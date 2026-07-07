@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Registro Attività</title>
+<meta name="theme-color" content="#C81E1E">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Registro">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  html, body { margin: 0; padding: 0; background: #FAFAF7; }
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FAFAF7;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  #login-screen .login-card {
+    width: 100%;
+    max-width: 340px;
+    background: #fff;
+    border: 1px solid #D9D6CC;
+    border-radius: 6px;
+    padding: 32px 28px;
+    box-sizing: border-box;
+  }
+  #login-screen h1 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+    color: #1A1A18;
+  }
+  #login-screen .login-sub {
+    font-size: 12px;
+    color: #55534C;
+    margin: 0 0 22px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  #login-screen label {
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #55534C;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+  #login-screen input {
+    width: 100%;
+    padding: 10px 11px;
+    border: 1px solid #D9D6CC;
+    border-radius: 3px;
+    font-size: 14px;
+    margin-bottom: 14px;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  #login-screen button {
+    width: 100%;
+    background: #C81E1E;
+    color: #fff;
+    border: none;
+    padding: 11px;
+    font-size: 13.5px;
+    font-weight: 700;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #login-screen button:hover { background: #8F1414; }
+  #login-screen button:disabled { background: #C8C6BC; cursor: not-allowed; }
+  #login-screen .login-error {
+    color: #C81E1E;
+    font-size: 12.5px;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #login-screen .login-hint {
+    font-size: 11px;
+    color: #8B8A80;
+    margin-top: 18px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Registro Attività</h1>
+    <div class="login-sub">Accedi per continuare</div>
+    <form id="login-form">
+      <label>Email</label>
+      <input type="email" id="login-email" autocomplete="username" required/>
+      <label>Password</label>
+      <input type="password" id="login-password" autocomplete="current-password" required/>
+      <button type="submit" id="login-submit-btn">Accedi</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+    <div class="login-hint">I dati sono privati e sincronizzati automaticamente tra tutti i tuoi dispositivi.</div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA6oEjxQZibK1Pmvf4vqPJc08lG5vK0xeY",
+    authDomain: "attivita-88590.firebaseapp.com",
+    projectId: "attivita-88590",
+    storageBucket: "attivita-88590.firebasestorage.app",
+    messagingSenderId: "269166580058",
+    appId: "1:269166580058:web:0a5ec5bc575e16bb6ae363"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+
+<div id="app-root" style="display:none;"></div>
+<style>
+  #app-root, #app-root * { box-sizing: border-box; }
+  #app-root {
+    --paper: #FAFAF7;
+    --panel: #F1F0EB;
+    --ink: #1A1A18;
+    --ink-soft: #55534C;
+    --line: #D9D6CC;
+    --red: #C81E1E;
+    --red-deep: #8F1414;
+    --green: #2F6B4F;
+    --board-bg: #16160F;
+    --board-fg: #F3F1E7;
+
+    font-family: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    min-height: 100vh;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app-root .mono {
+    font-family: 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  }
+
+  /* ---------- Header ---------- */
+  #app-root .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 28px 32px 18px;
+    border-bottom: 3px solid var(--ink);
+  }
+  #app-root .header-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+  }
+  #app-root .header-title span { color: var(--red); }
+  #app-root .header-sub {
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  #app-root .header-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    justify-content: flex-end;
+  }
+  #app-root .backup-btn {
+    font-size: 11px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink-soft);
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #app-root .backup-btn:hover { border-color: var(--ink); color: var(--ink); }
+  #app-root .header-clock {
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: right;
+    line-height: 1.5;
+  }
+  #app-root .header-clock b { color: var(--ink); font-weight: 700; }
+
+  /* ---------- Layout ---------- */
+  #app-root .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 0;
+    align-items: start;
+  }
+  @media (max-width: 820px) {
+    #app-root .layout { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Sidebar ---------- */
+  #app-root .sidebar {
+    border-right: 1px solid var(--line);
+    padding: 24px 20px;
+    min-height: 100%;
+  }
+  @media (max-width: 820px) {
+    #app-root .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  }
+  #app-root .sidebar h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+    font-weight: 700;
+  }
+  #app-root .client-search {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 13px;
+    border-radius: 3px;
+    margin-bottom: 14px;
+    font-family: inherit;
+  }
+  #app-root .client-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  #app-root .client-row:hover { color: var(--red); }
+  #app-root .client-row.active { color: var(--red); font-weight: 700; }
+  #app-root .client-row .tot {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  #app-root .client-row.active .tot { color: var(--red-deep); }
+  #app-root .add-client {
+    margin-top: 14px;
+    display: flex;
+    gap: 6px;
+  }
+  #app-root .add-client input {
+    flex: 1;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    border-radius: 3px;
+    font-family: inherit;
+  }
+  #app-root .add-client button {
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px;
+    padding: 0 10px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #app-root .empty-clients {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* ---------- Main ---------- */
+  #app-root .main { padding: 24px 32px 60px; }
+
+  /* Form */
+  #app-root .form-card.editing {
+    border-color: var(--red);
+    box-shadow: 0 0 0 1px var(--red);
+  }
+  #app-root .edit-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    color: var(--red-deep);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+  }
+  #app-root .cancel-edit-btn {
+    background: none;
+    border: 1px solid var(--ink-soft);
+    color: var(--ink-soft);
+    padding: 10px 16px;
+    font-size: 12.5px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-right: 8px;
+  }
+  #app-root .cancel-edit-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+  #app-root .form-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px 22px;
+    margin-bottom: 28px;
+  }
+  #app-root .form-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 600px) {
+    #app-root .form-row { grid-template-columns: 1fr; }
+  }
+  #app-root .field label {
+    display: block;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+  #app-root .field select,
+  #app-root .field input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 13.5px;
+    border-radius: 3px;
+    font-family: inherit;
+  }
+  #app-root .duration-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  #app-root .chip {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    border: 1px solid var(--ink);
+    background: transparent;
+    padding: 4px 9px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  #app-root .chip.selected { background: var(--ink); color: var(--paper); }
+
+  #app-root .desc-wrap { position: relative; margin-bottom: 14px; }
+  #app-root .desc-wrap textarea {
+    width: 100%;
+    min-height: 78px;
+    padding: 10px 44px 10px 12px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 13.5px;
+    border-radius: 3px;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.45;
+  }
+  #app-root .mic-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--ink);
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink);
+  }
+  #app-root .mic-btn.recording {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+    animation: pulse 1.1s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(200,30,30,0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(200,30,30,0); }
+    100% { box-shadow: 0 0 0 0 rgba(200,30,30,0); }
+  }
+  #app-root .mic-note {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  #app-root .form-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #app-root .save-btn {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    padding: 11px 22px;
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #app-root .save-btn:hover { background: var(--red-deep); }
+  #app-root .save-btn:disabled { background: #C8C6BC; cursor: not-allowed; }
+  #app-root .form-hint { font-size: 11.5px; color: var(--ink-soft); }
+
+  /* Split-flap board (today) */
+  /* ---------- Promemoria ---------- */
+  #app-root .reminders-section { margin-bottom: 30px; }
+  #app-root .reminder-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 20px;
+  }
+  #app-root .reminder-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #app-root .reminder-toggle-archive {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  #app-root .reminder-toggle-archive:hover { color: var(--red); }
+  #app-root .reminder-add-row {
+    display: grid;
+    grid-template-columns: 1fr 150px 130px auto;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 700px) {
+    #app-root .reminder-add-row { grid-template-columns: 1fr; }
+  }
+  #app-root .reminder-add-row input,
+  #app-root .reminder-add-row select {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 13px;
+    border-radius: 3px;
+    font-family: inherit;
+  }
+  #app-root .reminder-add-btn {
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 0 16px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #app-root .reminder-add-btn:hover { background: #000; }
+  #app-root .reminder-list { display: flex; flex-direction: column; }
+  #app-root .reminder-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 9px 2px;
+    border-bottom: 1px solid var(--line);
+  }
+  #app-root .reminder-item:last-child { border-bottom: none; }
+  #app-root .reminder-check {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    border: 1.5px solid var(--ink-soft);
+    border-radius: 3px;
+    cursor: pointer;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+  }
+  #app-root .reminder-check.checked {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  #app-root .reminder-body { flex: 1; min-width: 0; }
+  #app-root .reminder-text {
+    font-size: 13.5px;
+    line-height: 1.4;
+  }
+  #app-root .reminder-item.done .reminder-text {
+    text-decoration: line-through;
+    color: var(--ink-soft);
+  }
+  #app-root .reminder-meta {
+    display: flex;
+    gap: 10px;
+    margin-top: 3px;
+    flex-wrap: wrap;
+  }
+  #app-root .reminder-meta .m-client {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  #app-root .reminder-meta .m-date {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+  }
+  #app-root .reminder-meta .m-date.overdue { color: var(--red); font-weight: 700; }
+  #app-root .reminder-actions { display: flex; gap: 8px; align-items: center; }
+  #app-root .reminder-actions span {
+    font-size: 12.5px;
+    color: var(--line);
+    cursor: pointer;
+  }
+  #app-root .reminder-actions span:hover { color: var(--red); }
+  #app-root .reminder-empty {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    padding: 6px 2px;
+  }
+
+  #app-root .balance-section { margin-bottom: 22px; }
+  #app-root .balance-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #app-root .balance-target {
+    font-size: 12px;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #app-root .balance-target input {
+    width: 54px;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    text-align: center;
+  }
+  #app-root .balance-bar {
+    height: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  #app-root .balance-fill {
+    height: 100%;
+    background: var(--red);
+    border-radius: 8px 0 0 8px;
+    transition: width 0.35s ease;
+  }
+  #app-root .balance-fill.full { border-radius: 8px; }
+  #app-root .balance-stats {
+    display: flex;
+    gap: 24px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  #app-root .bstat { display: flex; flex-direction: column; }
+  #app-root .bstat .num {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  #app-root .bstat .num.c-red { color: var(--red-deep); }
+  #app-root .bstat .num.c-muted { color: var(--ink-soft); }
+  #app-root .bstat .num.c-green { color: var(--green); }
+  #app-root .bstat .lab {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+  }
+
+  #app-root .board-section { margin-bottom: 34px; }
+  #app-root .board-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  #app-root .board {
+    background: var(--board-bg);
+    border-radius: 4px;
+    padding: 6px 0;
+    overflow: hidden;
+  }
+  #app-root .board-empty {
+    color: #8B8A80;
+    font-size: 12.5px;
+    padding: 16px 20px;
+    font-style: italic;
+  }
+  #app-root .board-row {
+    display: grid;
+    grid-template-columns: 80px 130px 1fr 30px 30px;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 20px;
+    border-bottom: 1px solid #2A2A20;
+    color: var(--board-fg);
+    font-size: 13px;
+  }
+  #app-root .board-row:last-child { border-bottom: none; }
+  #app-root .board-time {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: #FF6B4A;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  #app-root .board-client {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 12px;
+    color: #C9C7B8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #app-root .board-desc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #app-root .board-edit {
+    color: #6B6A5E;
+    cursor: pointer;
+    text-align: right;
+    font-size: 13px;
+  }
+  #app-root .board-edit:hover { color: #FF6B4A; }
+  #app-root .board-del {
+    color: #6B6A5E;
+    cursor: pointer;
+    text-align: right;
+    font-size: 15px;
+  }
+  #app-root .board-del:hover { color: var(--red); }
+  #app-root .board-row.flip-in { animation: flipin 0.45s ease; }
+  @keyframes flipin {
+    0% { transform: rotateX(90deg); opacity: 0; }
+    100% { transform: rotateX(0deg); opacity: 1; }
+  }
+
+  /* Ledger */
+  #app-root .ledger-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  #app-root .ledger-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+  #app-root .ledger-filters { display: flex; gap: 8px; align-items: center; }
+  #app-root .ledger-filters select, #app-root .ledger-filters input {
+    padding: 6px 9px;
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    border-radius: 3px;
+    background: #fff;
+    font-family: inherit;
+  }
+  #app-root .day-group { margin-bottom: 22px; }
+  #app-root .day-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 5px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  #app-root .entry-row {
+    display: grid;
+    grid-template-columns: 70px 140px 1fr 26px 26px;
+    gap: 12px;
+    align-items: start;
+    padding: 9px 0;
+    border-bottom: 1px dotted var(--line);
+    font-size: 13px;
+  }
+  @media (max-width: 600px) {
+    #app-root .entry-row { grid-template-columns: 55px 1fr auto auto; }
+    #app-root .entry-row .e-client { grid-column: 2 / 3; order: 1; }
+    #app-root .entry-row .e-desc { grid-column: 1 / 3; order: 2; }
+    #app-root .entry-row .e-edit { order: 3; }
+    #app-root .entry-row .e-del { order: 4; text-align: right; }
+  }
+  #app-root .e-time {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: var(--red-deep);
+    font-weight: 700;
+  }
+  #app-root .e-client {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  #app-root .e-desc { color: var(--ink); line-height: 1.4; }
+  #app-root .e-edit {
+    color: var(--line);
+    cursor: pointer;
+    text-align: right;
+  }
+  #app-root .e-edit:hover { color: var(--ink); }
+  #app-root .e-del {
+    color: var(--line);
+    cursor: pointer;
+    text-align: right;
+  }
+  #app-root .e-del:hover { color: var(--red); }
+  #app-root .ledger-empty {
+    color: var(--ink-soft);
+    font-style: italic;
+    font-size: 13px;
+    padding: 30px 0;
+    text-align: center;
+  }
+  #app-root .totals-strip {
+    display: flex;
+    gap: 22px;
+    padding: 12px 0 20px;
+    flex-wrap: wrap;
+  }
+  #app-root .tot-card {
+    border-left: 3px solid var(--red);
+    padding: 2px 12px;
+  }
+  #app-root .tot-card .num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  #app-root .tot-card .lab {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+  }
+  #app-root .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+  }
+  #app-root .toast.show { opacity: 1; }
+</style>
+
+<script>
+(function(){
+  const db = firebase.firestore();
+
+  const DEFAULT_TARGET_MIN = 480; // 8 ore
+
+  let clients = [];
+  let entries = [];
+  let dayTargets = {};
+  let reminders = [];
+  let showCompletedReminders = false;
+  let reminderClientFilter = '';
+  let editingEntryId = null;
+  let selectedClientFilter = '';
+  let dateFilter = '';
+  let formClient = '';
+  let formDuration = 30;
+  let sidebarSearch = '';
+  let recognizing = false;
+  let recognition = null;
+
+  const root = document.getElementById('app-root');
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  function todayISO(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function fmtDateLabel(iso){
+    const d = new Date(iso + 'T00:00:00');
+    const giorni = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+    const mesi = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+    return giorni[d.getDay()] + ' ' + d.getDate() + ' ' + mesi[d.getMonth()] + ' ' + d.getFullYear();
+  }
+
+  function fmtMin(mins){
+    const h = Math.floor(mins/60), m = mins%60;
+    if (h === 0) return m + ' min';
+    if (m === 0) return h + 'h';
+    return h + 'h ' + String(m).padStart(2,'0');
+  }
+
+  let unsubscribeSnapshot = null;
+  let currentUid = null;
+
+  function subscribeToData(uid){
+    currentUid = uid;
+    const docRef = db.collection('registri').doc(uid);
+    unsubscribeSnapshot = docRef.onSnapshot((docSnap) => {
+      const data = docSnap.exists ? docSnap.data() : {};
+      clients = Array.isArray(data.clienti) ? data.clienti : [];
+      entries = Array.isArray(data.attivita) ? data.attivita : [];
+      reminders = Array.isArray(data.promemoria) ? data.promemoria : [];
+      dayTargets = (data.obiettivi && typeof data.obiettivi === 'object') ? data.obiettivi : {};
+      render();
+    }, (err) => {
+      console.error(err);
+      showToast('Errore di sincronizzazione: ' + err.message);
+    });
+  }
+
+  function unsubscribeData(){
+    if (unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    currentUid = null;
+  }
+
+  async function pushData(){
+    if (!currentUid) return;
+    try {
+      await db.collection('registri').doc(currentUid).set({
+        clienti: clients,
+        attivita: entries,
+        promemoria: reminders,
+        obiettivi: dayTargets,
+        aggiornatoIl: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch(e){
+      console.error(e);
+      showToast('Errore nel salvataggio online: ' + e.message);
+    }
+  }
+
+  function getTargetMinutes(date){
+    return dayTargets[date] || DEFAULT_TARGET_MIN;
+  }
+
+  async function saveReminders(){ await pushData(); }
+
+  function addReminder(testo, cliente, scadenza){
+    reminders.unshift({
+      id: uid(),
+      testo,
+      cliente: cliente || '',
+      scadenza: scadenza || '',
+      fatto: false,
+      creato: Date.now(),
+      completatoIl: null
+    });
+    saveReminders();
+    render();
+  }
+
+  function toggleReminder(id){
+    const r = reminders.find(x => x.id === id);
+    if (!r) return;
+    r.fatto = !r.fatto;
+    r.completatoIl = r.fatto ? Date.now() : null;
+    saveReminders();
+    render();
+  }
+
+  function deleteReminder(id){
+    reminders = reminders.filter(r => r.id !== id);
+    saveReminders();
+    render();
+  }
+
+  function exportBackup(){
+    const payload = {
+      esportatoIl: new Date().toISOString(),
+      clienti: clients,
+      attivita: entries,
+      promemoria: reminders,
+      obiettiviGiorno: dayTargets
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = todayISO();
+    a.href = url;
+    a.download = 'registro-backup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Backup scaricato');
+  }
+
+  async function importBackupFromFile(file){
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || (!data.attivita && !data.clienti && !data.promemoria)){
+        showToast('File non riconosciuto come backup valido');
+        return;
+      }
+      const ok = window.confirm('Ripristinare questo backup sostituirà i dati attuali con quelli del file. Continuare?');
+      if (!ok) return;
+      clients = Array.isArray(data.clienti) ? data.clienti : [];
+      entries = Array.isArray(data.attivita) ? data.attivita : [];
+      reminders = Array.isArray(data.promemoria) ? data.promemoria : [];
+      dayTargets = data.obiettiviGiorno && typeof data.obiettiviGiorno === 'object' ? data.obiettiviGiorno : {};
+      await Promise.all([saveClients(), saveEntries(), saveReminders(), saveTargets()]);
+      showToast('Backup ripristinato');
+      render();
+    } catch(e){
+      showToast('Impossibile leggere il file di backup');
+    }
+  }
+
+  async function saveClients(){ await pushData(); }
+
+  async function saveEntries(){ await pushData(); }
+
+  function showToast(msg){
+    let t = root.querySelector('.toast');
+    if (!t){
+      t = document.createElement('div');
+      t.className = 'toast';
+      root.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=> t.classList.remove('show'), 2200);
+  }
+
+  function clientTotal(name){
+    return entries.filter(e => e.cliente === name).reduce((s,e)=> s + e.minuti, 0);
+  }
+
+  function addClient(name){
+    name = name.trim();
+    if (!name) return;
+    if (clients.includes(name)) { showToast('Cliente già presente'); return; }
+    clients.push(name);
+    clients.sort((a,b)=> a.localeCompare(b));
+    saveClients();
+    render();
+  }
+
+  function deleteEntry(id){
+    entries = entries.filter(e => e.id !== id);
+    saveEntries();
+    render();
+  }
+
+  function addEntry(cliente, data, minuti, descrizione){
+    const entry = { id: uid(), cliente, data, minuti, descrizione, creato: Date.now() };
+    entries.unshift(entry);
+    saveEntries();
+    render(entry.id);
+  }
+
+  function updateEntry(id, cliente, data, minuti, descrizione){
+    const e = entries.find(x => x.id === id);
+    if (!e) return;
+    e.cliente = cliente;
+    e.data = data;
+    e.minuti = minuti;
+    e.descrizione = descrizione;
+    saveEntries();
+    editingEntryId = null;
+    render();
+  }
+
+  function startEditEntry(id){
+    const e = entries.find(x => x.id === id);
+    if (!e) return;
+    editingEntryId = id;
+    formClient = e.cliente;
+    formDuration = e.minuti;
+    render();
+    const formCard = root.querySelector('.form-card');
+    if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelEditEntry(){
+    editingEntryId = null;
+    formClient = '';
+    formDuration = 30;
+    render();
+  }
+
+  // ---------- Speech recognition ----------
+  function setupRecognition(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    const r = new SR();
+    r.lang = 'it-IT';
+    r.continuous = true;
+    r.interimResults = true;
+    return r;
+  }
+
+  function toggleMic(){
+    const textarea = root.querySelector('#f-desc');
+    if (recognizing){
+      if (recognition) recognition.stop();
+      recognizing = false;
+      updateMicButton();
+      return;
+    }
+    if (!recognition) recognition = setupRecognition();
+    if (!recognition){
+      showToast('Dettatura vocale non disponibile su questo browser');
+      return;
+    }
+    let baseText = textarea.value ? textarea.value.trim() + ' ' : '';
+    recognition.onresult = (ev) => {
+      let interim = '', final = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++){
+        if (ev.results[i].isFinal) final += ev.results[i][0].transcript;
+        else interim += ev.results[i][0].transcript;
+      }
+      textarea.value = (baseText + final + interim).trim();
+      if (final) baseText = (baseText + final).trim() + ' ';
+    };
+    recognition.onerror = () => { recognizing = false; updateMicButton(); };
+    recognition.onend = () => { recognizing = false; updateMicButton(); };
+    try {
+      recognition.start();
+      recognizing = true;
+      updateMicButton();
+    } catch(e){
+      showToast('Impossibile avviare la dettatura (permesso microfono?)');
+    }
+  }
+
+  function updateMicButton(){
+    const btn = root.querySelector('.mic-btn');
+    if (!btn) return;
+    btn.classList.toggle('recording', recognizing);
+    btn.innerHTML = recognizing ? micIconStop() : micIconOn();
+  }
+
+  function micIconOn(){
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>';
+  }
+  function micIconStop(){
+    return '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
+  }
+
+  // ---------- Rendering ----------
+  function render(justAddedId){
+    const filteredClientsList = clients.filter(c => c.toLowerCase().includes(sidebarSearch.toLowerCase()));
+
+    const clientOptionsHtml = clients.map(c =>
+      `<option value="${escapeHtml(c)}" ${formClient===c?'selected':''}>${escapeHtml(c)}</option>`
+    ).join('');
+
+    const sidebarHtml = `
+      <div class="sidebar">
+        <h3>Clienti / Mandati</h3>
+        <input class="client-search" placeholder="Cerca cliente…" value="${escapeHtml(sidebarSearch)}" id="sidebar-search-input"/>
+        <div>
+          <div class="client-row ${selectedClientFilter===''?'active':''}" data-client="">
+            <span>Tutti i clienti</span>
+          </div>
+          ${filteredClientsList.length ? filteredClientsList.map(c => `
+            <div class="client-row ${selectedClientFilter===c?'active':''}" data-client="${escapeHtml(c)}">
+              <span>${escapeHtml(c)}</span>
+              <span class="tot mono">${fmtMin(clientTotal(c))}</span>
+            </div>
+          `).join('') : '<div class="empty-clients">Nessun cliente ancora. Aggiungine uno qui sotto.</div>'}
+        </div>
+        <div class="add-client">
+          <input id="new-client-input" placeholder="Nuovo cliente…"/>
+          <button id="add-client-btn">+</button>
+        </div>
+      </div>
+    `;
+
+    const today = todayISO();
+    const todaysEntries = entries.filter(e => e.data === today).sort((a,b)=> b.creato - a.creato);
+
+    const targetMin = getTargetMinutes(today);
+    const workedMin = todaysEntries.reduce((s,e)=> s + e.minuti, 0);
+    const remainingMin = targetMin - workedMin;
+    const pct = targetMin > 0 ? Math.min(100, (workedMin/targetMin)*100) : 0;
+    const targetHoursVal = (targetMin/60);
+
+    // ---- Promemoria ----
+    let remList = reminders.slice();
+    if (reminderClientFilter) remList = remList.filter(r => r.cliente === reminderClientFilter);
+    const activeRem = remList.filter(r => !r.fatto).sort((a,b)=> {
+      if (a.scadenza && b.scadenza) return a.scadenza.localeCompare(b.scadenza);
+      if (a.scadenza) return -1;
+      if (b.scadenza) return 1;
+      return b.creato - a.creato;
+    });
+    const doneRem = remList.filter(r => r.fatto).sort((a,b)=> (b.completatoIl||0) - (a.completatoIl||0));
+
+    function reminderItemHtml(r, isDone){
+      const overdue = (!isDone && r.scadenza && r.scadenza < today);
+      return `
+        <div class="reminder-item ${isDone?'done':''}">
+          <div class="reminder-check ${isDone?'checked':''}" data-toggle-rem="${r.id}">${isDone?'✓':''}</div>
+          <div class="reminder-body">
+            <div class="reminder-text">${escapeHtml(r.testo)}</div>
+            <div class="reminder-meta">
+              ${r.cliente ? `<span class="m-client">${escapeHtml(r.cliente)}</span>` : ''}
+              ${r.scadenza ? `<span class="m-date ${overdue?'overdue':''}">${overdue?'scaduto ':'entro '}${fmtDateLabel(r.scadenza)}</span>` : ''}
+            </div>
+          </div>
+          <div class="reminder-actions">
+            ${isDone ? `<span data-reopen-rem="${r.id}" title="Riapri">↺</span>` : ''}
+            <span data-del-rem="${r.id}" title="Elimina">✕</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const remindersHtml = `
+      <div class="reminders-section">
+        <div class="reminder-card">
+          <div class="reminder-head">
+            <div class="board-title" style="margin-bottom:0;">Promemoria</div>
+            <button type="button" class="reminder-toggle-archive" id="toggle-archive-btn">
+              ${showCompletedReminders ? 'Nascondi conclusi' : `Mostra conclusi (${doneRem.length})`}
+            </button>
+          </div>
+          <div class="reminder-add-row">
+            <input type="text" id="rem-text" placeholder="Cosa devi ricordare o fare? Es. Richiamare il cliente per i documenti mancanti…"/>
+            <select id="rem-client">
+              <option value="">— cliente (opz.) —</option>
+              ${clients.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+            <input type="date" id="rem-date"/>
+            <button type="button" class="reminder-add-btn" id="rem-add-btn">Aggiungi</button>
+          </div>
+          <div class="reminder-list">
+            ${activeRem.length ? activeRem.map(r => reminderItemHtml(r,false)).join('') : '<div class="reminder-empty">Nessun promemoria in sospeso.</div>'}
+          </div>
+          ${showCompletedReminders ? `
+            <div class="reminder-list" style="margin-top:10px; border-top:1px dashed var(--line); padding-top:8px;">
+              ${doneRem.length ? doneRem.map(r => reminderItemHtml(r,true)).join('') : '<div class="reminder-empty">Nessun promemoria concluso.</div>'}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    const balanceHtml = `
+      <div class="balance-section">
+        <div class="balance-head">
+          <div class="board-title" style="margin-bottom:0;">Bilancio giornata</div>
+          <div class="balance-target">
+            Totale previsto
+            <input type="number" id="f-target-hours" min="0.5" step="0.5" value="${targetHoursVal}"/>
+            h
+          </div>
+        </div>
+        <div class="balance-bar">
+          <div class="balance-fill ${pct>=100?'full':''}" style="width:${pct}%;"></div>
+        </div>
+        <div class="balance-stats">
+          <div class="bstat">
+            <span class="num mono c-red">${fmtMin(workedMin)}</span>
+            <span class="lab">Registrato (attività inserite)</span>
+          </div>
+          <div class="bstat">
+            <span class="num mono ${remainingMin>0?'c-muted':'c-green'}">${remainingMin>0 ? fmtMin(remainingMin) : '0 min'}</span>
+            <span class="lab">Non registrato</span>
+          </div>
+          ${remainingMin<0 ? `
+          <div class="bstat">
+            <span class="num mono c-green">+${fmtMin(-remainingMin)}</span>
+            <span class="lab">Oltre il previsto</span>
+          </div>` : ''}
+        </div>
+      </div>
+    `;
+
+    const boardHtml = `
+      <div class="board-section">
+        <div class="board-title">Oggi — ${fmtDateLabel(today)}</div>
+        <div class="board">
+          ${todaysEntries.length ? todaysEntries.map(e => `
+            <div class="board-row ${e.id===justAddedId?'flip-in':''}">
+              <div class="board-time">${fmtMin(e.minuti)}</div>
+              <div class="board-client">${escapeHtml(e.cliente)}</div>
+              <div class="board-desc">${escapeHtml(e.descrizione)}</div>
+              <div class="board-edit" data-edit="${e.id}">✎</div>
+              <div class="board-del" data-del="${e.id}">✕</div>
+            </div>
+          `).join('') : '<div class="board-empty">Ancora nessuna attività registrata oggi.</div>'}
+        </div>
+      </div>
+    `;
+
+    const durations = [5,10,15,30,45,60,90,120];
+    const durationChipsHtml = durations.map(d => `<button type="button" class="chip ${formDuration===d?'selected':''}" data-dur="${d}">${fmtMin(d)}</button>`).join('');
+
+    const entryBeingEdited = editingEntryId ? entries.find(e => e.id === editingEntryId) : null;
+    const formDateVal = entryBeingEdited ? entryBeingEdited.data : today;
+    const formDescVal = entryBeingEdited ? entryBeingEdited.descrizione : '';
+
+    const formHtml = `
+      <div class="form-card ${entryBeingEdited ? 'editing' : ''}">
+        ${entryBeingEdited ? `
+          <div class="edit-banner">
+            <span>✎ Modifica attività del ${fmtDateLabel(entryBeingEdited.data)}</span>
+          </div>
+        ` : ''}
+        <div class="form-row">
+          <div class="field">
+            <label>Cliente</label>
+            <select id="f-client">
+              <option value="">— seleziona —</option>
+              ${clientOptionsHtml}
+            </select>
+          </div>
+          <div class="field">
+            <label>Data</label>
+            <input type="date" id="f-date" value="${formDateVal}"/>
+          </div>
+          <div class="field">
+            <label>Tempo impiegato</label>
+            <input type="number" id="f-minuti" min="1" step="5" value="${formDuration}"/>
+            <div class="duration-chips">${durationChipsHtml}</div>
+          </div>
+        </div>
+        <div class="desc-wrap">
+          <textarea id="f-desc" placeholder="Cosa hai fatto? Es. Telefonato all'ufficio imposte alla fonte per lo stato della pratica…">${escapeHtml(formDescVal)}</textarea>
+          <button type="button" class="mic-btn" title="Detta l'attività">${micIconOn()}</button>
+        </div>
+        <div class="mic-note">Il microfono richiede il permesso del browser e potrebbe non funzionare in tutti gli ambienti.</div>
+        <div class="form-footer" style="margin-top:12px;">
+          <span class="form-hint">Cliente e descrizione sono obbligatori.</span>
+          <span>
+            ${entryBeingEdited ? `<button type="button" class="cancel-edit-btn" id="cancel-edit-btn">Annulla modifica</button>` : ''}
+            <button class="save-btn" id="save-btn">${entryBeingEdited ? 'Aggiorna attività' : 'Registra attività'}</button>
+          </span>
+        </div>
+      </div>
+    `;
+
+    // Ledger
+    const dateOptions = Array.from(new Set(entries.map(e=>e.data))).sort().reverse();
+    let filtered = entries.slice();
+    if (selectedClientFilter) filtered = filtered.filter(e => e.cliente === selectedClientFilter);
+    if (dateFilter) filtered = filtered.filter(e => e.data === dateFilter);
+    filtered.sort((a,b)=> (b.data.localeCompare(a.data)) || (b.creato - a.creato));
+
+    const totMinutes = filtered.reduce((s,e)=>s+e.minuti,0);
+    const totalsStripHtml = `
+      <div class="totals-strip">
+        <div class="tot-card"><div class="num mono">${fmtMin(totMinutes)}</div><div class="lab">Totale nel filtro</div></div>
+        <div class="tot-card"><div class="num mono">${filtered.length}</div><div class="lab">Attività</div></div>
+        ${selectedClientFilter ? `<div class="tot-card"><div class="num mono">${escapeHtml(selectedClientFilter)}</div><div class="lab">Cliente selezionato</div></div>` : ''}
+      </div>
+    `;
+
+    const groups = {};
+    filtered.forEach(e => { (groups[e.data] = groups[e.data] || []).push(e); });
+    const groupKeys = Object.keys(groups).sort().reverse();
+
+    const ledgerHtml = `
+      <div class="ledger-header">
+        <div class="ledger-title">Registro completo</div>
+        <div class="ledger-filters">
+          <select id="filter-client">
+            <option value="">Tutti i clienti</option>
+            ${clients.map(c=>`<option value="${escapeHtml(c)}" ${selectedClientFilter===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}
+          </select>
+          <select id="filter-date">
+            <option value="">Tutte le date</option>
+            ${dateOptions.map(d=>`<option value="${d}" ${dateFilter===d?'selected':''}>${fmtDateLabel(d)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${totalsStripHtml}
+      ${groupKeys.length ? groupKeys.map(day => `
+        <div class="day-group">
+          <div class="day-label"><span>${fmtDateLabel(day)}</span><span>${fmtMin(groups[day].reduce((s,e)=>s+e.minuti,0))}</span></div>
+          ${groups[day].map(e => `
+            <div class="entry-row">
+              <div class="e-time mono">${fmtMin(e.minuti)}</div>
+              <div class="e-client">${escapeHtml(e.cliente)}</div>
+              <div class="e-desc">${escapeHtml(e.descrizione)}</div>
+              <div class="e-edit" data-edit="${e.id}">✎</div>
+              <div class="e-del" data-del="${e.id}">✕</div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('') : '<div class="ledger-empty">Nessuna attività corrisponde ai filtri selezionati.</div>'}
+    `;
+
+    root.innerHTML = `
+      <div class="header">
+        <div>
+          <div class="header-title">Registro<span>.</span> Attività</div>
+          <div class="header-sub">Un tabellone per ogni mandato</div>
+        </div>
+        <div class="header-clock mono">
+          ${fmtDateLabel(today)}<br><b>${entries.length}</b> attività registrate in totale
+          <div class="header-actions">
+            <button type="button" class="backup-btn" id="export-btn">⬇ Esporta backup</button>
+            <button type="button" class="backup-btn" id="import-btn">⬆ Ripristina backup</button>
+            <button type="button" class="backup-btn" id="logout-btn">⎋ Esci</button>
+            <input type="file" id="import-file-input" accept="application/json" style="display:none;"/>
+          </div>
+        </div>
+      </div>
+      <div class="layout">
+        ${sidebarHtml}
+        <div class="main">
+          ${remindersHtml}
+          ${balanceHtml}
+          ${boardHtml}
+          ${formHtml}
+          ${ledgerHtml}
+        </div>
+      </div>
+    `;
+
+    attachHandlers();
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function attachHandlers(){
+    root.querySelectorAll('.client-row').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedClientFilter = el.getAttribute('data-client');
+        render();
+      });
+    });
+
+    const searchInput = root.querySelector('#sidebar-search-input');
+    if (searchInput){
+      searchInput.addEventListener('input', (e) => {
+        sidebarSearch = e.target.value;
+        const pos = e.target.selectionStart;
+        render();
+        const ni = root.querySelector('#sidebar-search-input');
+        if (ni){ ni.focus(); ni.setSelectionRange(pos,pos); }
+      });
+    }
+
+    const addBtn = root.querySelector('#add-client-btn');
+    const newClientInput = root.querySelector('#new-client-input');
+    if (addBtn && newClientInput){
+      addBtn.addEventListener('click', () => {
+        addClient(newClientInput.value);
+      });
+      newClientInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter'){ e.preventDefault(); addClient(newClientInput.value); }
+      });
+    }
+
+    root.querySelectorAll('.chip').forEach(el => {
+      el.addEventListener('click', () => {
+        formDuration = parseInt(el.getAttribute('data-dur'),10);
+        const minInput = root.querySelector('#f-minuti');
+        if (minInput) minInput.value = formDuration;
+        root.querySelectorAll('.chip').forEach(c=>c.classList.remove('selected'));
+        el.classList.add('selected');
+      });
+    });
+
+    const minutiInput = root.querySelector('#f-minuti');
+    if (minutiInput){
+      minutiInput.addEventListener('input', () => {
+        formDuration = parseInt(minutiInput.value,10) || 0;
+        root.querySelectorAll('.chip').forEach(c => {
+          c.classList.toggle('selected', parseInt(c.getAttribute('data-dur'),10) === formDuration);
+        });
+      });
+    }
+
+    const clientSelect = root.querySelector('#f-client');
+    if (clientSelect){
+      clientSelect.addEventListener('change', () => { formClient = clientSelect.value; });
+    }
+
+    const targetInput = root.querySelector('#f-target-hours');
+    if (targetInput){
+      targetInput.addEventListener('change', () => {
+        const hrs = parseFloat(targetInput.value);
+        const today = todayISO();
+        if (!hrs || hrs <= 0){
+          delete dayTargets[today];
+        } else {
+          dayTargets[today] = Math.round(hrs * 60);
+        }
+        saveTargets();
+        render();
+      });
+    }
+
+    const remAddBtn = root.querySelector('#rem-add-btn');
+    if (remAddBtn){
+      const submitReminder = () => {
+        const textEl = root.querySelector('#rem-text');
+        const clientEl = root.querySelector('#rem-client');
+        const dateEl = root.querySelector('#rem-date');
+        const testo = textEl.value.trim();
+        if (!testo){ showToast('Scrivi cosa devi ricordare'); return; }
+        addReminder(testo, clientEl.value, dateEl.value);
+        showToast('Promemoria aggiunto');
+      };
+      remAddBtn.addEventListener('click', submitReminder);
+      const remTextInput = root.querySelector('#rem-text');
+      if (remTextInput){
+        remTextInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter'){ e.preventDefault(); submitReminder(); }
+        });
+      }
+    }
+
+    const archiveToggleBtn = root.querySelector('#toggle-archive-btn');
+    if (archiveToggleBtn){
+      archiveToggleBtn.addEventListener('click', () => {
+        showCompletedReminders = !showCompletedReminders;
+        render();
+      });
+    }
+
+    root.querySelectorAll('[data-toggle-rem]').forEach(el => {
+      el.addEventListener('click', () => toggleReminder(el.getAttribute('data-toggle-rem')));
+    });
+    root.querySelectorAll('[data-reopen-rem]').forEach(el => {
+      el.addEventListener('click', () => toggleReminder(el.getAttribute('data-reopen-rem')));
+    });
+    root.querySelectorAll('[data-del-rem]').forEach(el => {
+      el.addEventListener('click', () => deleteReminder(el.getAttribute('data-del-rem')));
+    });
+
+    const exportBtn = root.querySelector('#export-btn');
+    if (exportBtn) exportBtn.addEventListener('click', exportBackup);
+
+    const importBtn = root.querySelector('#import-btn');
+    const importFileInput = root.querySelector('#import-file-input');
+    if (importBtn && importFileInput){
+      importBtn.addEventListener('click', () => importFileInput.click());
+      importFileInput.addEventListener('change', () => {
+        if (importFileInput.files && importFileInput.files[0]){
+          importBackupFromFile(importFileInput.files[0]);
+        }
+        importFileInput.value = '';
+      });
+    }
+
+    const logoutBtn = root.querySelector('#logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', () => {
+      if (recognizing && recognition) recognition.stop();
+      firebase.auth().signOut();
+    });
+
+    const micBtn = root.querySelector('.mic-btn');
+    if (micBtn) micBtn.addEventListener('click', toggleMic);
+
+    const saveBtn = root.querySelector('#save-btn');
+    if (saveBtn){
+      saveBtn.addEventListener('click', () => {
+        const cliente = root.querySelector('#f-client').value;
+        const data = root.querySelector('#f-date').value || todayISO();
+        const minuti = parseInt(root.querySelector('#f-minuti').value,10);
+        const descrizione = root.querySelector('#f-desc').value.trim();
+        if (!cliente){ showToast('Seleziona un cliente'); return; }
+        if (!descrizione){ showToast("Descrivi l'attività svolta"); return; }
+        if (!minuti || minuti <= 0){ showToast('Indica il tempo impiegato'); return; }
+        if (recognizing && recognition) recognition.stop();
+        if (editingEntryId){
+          updateEntry(editingEntryId, cliente, data, minuti, descrizione);
+          showToast('Attività aggiornata');
+        } else {
+          addEntry(cliente, data, minuti, descrizione);
+          showToast('Attività registrata');
+        }
+      });
+    }
+
+    const cancelEditBtn = root.querySelector('#cancel-edit-btn');
+    if (cancelEditBtn) cancelEditBtn.addEventListener('click', cancelEditEntry);
+
+    const filterClient = root.querySelector('#filter-client');
+    if (filterClient) filterClient.addEventListener('change', () => { selectedClientFilter = filterClient.value; render(); });
+    const filterDate = root.querySelector('#filter-date');
+    if (filterDate) filterDate.addEventListener('change', () => { dateFilter = filterDate.value; render(); });
+
+    root.querySelectorAll('[data-edit]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-edit');
+        startEditEntry(id);
+      });
+    });
+
+    root.querySelectorAll('[data-del]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-del');
+        if (editingEntryId === id) editingEntryId = null;
+        deleteEntry(id);
+      });
+    });
+  }
+
+  // L'avvio dell'app avviene tramite l'auth listener di Firebase (vedi fondo pagina)
+  window.__registroApp = { subscribeToData, unsubscribeData };
+})();
+</script>
+
+<script>
+  (function(){
+    const auth = firebase.auth();
+    const loginScreen = document.getElementById('login-screen');
+    const appRoot = document.getElementById('app-root');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const loginSubmitBtn = document.getElementById('login-submit-btn');
+
+    auth.onAuthStateChanged(function(user){
+      if (user){
+        loginScreen.style.display = 'none';
+        appRoot.style.display = '';
+        if (window.__registroApp) window.__registroApp.subscribeToData(user.uid);
+      } else {
+        if (window.__registroApp) window.__registroApp.unsubscribeData();
+        appRoot.style.display = 'none';
+        loginScreen.style.display = 'flex';
+      }
+    });
+
+    loginForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      loginError.textContent = '';
+      loginSubmitBtn.disabled = true;
+      loginSubmitBtn.textContent = 'Accesso in corso\u2026';
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      auth.signInWithEmailAndPassword(email, password)
+        .catch(function(err){
+          let msg = 'Accesso non riuscito. Controlla email e password.';
+          if (err && err.code === 'auth/too-many-requests') msg = 'Troppi tentativi. Riprova tra qualche minuto.';
+          loginError.textContent = msg;
+        })
+        .finally(function(){
+          loginSubmitBtn.disabled = false;
+          loginSubmitBtn.textContent = 'Accedi';
+        });
+    });
+  })();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>

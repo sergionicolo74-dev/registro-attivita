@@ -365,6 +365,23 @@
   }
   #app-root .chip.selected { background: var(--ink); color: var(--paper); }
 
+  #app-root .billable-toggle-row { margin-bottom: 12px; }
+  #app-root .billable-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    user-select: none;
+  }
+  #app-root .billable-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+
   #app-root .desc-wrap { position: relative; margin-bottom: 14px; }
   #app-root .desc-wrap textarea {
     width: 100%;
@@ -467,6 +484,30 @@
   @media (max-width: 700px) {
     #app-root .reminder-add-row { grid-template-columns: 1fr; }
   }
+  #app-root .reminder-add-row.deleg-add-row {
+    grid-template-columns: 140px 1fr 150px 130px auto;
+  }
+  @media (max-width: 820px) {
+    #app-root .reminder-add-row.deleg-add-row { grid-template-columns: 1fr; }
+  }
+  #app-root .collab-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  #app-root .collab-chip {
+    font-size: 12px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 5px 12px;
+    cursor: pointer;
+    color: var(--ink-soft);
+    background: #fff;
+  }
+  #app-root .collab-chip b { color: var(--ink); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  #app-root .collab-chip.active { border-color: var(--red); color: var(--red-deep); background: #fff; }
+  #app-root .collab-chip.active b { color: var(--red-deep); }
   #app-root .reminder-add-row input,
   #app-root .reminder-add-row select {
     padding: 8px 10px;
@@ -595,6 +636,20 @@
     transition: width 0.35s ease;
   }
   #app-root .balance-fill.full { border-radius: 8px; }
+  #app-root .balance-fill.billable { background: var(--green); }
+  #app-root .balance-sub {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+  }
+  #app-root .balance-sub-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
   #app-root .balance-stats {
     display: flex;
     gap: 24px;
@@ -639,7 +694,7 @@
   }
   #app-root .board-row {
     display: grid;
-    grid-template-columns: 80px 130px 1fr 30px 30px;
+    grid-template-columns: 80px 26px 130px 1fr 30px 30px;
     gap: 12px;
     align-items: center;
     padding: 9px 20px;
@@ -668,6 +723,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  #app-root .board-bill {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid #6B6A5E;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: transparent;
+  }
+  #app-root .board-bill.on {
+    border-color: #4FAE7E;
+    background: #4FAE7E;
+    color: #16160F;
+    font-weight: 700;
   }
   #app-root .board-edit {
     color: #6B6A5E;
@@ -727,7 +800,7 @@
   }
   #app-root .entry-row {
     display: grid;
-    grid-template-columns: 70px 140px 1fr 26px 26px;
+    grid-template-columns: 70px 26px 140px 1fr 26px 26px;
     gap: 12px;
     align-items: start;
     padding: 9px 0;
@@ -735,11 +808,13 @@
     font-size: 13px;
   }
   @media (max-width: 600px) {
-    #app-root .entry-row { grid-template-columns: 55px 1fr auto auto; }
-    #app-root .entry-row .e-client { grid-column: 2 / 3; order: 1; }
-    #app-root .entry-row .e-desc { grid-column: 1 / 3; order: 2; }
-    #app-root .entry-row .e-edit { order: 3; }
-    #app-root .entry-row .e-del { order: 4; text-align: right; }
+    #app-root .entry-row { grid-template-columns: 30px 55px 1fr auto auto; }
+    #app-root .entry-row .e-bill { grid-row: 1; order: 0; }
+    #app-root .entry-row .e-time { order: 1; }
+    #app-root .entry-row .e-client { grid-column: 3 / 4; order: 2; }
+    #app-root .entry-row .e-desc { grid-column: 1 / 4; order: 3; }
+    #app-root .entry-row .e-edit { order: 4; }
+    #app-root .entry-row .e-del { order: 5; text-align: right; }
   }
   #app-root .e-time {
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -753,6 +828,25 @@
     color: var(--ink-soft);
   }
   #app-root .e-desc { color: var(--ink); line-height: 1.4; }
+  #app-root .e-bill {
+    width: 17px;
+    height: 17px;
+    border: 1.5px solid var(--line);
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: transparent;
+    margin-top: 1px;
+  }
+  #app-root .e-bill.on {
+    border-color: var(--green);
+    background: var(--green);
+    color: #fff;
+    font-weight: 700;
+  }
   #app-root .e-edit {
     color: var(--line);
     cursor: pointer;
@@ -793,6 +887,58 @@
     letter-spacing: 0.05em;
     color: var(--ink-soft);
   }
+  /* ---------- Report ---------- */
+  #app-root .report-section { margin-top: 34px; margin-bottom: 20px; }
+  #app-root .report-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px 22px;
+  }
+  #app-root .report-filters-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 600px) {
+    #app-root .report-filters-row { grid-template-columns: 1fr; }
+  }
+  #app-root .report-type-row {
+    display: flex;
+    gap: 22px;
+    margin-bottom: 16px;
+  }
+  #app-root .report-preview-tot {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line);
+    margin-bottom: 16px;
+  }
+  #app-root .report-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  #app-root .report-btn {
+    background: #fff;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    padding: 10px 16px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #app-root .report-btn:hover { background: var(--ink); color: var(--paper); }
+  #app-root .report-btn.primary { background: var(--red); color: #fff; border-color: var(--red); }
+  #app-root .report-btn.primary:hover { background: var(--red-deep); border-color: var(--red-deep); }
+  #app-root .report-hint { font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+
   #app-root .toast {
     position: fixed;
     bottom: 20px;
@@ -823,11 +969,20 @@
   let reminders = [];
   let showCompletedReminders = false;
   let reminderClientFilter = '';
+  let reportClient = '';
+  let reportDateFrom = '';
+  let reportDateTo = '';
+  let reportIncludeBillable = true;
+  let reportIncludeNonBillable = true;
+  let delegations = [];
+  let showCompletedDelegations = false;
+  let delegationCollabFilter = '';
   let editingEntryId = null;
   let selectedClientFilter = '';
   let dateFilter = '';
   let formClient = '';
   let formDuration = 30;
+  let formFatturabile = true;
   let sidebarSearch = '';
   let recognizing = false;
   let recognition = null;
@@ -866,6 +1021,7 @@
       clients = Array.isArray(data.clienti) ? data.clienti : [];
       entries = Array.isArray(data.attivita) ? data.attivita : [];
       reminders = Array.isArray(data.promemoria) ? data.promemoria : [];
+      delegations = Array.isArray(data.deleghe) ? data.deleghe : [];
       dayTargets = (data.obiettivi && typeof data.obiettivi === 'object') ? data.obiettivi : {};
       render();
     }, (err) => {
@@ -886,6 +1042,7 @@
         clienti: clients,
         attivita: entries,
         promemoria: reminders,
+        deleghe: delegations,
         obiettivi: dayTargets,
         aggiornatoIl: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -900,6 +1057,8 @@
   }
 
   async function saveReminders(){ await pushData(); }
+
+  async function saveTargets(){ await pushData(); }
 
   function addReminder(testo, cliente, scadenza){
     reminders.unshift({
@@ -930,12 +1089,46 @@
     render();
   }
 
+  // ---------- Deleghe ai collaboratori ----------
+  async function saveDelegations(){ await pushData(); }
+
+  function addDelegation(collaboratore, cliente, descrizione, scadenza){
+    delegations.unshift({
+      id: uid(),
+      collaboratore,
+      cliente: cliente || '',
+      descrizione,
+      scadenza: scadenza || '',
+      fatto: false,
+      creato: Date.now(),
+      completatoIl: null
+    });
+    saveDelegations();
+    render();
+  }
+
+  function toggleDelegation(id){
+    const d = delegations.find(x => x.id === id);
+    if (!d) return;
+    d.fatto = !d.fatto;
+    d.completatoIl = d.fatto ? Date.now() : null;
+    saveDelegations();
+    render();
+  }
+
+  function deleteDelegation(id){
+    delegations = delegations.filter(d => d.id !== id);
+    saveDelegations();
+    render();
+  }
+
   function exportBackup(){
     const payload = {
       esportatoIl: new Date().toISOString(),
       clienti: clients,
       attivita: entries,
       promemoria: reminders,
+      deleghe: delegations,
       obiettiviGiorno: dayTargets
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -964,13 +1157,153 @@
       clients = Array.isArray(data.clienti) ? data.clienti : [];
       entries = Array.isArray(data.attivita) ? data.attivita : [];
       reminders = Array.isArray(data.promemoria) ? data.promemoria : [];
+      delegations = Array.isArray(data.deleghe) ? data.deleghe : [];
       dayTargets = data.obiettiviGiorno && typeof data.obiettiviGiorno === 'object' ? data.obiettiviGiorno : {};
-      await Promise.all([saveClients(), saveEntries(), saveReminders(), saveTargets()]);
+      await Promise.all([saveClients(), saveEntries(), saveReminders(), saveDelegations(), saveTargets()]);
       showToast('Backup ripristinato');
       render();
     } catch(e){
       showToast('Impossibile leggere il file di backup');
     }
+  }
+
+  // ---------- Report ed esportazioni ----------
+
+  function getReportEntries(){
+    let list = entries.slice();
+    if (reportClient) list = list.filter(e => e.cliente === reportClient);
+    if (reportDateFrom) list = list.filter(e => e.data >= reportDateFrom);
+    if (reportDateTo) list = list.filter(e => e.data <= reportDateTo);
+    list = list.filter(e => {
+      const b = isBillable(e);
+      return (b && reportIncludeBillable) || (!b && reportIncludeNonBillable);
+    });
+    list.sort((a,b)=> a.data.localeCompare(b.data) || (a.creato - b.creato));
+    return list;
+  }
+
+  function csvEscape(val){
+    const s = String(val == null ? '' : val);
+    if (/[";\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+
+  function downloadTextFile(filename, content, mime){
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportReportCSV(){
+    const list = getReportEntries();
+    if (!list.length){ showToast('Nessuna attività corrisponde ai filtri del report'); return; }
+    const rows = [['Data','Cliente','Minuti','Durata','Fatturabile','Descrizione']];
+    list.forEach(e => {
+      rows.push([e.data, e.cliente, e.minuti, fmtMin(e.minuti), isBillable(e) ? 'Sì' : 'No', e.descrizione]);
+    });
+    const totMin = list.reduce((s,e)=>s+e.minuti,0);
+    rows.push([]);
+    rows.push(['', '', '', '', 'Totale', fmtMin(totMin)]);
+    const csv = rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+    const nomeCliente = reportClient ? reportClient.replace(/[^a-z0-9]+/gi,'-') : 'tutti-i-clienti';
+    downloadTextFile('report-' + nomeCliente + '-' + todayISO() + '.csv', '\uFEFF' + csv, 'text/csv;charset=utf-8;');
+    showToast('Report CSV scaricato');
+  }
+
+  function exportReportPDF(){
+    const list = getReportEntries();
+    if (!list.length){ showToast('Nessuna attività corrisponde ai filtri del report'); return; }
+    const totMin = list.reduce((s,e)=>s+e.minuti,0);
+    const billMin = list.filter(isBillable).reduce((s,e)=>s+e.minuti,0);
+    const nonBillMin = totMin - billMin;
+    const titolo = reportClient ? escapeHtml(reportClient) : 'Tutti i clienti';
+    const periodo = (reportDateFrom || reportDateTo)
+      ? `${reportDateFrom ? fmtDateLabel(reportDateFrom) : '\u2026'} \u2013 ${reportDateTo ? fmtDateLabel(reportDateTo) : '\u2026'}`
+      : 'Tutto lo storico';
+    const tipoLabel = (reportIncludeBillable && !reportIncludeNonBillable) ? 'Solo attività fatturabili'
+      : (!reportIncludeBillable && reportIncludeNonBillable) ? 'Solo attività non fatturabili'
+      : 'Tutte le attività';
+
+    const rowsHtml = list.map(e => `
+      <tr>
+        <td>${fmtDateLabel(e.data)}</td>
+        <td>${escapeHtml(e.descrizione)}</td>
+        <td class="r">${fmtMin(e.minuti)}</td>
+        <td class="c">${isBillable(e) ? 'Sì' : 'No'}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+      <title>Report ${titolo}</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1A1A18; padding: 32px; }
+        h1 { font-size: 20px; text-transform: uppercase; letter-spacing: -0.02em; margin: 0 0 2px; }
+        .sub { font-size: 12px; color:#55534C; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        th, td { padding: 7px 8px; border-bottom: 1px solid #D9D6CC; text-align: left; }
+        th { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; color:#55534C; border-bottom: 2px solid #1A1A18; }
+        td.r, th.r { text-align: right; font-family: monospace; }
+        td.c, th.c { text-align: center; }
+        .totals { margin-top: 18px; font-size: 13px; }
+        .totals div { margin-bottom: 4px; }
+        .totals b { font-family: monospace; }
+        @media print { body { padding: 12mm; } }
+      </style>
+      </head><body>
+        <h1>Report attività \u2014 ${titolo}</h1>
+        <div class="sub">${periodo} &nbsp;\u2022&nbsp; ${tipoLabel} &nbsp;\u2022&nbsp; generato il ${fmtDateLabel(todayISO())}</div>
+        <table>
+          <thead><tr><th>Data</th><th>Descrizione</th><th class="r">Durata</th><th class="c">Fatturabile</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <div class="totals">
+          <div>Totale ore: <b>${fmtMin(totMin)}</b></div>
+          <div>di cui fatturabile: <b>${fmtMin(billMin)}</b></div>
+          <div>di cui non fatturabile: <b>${fmtMin(nonBillMin)}</b></div>
+        </div>
+        <script>window.onload = function(){ window.print(); };<\/script>
+      </body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  function exportStatsCSV(){
+    let list = entries.slice();
+    if (reportDateFrom) list = list.filter(e => e.data >= reportDateFrom);
+    if (reportDateTo) list = list.filter(e => e.data <= reportDateTo);
+    if (!list.length){ showToast('Nessun dato nel periodo selezionato'); return; }
+
+    const perClient = {};
+    list.forEach(e => {
+      if (!perClient[e.cliente]) perClient[e.cliente] = { count: 0, totMin: 0, billMin: 0 };
+      perClient[e.cliente].count++;
+      perClient[e.cliente].totMin += e.minuti;
+      if (isBillable(e)) perClient[e.cliente].billMin += e.minuti;
+    });
+
+    const rows = [['Cliente','Numero attività','Minuti totali','Ore totali','Minuti fatturabili','Minuti non fatturabili','% fatturabile']];
+    Object.keys(perClient).sort((a,b)=>a.localeCompare(b)).forEach(c => {
+      const s = perClient[c];
+      const pct = s.totMin > 0 ? Math.round((s.billMin/s.totMin)*100) : 0;
+      rows.push([c, s.count, s.totMin, fmtMin(s.totMin), s.billMin, s.totMin - s.billMin, pct + '%']);
+    });
+    const grandTot = list.reduce((s,e)=>s+e.minuti,0);
+    const grandBill = list.filter(isBillable).reduce((s,e)=>s+e.minuti,0);
+    rows.push([]);
+    rows.push(['Totale generale', list.length, grandTot, fmtMin(grandTot), grandBill, grandTot-grandBill, grandTot>0?Math.round((grandBill/grandTot)*100)+'%':'0%']);
+
+    const csv = rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+    downloadTextFile('statistiche-' + todayISO() + '.csv', '\uFEFF' + csv, 'text/csv;charset=utf-8;');
+    showToast('Statistiche scaricate');
   }
 
   async function saveClients(){ await pushData(); }
@@ -1010,22 +1343,35 @@
     render();
   }
 
-  function addEntry(cliente, data, minuti, descrizione){
-    const entry = { id: uid(), cliente, data, minuti, descrizione, creato: Date.now() };
+  function isBillable(e){
+    return e.fatturabile !== false; // default true per compatibilità con voci vecchie
+  }
+
+  function addEntry(cliente, data, minuti, descrizione, fatturabile){
+    const entry = { id: uid(), cliente, data, minuti, descrizione, fatturabile: !!fatturabile, creato: Date.now() };
     entries.unshift(entry);
     saveEntries();
     render(entry.id);
   }
 
-  function updateEntry(id, cliente, data, minuti, descrizione){
+  function updateEntry(id, cliente, data, minuti, descrizione, fatturabile){
     const e = entries.find(x => x.id === id);
     if (!e) return;
     e.cliente = cliente;
     e.data = data;
     e.minuti = minuti;
     e.descrizione = descrizione;
+    e.fatturabile = !!fatturabile;
     saveEntries();
     editingEntryId = null;
+    render();
+  }
+
+  function toggleBillable(id){
+    const e = entries.find(x => x.id === id);
+    if (!e) return;
+    e.fatturabile = !isBillable(e);
+    saveEntries();
     render();
   }
 
@@ -1035,15 +1381,17 @@
     editingEntryId = id;
     formClient = e.cliente;
     formDuration = e.minuti;
+    formFatturabile = isBillable(e);
     render();
     const formCard = root.querySelector('.form-card');
-    if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (formCard && typeof formCard.scrollIntoView === 'function') formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function cancelEditEntry(){
     editingEntryId = null;
     formClient = '';
     formDuration = 30;
+    formFatturabile = true;
     render();
   }
 
@@ -1145,6 +1493,10 @@
     const pct = targetMin > 0 ? Math.min(100, (workedMin/targetMin)*100) : 0;
     const targetHoursVal = (targetMin/60);
 
+    const billableMin = todaysEntries.filter(isBillable).reduce((s,e)=> s + e.minuti, 0);
+    const nonBillableMin = workedMin - billableMin;
+    const pctBillable = workedMin > 0 ? (billableMin/workedMin)*100 : 0;
+
     // ---- Promemoria ----
     let remList = reminders.slice();
     if (reminderClientFilter) remList = remList.filter(r => r.cliente === reminderClientFilter);
@@ -1206,6 +1558,85 @@
       </div>
     `;
 
+    // ---- Deleghe ai collaboratori ----
+    let delegList = delegations.slice();
+    if (delegationCollabFilter) delegList = delegList.filter(d => d.collaboratore === delegationCollabFilter);
+    const activeDeleg = delegList.filter(d => !d.fatto).sort((a,b)=> {
+      if (a.scadenza && b.scadenza) return a.scadenza.localeCompare(b.scadenza);
+      if (a.scadenza) return -1;
+      if (b.scadenza) return 1;
+      return b.creato - a.creato;
+    });
+    const doneDeleg = delegList.filter(d => d.fatto).sort((a,b)=> (b.completatoIl||0) - (a.completatoIl||0));
+
+    const collabStats = {};
+    delegations.forEach(d => {
+      if (!collabStats[d.collaboratore]) collabStats[d.collaboratore] = { open: 0, total: 0 };
+      collabStats[d.collaboratore].total++;
+      if (!d.fatto) collabStats[d.collaboratore].open++;
+    });
+    const collabNames = Object.keys(collabStats).sort((a,b)=>a.localeCompare(b));
+    const collabDatalistOptions = collabNames.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+
+    function delegationItemHtml(d, isDone){
+      const overdue = (!isDone && d.scadenza && d.scadenza < today);
+      return `
+        <div class="reminder-item ${isDone?'done':''}">
+          <div class="reminder-check ${isDone?'checked':''}" data-toggle-deleg="${d.id}">${isDone?'✓':''}</div>
+          <div class="reminder-body">
+            <div class="reminder-text">${escapeHtml(d.descrizione)}</div>
+            <div class="reminder-meta">
+              <span class="m-client">${escapeHtml(d.collaboratore)}</span>
+              ${d.cliente ? `<span class="m-client">${escapeHtml(d.cliente)}</span>` : ''}
+              ${d.scadenza ? `<span class="m-date ${overdue?'overdue':''}">${overdue?'scaduta ':'entro '}${fmtDateLabel(d.scadenza)}</span>` : ''}
+            </div>
+          </div>
+          <div class="reminder-actions">
+            ${isDone ? `<span data-reopen-deleg="${d.id}" title="Riapri">↺</span>` : ''}
+            <span data-del-deleg="${d.id}" title="Elimina">✕</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const delegationsHtml = `
+      <div class="reminders-section">
+        <div class="reminder-card">
+          <div class="reminder-head">
+            <div class="board-title" style="margin-bottom:0;">Deleghe ai collaboratori</div>
+            <button type="button" class="reminder-toggle-archive" id="toggle-deleg-archive-btn">
+              ${showCompletedDelegations ? 'Nascondi concluse' : `Mostra concluse (${doneDeleg.length})`}
+            </button>
+          </div>
+          ${collabNames.length ? `
+            <div class="collab-chips">
+              <span class="collab-chip ${delegationCollabFilter===''?'active':''}" data-collab="">Tutti</span>
+              ${collabNames.map(c => `<span class="collab-chip ${delegationCollabFilter===c?'active':''}" data-collab="${escapeHtml(c)}">${escapeHtml(c)} <b>${collabStats[c].open}</b> aperte</span>`).join('')}
+            </div>
+          ` : ''}
+          <div class="reminder-add-row deleg-add-row">
+            <input type="text" id="deleg-collab" placeholder="Collaboratore…" list="collab-datalist"/>
+            <datalist id="collab-datalist">${collabDatalistOptions}</datalist>
+            <input type="text" id="deleg-text" placeholder="Cosa gli/le hai delegato?"/>
+            <select id="deleg-client">
+              <option value="">— cliente (opz.) —</option>
+              ${clients.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+            <input type="date" id="deleg-date"/>
+            <button type="button" class="reminder-add-btn" id="deleg-add-btn">Aggiungi</button>
+          </div>
+          <div class="reminder-list">
+            ${activeDeleg.length ? activeDeleg.map(d => delegationItemHtml(d,false)).join('') : '<div class="reminder-empty">Nessuna delega in sospeso.</div>'}
+          </div>
+          ${showCompletedDelegations ? `
+            <div class="reminder-list" style="margin-top:10px; border-top:1px dashed var(--line); padding-top:8px;">
+              ${doneDeleg.length ? doneDeleg.map(d => delegationItemHtml(d,true)).join('') : '<div class="reminder-empty">Nessuna delega conclusa.</div>'}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
     const balanceHtml = `
       <div class="balance-section">
         <div class="balance-head">
@@ -1234,6 +1665,22 @@
             <span class="lab">Oltre il previsto</span>
           </div>` : ''}
         </div>
+        <div class="balance-sub">
+          <div class="balance-sub-label">Di cui fatturabile</div>
+          <div class="balance-bar">
+            <div class="balance-fill billable ${pctBillable>=100?'full':''}" style="width:${pctBillable}%;"></div>
+          </div>
+          <div class="balance-stats">
+            <div class="bstat">
+              <span class="num mono c-green">${fmtMin(billableMin)}</span>
+              <span class="lab">Fatturabile</span>
+            </div>
+            <div class="bstat">
+              <span class="num mono c-muted">${fmtMin(nonBillableMin)}</span>
+              <span class="lab">Non fatturabile</span>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -1244,6 +1691,7 @@
           ${todaysEntries.length ? todaysEntries.map(e => `
             <div class="board-row ${e.id===justAddedId?'flip-in':''}">
               <div class="board-time">${fmtMin(e.minuti)}</div>
+              <div class="board-bill ${isBillable(e)?'on':''}" data-bill="${e.id}" title="${isBillable(e)?'Fatturabile — clicca per togliere':'Non fatturabile — clicca per segnare fatturabile'}">${isBillable(e)?'✓':''}</div>
               <div class="board-client">${escapeHtml(e.cliente)}</div>
               <div class="board-desc">${escapeHtml(e.descrizione)}</div>
               <div class="board-edit" data-edit="${e.id}">✎</div>
@@ -1285,6 +1733,12 @@
             <input type="number" id="f-minuti" min="1" step="5" value="${formDuration}"/>
             <div class="duration-chips">${durationChipsHtml}</div>
           </div>
+        </div>
+        <div class="billable-toggle-row">
+          <label class="billable-toggle">
+            <input type="checkbox" id="f-fatturabile" ${formFatturabile ? 'checked' : ''}/>
+            <span>Fatturabile al cliente</span>
+          </label>
         </div>
         <div class="desc-wrap">
           <textarea id="f-desc" placeholder="Cosa hai fatto? Es. Telefonato all'ufficio imposte alla fonte per lo stato della pratica…">${escapeHtml(formDescVal)}</textarea>
@@ -1342,6 +1796,7 @@
           ${groups[day].map(e => `
             <div class="entry-row">
               <div class="e-time mono">${fmtMin(e.minuti)}</div>
+              <div class="e-bill ${isBillable(e)?'on':''}" data-bill="${e.id}" title="${isBillable(e)?'Fatturabile — clicca per togliere':'Non fatturabile — clicca per segnare fatturabile'}">${isBillable(e)?'✓':''}</div>
               <div class="e-client">${escapeHtml(e.cliente)}</div>
               <div class="e-desc">${escapeHtml(e.descrizione)}</div>
               <div class="e-edit" data-edit="${e.id}">✎</div>
@@ -1350,6 +1805,59 @@
           `).join('')}
         </div>
       `).join('') : '<div class="ledger-empty">Nessuna attività corrisponde ai filtri selezionati.</div>'}
+    `;
+
+    // ---- Report ed esportazioni ----
+    const reportEntries = getReportEntries();
+    const reportTotMin = reportEntries.reduce((s,e)=>s+e.minuti,0);
+    const reportBillMin = reportEntries.filter(isBillable).reduce((s,e)=>s+e.minuti,0);
+    const reportNonBillMin = reportTotMin - reportBillMin;
+
+    const reportHtml = `
+      <div class="report-section">
+        <div class="ledger-title" style="margin-bottom:12px;">Report ed esportazioni</div>
+        <div class="report-card">
+          <div class="report-filters-row">
+            <div class="field">
+              <label>Cliente</label>
+              <select id="rep-client">
+                <option value="">Tutti i clienti</option>
+                ${clients.map(c=>`<option value="${escapeHtml(c)}" ${reportClient===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label>Dal</label>
+              <input type="date" id="rep-from" value="${reportDateFrom}"/>
+            </div>
+            <div class="field">
+              <label>Al</label>
+              <input type="date" id="rep-to" value="${reportDateTo}"/>
+            </div>
+          </div>
+          <div class="report-type-row">
+            <label class="billable-toggle">
+              <input type="checkbox" id="rep-inc-bill" ${reportIncludeBillable?'checked':''}/>
+              <span>Fatturabili</span>
+            </label>
+            <label class="billable-toggle">
+              <input type="checkbox" id="rep-inc-nonbill" ${reportIncludeNonBillable?'checked':''}/>
+              <span>Non fatturabili</span>
+            </label>
+          </div>
+          <div class="report-preview-tot">
+            <div class="bstat"><span class="num mono">${fmtMin(reportTotMin)}</span><span class="lab">Totale nel filtro</span></div>
+            <div class="bstat"><span class="num mono c-green">${fmtMin(reportBillMin)}</span><span class="lab">Fatturabile</span></div>
+            <div class="bstat"><span class="num mono c-muted">${fmtMin(reportNonBillMin)}</span><span class="lab">Non fatturabile</span></div>
+            <div class="bstat"><span class="num mono">${reportEntries.length}</span><span class="lab">Attività</span></div>
+          </div>
+          <div class="report-actions">
+            <button type="button" class="report-btn primary" id="rep-export-csv">⬇ Esporta CSV (Excel)</button>
+            <button type="button" class="report-btn primary" id="rep-export-pdf">🖶 Timesheet stampabile / PDF</button>
+            <button type="button" class="report-btn" id="rep-export-stats">⬇ Esporta statistiche per cliente</button>
+          </div>
+          <div class="report-hint">Il CSV e il timesheet rispettano i filtri qui sopra (cliente, periodo, fatturabile/non fatturabile). Le statistiche per cliente considerano invece tutti i clienti nel periodo selezionato.</div>
+        </div>
+      </div>
     `;
 
     root.innerHTML = `
@@ -1372,10 +1880,12 @@
         ${sidebarHtml}
         <div class="main">
           ${remindersHtml}
+          ${delegationsHtml}
           ${balanceHtml}
           ${boardHtml}
           ${formHtml}
           ${ledgerHtml}
+          ${reportHtml}
         </div>
       </div>
     `;
@@ -1495,8 +2005,75 @@
       el.addEventListener('click', () => deleteReminder(el.getAttribute('data-del-rem')));
     });
 
+    const delegAddBtn = root.querySelector('#deleg-add-btn');
+    if (delegAddBtn){
+      const submitDelegation = () => {
+        const collabEl = root.querySelector('#deleg-collab');
+        const textEl = root.querySelector('#deleg-text');
+        const clientEl = root.querySelector('#deleg-client');
+        const dateEl = root.querySelector('#deleg-date');
+        const collaboratore = collabEl.value.trim();
+        const testo = textEl.value.trim();
+        if (!collaboratore){ showToast('Indica a chi hai delegato il lavoro'); return; }
+        if (!testo){ showToast('Descrivi cosa è stato delegato'); return; }
+        addDelegation(collaboratore, clientEl.value, testo, dateEl.value);
+        showToast('Delega aggiunta');
+        collabEl.value = ''; textEl.value = ''; clientEl.value = ''; dateEl.value = '';
+      };
+      delegAddBtn.addEventListener('click', submitDelegation);
+      const delegTextInput = root.querySelector('#deleg-text');
+      if (delegTextInput){
+        delegTextInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter'){ e.preventDefault(); submitDelegation(); }
+        });
+      }
+    }
+
+    const deleguArchiveBtn = root.querySelector('#toggle-deleg-archive-btn');
+    if (deleguArchiveBtn){
+      deleguArchiveBtn.addEventListener('click', () => {
+        showCompletedDelegations = !showCompletedDelegations;
+        render();
+      });
+    }
+
+    root.querySelectorAll('[data-collab]').forEach(el => {
+      el.addEventListener('click', () => {
+        delegationCollabFilter = el.getAttribute('data-collab');
+        render();
+      });
+    });
+
+    root.querySelectorAll('[data-toggle-deleg]').forEach(el => {
+      el.addEventListener('click', () => toggleDelegation(el.getAttribute('data-toggle-deleg')));
+    });
+    root.querySelectorAll('[data-reopen-deleg]').forEach(el => {
+      el.addEventListener('click', () => toggleDelegation(el.getAttribute('data-reopen-deleg')));
+    });
+    root.querySelectorAll('[data-del-deleg]').forEach(el => {
+      el.addEventListener('click', () => deleteDelegation(el.getAttribute('data-del-deleg')));
+    });
+
     const exportBtn = root.querySelector('#export-btn');
     if (exportBtn) exportBtn.addEventListener('click', exportBackup);
+
+    const repClient = root.querySelector('#rep-client');
+    if (repClient) repClient.addEventListener('change', () => { reportClient = repClient.value; render(); });
+    const repFrom = root.querySelector('#rep-from');
+    if (repFrom) repFrom.addEventListener('change', () => { reportDateFrom = repFrom.value; render(); });
+    const repTo = root.querySelector('#rep-to');
+    if (repTo) repTo.addEventListener('change', () => { reportDateTo = repTo.value; render(); });
+    const repIncBill = root.querySelector('#rep-inc-bill');
+    if (repIncBill) repIncBill.addEventListener('change', () => { reportIncludeBillable = repIncBill.checked; render(); });
+    const repIncNonBill = root.querySelector('#rep-inc-nonbill');
+    if (repIncNonBill) repIncNonBill.addEventListener('change', () => { reportIncludeNonBillable = repIncNonBill.checked; render(); });
+
+    const repExportCsv = root.querySelector('#rep-export-csv');
+    if (repExportCsv) repExportCsv.addEventListener('click', exportReportCSV);
+    const repExportPdf = root.querySelector('#rep-export-pdf');
+    if (repExportPdf) repExportPdf.addEventListener('click', exportReportPDF);
+    const repExportStats = root.querySelector('#rep-export-stats');
+    if (repExportStats) repExportStats.addEventListener('click', exportStatsCSV);
 
     const importBtn = root.querySelector('#import-btn');
     const importFileInput = root.querySelector('#import-file-input');
@@ -1526,17 +2103,25 @@
         const data = root.querySelector('#f-date').value || todayISO();
         const minuti = parseInt(root.querySelector('#f-minuti').value,10);
         const descrizione = root.querySelector('#f-desc').value.trim();
+        const fatturabile = root.querySelector('#f-fatturabile').checked;
         if (!cliente){ showToast('Seleziona un cliente'); return; }
         if (!descrizione){ showToast("Descrivi l'attività svolta"); return; }
         if (!minuti || minuti <= 0){ showToast('Indica il tempo impiegato'); return; }
         if (recognizing && recognition) recognition.stop();
         if (editingEntryId){
-          updateEntry(editingEntryId, cliente, data, minuti, descrizione);
+          updateEntry(editingEntryId, cliente, data, minuti, descrizione, fatturabile);
           showToast('Attività aggiornata');
         } else {
-          addEntry(cliente, data, minuti, descrizione);
+          addEntry(cliente, data, minuti, descrizione, fatturabile);
           showToast('Attività registrata');
         }
+      });
+    }
+
+    const fatturabileCheckbox = root.querySelector('#f-fatturabile');
+    if (fatturabileCheckbox){
+      fatturabileCheckbox.addEventListener('change', () => {
+        formFatturabile = fatturabileCheckbox.checked;
       });
     }
 
@@ -1552,6 +2137,13 @@
       el.addEventListener('click', () => {
         const id = el.getAttribute('data-edit');
         startEditEntry(id);
+      });
+    });
+
+    root.querySelectorAll('[data-bill]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-bill');
+        toggleBillable(id);
       });
     });
 
@@ -1582,7 +2174,8 @@
       if (user){
         loginScreen.style.display = 'none';
         appRoot.style.display = '';
-        if (window.__registroApp) window.__registroApp.subscribeToData(user.uid);
+        // Tutti gli account autorizzati condividono lo stesso archivio dati
+        if (window.__registroApp) window.__registroApp.subscribeToData('studio-principale');
       } else {
         if (window.__registroApp) window.__registroApp.unsubscribeData();
         appRoot.style.display = 'none';

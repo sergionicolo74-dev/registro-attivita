@@ -1,0 +1,77 @@
+// Modulo Utenti (solo amministratori): collaboratori che accedono al gestionale.
+import * as D from "./data.js";
+import { e, avviso, stato, campo, leggiForm } from "./ui.js";
+import { fmtData } from "./regole.js";
+
+const RUOLI = [["utente", "Utente (vede solo i propri dati)"], ["admin", "Amministratore (vede tutto)"]];
+const ERRORI = {
+  "auth/email-already-in-use": "Esiste già un account con questa email. Se è di un collaboratore senza accesso, scrivimi il suo codice utente.",
+  "auth/invalid-email": "Email non valida.",
+  "auth/operation-not-allowed": "In Firebase l'accesso con email e password non è attivo.",
+  "auth/network-request-failed": "Connessione assente: riprova."
+};
+
+export async function vistaUtenti(el) {
+  const me = D.utenteCorrente();
+  const utenti = (await D.listaUtenti()).sort((a, b) => (b.attivo !== false) - (a.attivo !== false) || String(a.nome || "").localeCompare(String(b.nome || "")));
+  el.innerHTML = `<div class="testata"><div><h1>Utenti</h1><div class="tenue">Chi può accedere al gestionale</div></div>
+      <div class="barra"><button class="btn primario" id="nuovo-u">Nuovo collaboratore</button></div></div>
+    <table class="tabella"><thead><tr><th>Nome</th><th>Email</th><th>Ruolo</th><th>Accesso</th><th>Accordo 73b</th><th>Orario</th></tr></thead><tbody>
+    ${utenti.map(u => `<tr class="cliccabile" data-id="${e(u.id)}" tabindex="0">
+      <td><strong>${e(u.nome || "(senza nome)")}</strong>${u.id === me.uid ? ' <span class="tenue">· tu</span>' : ""}</td><td>${e(u.email || "")}</td>
+      <td>${u.ruolo === "admin" ? stato("info", "Amministratore") : u.ruolo === "utente" ? stato("neutro", "Utente") : stato("urgente", "Nessun ruolo")}</td>
+      <td>${u.attivo === false ? stato("scaduto", "Disattivato") : stato("ok", "Attivo")}</td>
+      <td>${u.accordo73b ? e(fmtData(u.accordo73b)) : '<span class="tenue">–</span>'}</td>
+      <td>${e(u.oreSettimanali || 42)} h · ${e(u.percentuale ?? 100)}%</td></tr>`).join("")}</tbody></table>
+    <p class="tenue" style="margin-top:10px">Il nome deve essere scritto come nel campo "Responsabile" dei clienti: così lo Scadenziario sa di chi sono le scadenze. Orario, accordo 73b e saldo ore si impostano in Presenze → Orario e accordo.</p>`;
+  const ricarica = () => vistaUtenti(el);
+  el.querySelector("#nuovo-u").addEventListener("click", () => cassetto(null, ricarica));
+  el.querySelectorAll("tr[data-id]").forEach(tr => {
+    const apri = () => cassetto(utenti.find(u => u.id === tr.dataset.id), ricarica);
+    tr.addEventListener("click", apri); tr.addEventListener("keydown", ev => { if (ev.key === "Enter") apri(); });
+  });
+}
+
+function cassetto(u, ricarica) {
+  const me = D.utenteCorrente(), nuovo = !u, io = u?.id === me.uid;
+  const velo = document.createElement("div"); velo.className = "velo";
+  const box = document.createElement("aside"); box.className = "cassetto"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Utente");
+  box.innerHTML = `<form><h2 style="font-size:18px;margin-bottom:14px">${nuovo ? "Nuovo collaboratore" : e(u.nome || "Utente")}</h2>
+    <div class="griglia">
+      ${campo("nome", "Nome e cognome", u?.nome, "text", [], true)}
+      ${nuovo ? campo("email", "Email di lavoro", "", "email", [], true) : `<div class="largo"><label>Email</label><div style="padding:8px 0">${e(u.email || "–")}</div></div>`}
+      <div><label for="f_ruolo">Ruolo</label><select id="f_ruolo" name="ruolo"${io ? " disabled" : ""}>${RUOLI.map(([k, n]) => `<option value="${k}"${(u?.ruolo || "utente") === k ? " selected" : ""}>${e(n)}</option>`).join("")}</select></div>
+      ${nuovo ? "" : `<div><label for="f_att">Accesso</label><select id="f_att" name="attivo"${io ? " disabled" : ""}><option value="si"${u.attivo !== false ? " selected" : ""}>Attivo</option><option value="no"${u.attivo === false ? " selected" : ""}>Disattivato</option></select></div>`}
+    </div>
+    ${nuovo ? `<p class="tenue" style="font-size:13px;margin-top:12px">Il collaboratore riceve un'email per scegliere la propria password (controllare anche lo spam). Poi entra dall'indirizzo del gestionale con la sua email.</p>`
+      : `<p class="tenue" style="font-size:13px;margin-top:12px">${io ? "Non puoi cambiare il tuo ruolo né disattivarti. " : "Disattivato: non può più entrare, ma le sue ore e presenze restano conservate. "}Codice utente: <code>${e(u.id)}</code></p>`}
+    <div class="azioni">${!nuovo && u.email ? '<button type="button" class="btn" id="reinvia" style="margin-right:auto">Reinvia email password</button>' : ""}
+      <button type="button" class="btn" id="annulla-u">Chiudi</button><button class="btn primario">${nuovo ? "Crea e invia email" : "Salva"}</button></div></form>`;
+  document.body.append(velo, box);
+  const form = box.querySelector("form");
+  const chiudi = () => { velo.remove(); box.remove(); };
+  velo.addEventListener("click", chiudi); box.querySelector("#annulla-u").addEventListener("click", chiudi);
+  box.querySelector("#reinvia")?.addEventListener("click", async () => {
+    try { await D.recuperaPassword(u.email); avviso(`Email inviata a ${u.email}`); } catch { avviso("Invio non riuscito"); }
+  });
+  form.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const d = leggiForm(form), btn = form.querySelector(".primario");
+    if (!d.nome) { form.nome.focus(); avviso("Scrivi nome e cognome"); return; }
+    if (nuovo) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email || "")) { form.email.focus(); avviso("Email non valida"); return; }
+      btn.disabled = true; btn.textContent = "Creazione…";
+      try {
+        await D.creaCollaboratore({ nome: d.nome, email: d.email.toLowerCase(), ruolo: d.ruolo });
+        chiudi(); avviso(`Account creato: email inviata a ${d.email}`); ricarica();
+      } catch (x) {
+        console.error(x); btn.disabled = false; btn.textContent = "Crea e invia email";
+        avviso(ERRORI[x.code] || "Creazione non riuscita: " + (x.message || x));
+      }
+      return;
+    }
+    await D.salvaUtente({ id: u.id, nome: d.nome, ...(io ? {} : { ruolo: d.ruolo, attivo: d.attivo !== "no" }) });
+    chiudi(); avviso("Utente aggiornato"); ricarica();
+  });
+  form.nome.focus();
+}

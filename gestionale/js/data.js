@@ -10,6 +10,7 @@ let db = null, auth = null;
 let demo = null;        // archivio in memoria per l'ambiente demo
 let utente = null;      // { uid, email, nome, ruolo }
 let authListeners = [];
+let appMod = null, configFb = null; // per creare account senza uscire dalla sessione dell'amministratore
 
 const ADMIN = () => utente && utente.ruolo === "admin";
 
@@ -20,7 +21,7 @@ export async function init(env) {
     import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
     import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
   ]);
-  fb = { ...a, ...f };
+  fb = { ...a, ...f }; appMod = app; configFb = AMBIENTI[env].firebase;
   const fapp = app.initializeApp(AMBIENTI[env].firebase);
   auth = a.getAuth(fapp);
   db = f.getFirestore(fapp);
@@ -102,6 +103,27 @@ export async function scriviMolti(docs, avanzamento = () => {}) {
 
 // ---------- utenti ----------
 export const listaUtenti = () => lista("utenti");
+
+/**
+ * Crea l'account di un collaboratore (solo amministratori) e gli invia l'email per scegliere la password.
+ * Usa una seconda istanza di Firebase, così l'amministratore resta collegato.
+ */
+export async function creaCollaboratore({ nome, email, ruolo }) {
+  if (!ADMIN()) throw new Error("Solo un amministratore può creare utenti");
+  if (demo) { const id = "u" + Date.now().toString(36); demo.utenti[id] = { id, nome, email, ruolo, attivo: true }; return id; }
+  const nomeApp = "creazione-utenti";
+  const sec = appMod.getApps().find(x => x.name === nomeApp) || appMod.initializeApp(configFb, nomeApp);
+  const secAuth = fb.getAuth(sec);
+  const pw = crypto.getRandomValues(new Uint32Array(4)).join("-") + "Aa!";
+  const cred = await fb.createUserWithEmailAndPassword(secAuth, email, pw);
+  const uid = cred.user.uid;
+  await fb.signOut(secAuth);
+  await scrivi("utenti", { id: uid, nome, email, ruolo, attivo: true, creato: ora(), oreSettimanali: 42, percentuale: 100, pausaStandard: 60, entrataStandard: "08:00" });
+  await fb.sendPasswordResetEmail(auth, email);
+  return uid;
+}
+/** Aggiorna nome, ruolo, stato attivo (solo amministratori). */
+export const salvaUtente = (u) => scrivi("utenti", u);
 
 // ---------- clienti ----------
 export const listaClienti = () => lista("clienti");

@@ -8,6 +8,7 @@ import { vistaMandati } from "./mandati.js";
 import { vistaCompiti } from "./compiti.js";
 import { vistaScadenziario } from "./scadenziario.js";
 import { vistaPresenze } from "./presenze.js";
+import { vistaUtenti } from "./utenti.js";
 
 const env = ambienteCorrente();
 
@@ -21,6 +22,7 @@ const MODULI = [
   { id: "compiti", nome: "Compiti", pronto: true },
   { id: "presenze", nome: "Presenze", pronto: true },
   { id: "vacanze", nome: "Vacanze", pronto: false },
+  { id: "utenti", nome: "Utenti", pronto: true, admin: true },
   { id: "importa", nome: "Importa dati", pronto: true, admin: true }
 ];
 
@@ -84,6 +86,7 @@ async function instrada() {
     else if (mod === "scadenziario") await vistaScadenziario(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "presenze") await vistaPresenze(vista);
     else if (mod === "compiti") await vistaCompiti(vista, id ? decodeURIComponent(id) : null);
+    else if (mod === "utenti" && D.isAdmin()) await vistaUtenti(vista);
     else if (mod === "importa" && D.isAdmin()) await vistaImporta(vista);
     else vista.innerHTML = `<div class="testata"><h1>${e(m?.nome || "Pagina")}</h1></div><div class="pannello vuoto">Questo modulo arriva nelle prossime fasi del piano.</div>`;
   } catch (x) {

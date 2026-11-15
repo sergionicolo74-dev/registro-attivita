@@ -19,6 +19,8 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch�
 - Dashboard: filtri per periodo (settimana, mese, trimestre, anno) e persona; ore sui mandati, presenza e copertura per collaboratore, andamento, ore per mandato e per cliente, semafori dello studio
 - Persone fisiche: anagrafica per la dichiarazione (stato civile, coniuge, figli, documenti da raccogliere), DF al 30.04 con proroghe al 30.09 / 31.12 e spunta dei documenti ricevuti
 - Pratiche: pratiche amministrative fuori mandato con fasi, date di controllo e solleciti, ore registrate e fatturazione (forfait o a ore, esportazione CSV)
+- Report (amministratori e permesso fatturazione): da fatturare (forfait dei periodi chiusi, ore extra, pratiche), redditività dei mandati, dettaglio ore, rapporto stampabile per il cliente, esportazioni CSV
+- Registro: ogni ora è compresa nel mandato, extra da fatturare a parte o non fatturabile
 - Utenti: creazione dei collaboratori con email per scegliere la password
 
 ## Ambienti

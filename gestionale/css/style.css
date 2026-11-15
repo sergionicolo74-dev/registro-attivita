@@ -251,8 +251,8 @@ table.piano .oggi { box-shadow: inset 2px 0 0 var(--inchiostro), inset -2px 0 0 
 .sem:hover { border-color: #B9B6AC; }
 .kpi-d { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
 .kpi-c { background: #fff; border: 1px solid var(--linea); border-radius: var(--r); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.kpi-c strong { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.kpi-c.princ strong { font-size: 34px; }
+.kpi-c strong { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi-c.princ strong { font-size: clamp(22px, 2.4vw, 34px); }
 .mini-barra { display: flex; width: 100%; height: 10px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--grigio-tinta); }
 .sez-d { margin-bottom: 14px; }
 .testa-d { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -360,3 +360,17 @@ details.sez-d summary { cursor: pointer; }
 .doc-c { display: inline-block; margin-left: 6px; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--grigio-tinta); color: var(--tenue); }
 .doc-c.tutti { background: var(--verde-tinta); color: var(--verde); }
 .doc-c.tutti::before { content: "✓ "; }
+
+/* Report */
+.barra-ore { position: relative; height: 14px; min-width: 160px; }
+.barra-ore .prev { position: absolute; left: 0; top: 0; bottom: 0; border: 1.5px dashed #9A978E; border-radius: 4px; background: #fff; }
+.barra-ore .s-fat { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 3px 0 0 3px; }
+.barra-ore .oltre { position: absolute; top: 2px; bottom: 2px; border-radius: 0 3px 3px 0; background: repeating-linear-gradient(45deg, var(--rosso), var(--rosso) 3px, #E89A9A 3px, #E89A9A 6px); }
+.legenda i.s-oltre { background: repeating-linear-gradient(45deg, var(--rosso), var(--rosso) 3px, #E89A9A 3px, #E89A9A 6px); border-color: var(--rosso); }
+tr.fatturato td { color: var(--tenue); }
+.blocco-extra { border-top: 1px solid var(--linea); padding-top: 12px; margin-top: 12px; }
+.blocco-extra:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.blocco-extra h3 { font-size: 14px; }
+.voce-f { width: 100%; font: inherit; font-size: 13px; padding: 5px 7px; border: 1px solid var(--linea); border-radius: 6px; resize: vertical; }
+.desc-r { font-size: 13px; max-width: 360px; }
+strong.neg { color: var(--rosso); }

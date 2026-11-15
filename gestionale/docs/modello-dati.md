@@ -13,6 +13,7 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 | `compiti/{id}` | autore, assegnatario, admin | autore, assegnatario, admin | promemoria, deleghe, pratiche |
 | `scadenze/{cliente_servizio_periodo}` | utenti attivi | utenti attivi (elimina: admin) | solo lo stato delle scadenze calcolate |
 | `presenze/{uid_data}` | proprietario, admin | proprietario, admin | entrata, uscita, pausa e ore lavorate al giorno |
+| `fatture/{cliente_mandato_periodo}` | admin, permesso fatturazione | admin, permesso fatturazione | forfait dei mandati segnati come fatturati |
 | `pratiche/{id}` | utenti attivi | utenti attivi (elimina: admin) | pratiche amministrative fuori mandato |
 | `vacanze/{id}` | utenti attivi | richiedente (solo se in attesa), admin | piano vacanze e assenze, approvazione |
 
@@ -42,7 +43,7 @@ Il numero del documento d'identità non si registra: resta nella copia in archiv
 
 ## registrazioni
 
-`clienteId`, `data`, `minuti`, `fatturabile`, `tipo` (`lavoro`/`nota`), `mandato` (`contabilita`/`funzione`/`domiciliazione`), `descrizione`, `autoreUid`, `autoreNome`, `migratoDa` (se importata).
+`clienteId`, `data`, `minuti`, `fatturabile`, `extra` (vero = da fatturare a parte), `fatturataIl`, `voceFattura` (testo breve per la fattura), `praticaId`, `tipo` (`lavoro`/`nota`), `mandato` (`contabilita`/`funzione`/`domiciliazione`), `descrizione`, `autoreUid`, `autoreNome`, `migratoDa` (se importata).
 
 ## compiti
 
@@ -83,3 +84,12 @@ Nessun dato proprio: legge registrazioni, presenze, vacanze, clienti, compiti e 
 `apertaIl`, `inviataIl`, `conclusaIl`, `prossimoControllo`, `concludereEntro`, `attesa` (giorni), `solleciti`, `ultimoSollecito`, `responsabileUid`, `responsabileNome`,
 `passi` [{`quando`, `nome`, `fase`, `testo`}], `fatturazione` {`modo` (Forfait / A ore / Non fatturare), `importo`, `tariffa`, `stato` (Da fatturare / Fatturata), `fatturataIl`, `importoFatturato`}.
 Le ore si registrano nel Registro con `praticaId` (e `mandato` = "pratica"): non entrano nei budget dei mandati.
+
+## Report e fatturazione
+
+Permesso: `utenti/{uid}.fatturazione` = vero (oppure ruolo admin) → vede le ore di tutti nei Report e può segnare le fatture.
+Mandato a forfait = `budget` annuo > 0; si fattura per periodi (`fatturazione`: Mensile/Trimestrale/Semestrale/Annuale; contabilità trimestrale se vuoto, gli altri annuale):
+importo = budget ÷ numero di periodi. Redditività: ore nel mandato (anche non fatturabili, escluse extra e pratiche) × tariffa rispetto al forfait
+(redditizio se entro il forfait, al limite fino al 15% oltre, in perdita oltre). Ore preventivate: budget ore (contabilità) oppure forfait ÷ tariffa.
+Da fatturare a parte: ore extra, ore su mandati senza forfait e su clienti occasionali, più le pratiche concluse.
+`fatture` {`clienteId`, `mandato`, `periodo`, `importo`, `minuti`, `valoreOre`, `stato`, `fatturataIl`, `fatturataDa`}.

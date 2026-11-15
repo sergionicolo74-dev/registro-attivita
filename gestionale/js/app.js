@@ -12,6 +12,7 @@ import { vistaUtenti } from "./utenti.js";
 import { vistaVacanze } from "./vacanze.js";
 import { vistaDashboard } from "./dashboard.js";
 import { vistaPratiche } from "./pratiche.js";
+import { vistaReport } from "./report.js";
 
 const env = ambienteCorrente();
 
@@ -24,6 +25,7 @@ const MODULI = [
   { id: "scadenziario", nome: "Scadenziario", pronto: true },
   { id: "compiti", nome: "Compiti", pronto: true },
   { id: "pratiche", nome: "Pratiche", pronto: true },
+  { id: "report", nome: "Report", pronto: true, fatt: true },
   { id: "presenze", nome: "Presenze", pronto: true },
   { id: "vacanze", nome: "Vacanze", pronto: true },
   { id: "utenti", nome: "Utenti", pronto: true, admin: true },
@@ -72,7 +74,7 @@ function mostra(u) {
 
 function disegnaMenu(attivo) {
   const admin = D.isAdmin();
-  document.getElementById("nav").innerHTML = MODULI.filter(m => !m.admin || admin).map(m =>
+  document.getElementById("nav").innerHTML = MODULI.filter(m => (!m.admin || admin) && (!m.fatt || D.puoFatturare())).map(m =>
     `<a href="#/${m.id}" class="${m.id === attivo ? "attivo" : ""}"${m.id === attivo ? ' aria-current="page"' : ""}>${e(m.nome)}${m.pronto ? "" : '<span class="presto">in arrivo</span>'}</a>`).join("");
 }
 
@@ -90,6 +92,7 @@ async function instrada() {
     else if (mod === "mandati") await vistaMandati(vista);
     else if (mod === "scadenziario") await vistaScadenziario(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "presenze") await vistaPresenze(vista);
+    else if (mod === "report" && D.puoFatturare()) await vistaReport(vista);
     else if (mod === "pratiche") await vistaPratiche(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "compiti") await vistaCompiti(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "vacanze") await vistaVacanze(vista);

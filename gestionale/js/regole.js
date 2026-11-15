@@ -524,3 +524,39 @@ export const DOCUMENTI_DF = [
 ];
 /** Chiavi dei documenti scelti nell'anagrafica del cliente. */
 export const documentiDF = (c) => DOCUMENTI_DF.map(([k]) => k).filter(k => c.df?.documenti?.[k]);
+
+// ---------- Fatturazione e redditività dei mandati ----------
+export const FREQ_FATTURAZIONE = ["Mensile", "Trimestrale", "Semestrale", "Annuale"];
+const N_FREQ = { Mensile: 12, Trimestrale: 4, Semestrale: 2, Annuale: 1 };
+/** Frequenza di fatturazione di un mandato (contabilità: trimestrale se non indicata; gli altri: annuale). */
+export const freqMandato = (k, m) => m.fatturazione || (k === "contabilita" ? "Trimestrale" : "Annuale");
+/** Periodi di fatturazione di un anno: [{periodo, da, a, etichetta, quota}] */
+export function periodiFatturazione(freq, anno) {
+  const n = N_FREQ[freq] || 1, mesi = 12 / n, out = [];
+  for (let i = 1; i <= n; i++) {
+    const da = dataISO(anno, (i - 1) * mesi + 1, 1), a = fineMese(anno, i * mesi);
+    const etichetta = n === 12 ? `${MESI[i - 1]} ${anno}` : n === 4 ? `${i}° trimestre ${anno}` : n === 2 ? `${i}° semestre ${anno}` : String(anno);
+    out.push({ periodo: n === 1 ? String(anno) : `${anno}-${n === 12 ? String(i).padStart(2, "0") : (n === 4 ? "T" : "S") + i}`, da, a, etichetta, quota: 1 / n });
+  }
+  return out;
+}
+/** Il mandato è a forfait se ha un budget annuo; altrimenti si fattura a ore. */
+export const aForfait = (m) => Number(m?.budget) > 0;
+/**
+ * Redditività di un forfait: minuti impiegati valutati alla tariffa.
+ * esito: ok (valore ore entro il forfait) | urgente (fino al 15% oltre) | scaduto (in perdita oltre il 15%)
+ */
+export function redditivita(forfait, minuti, tariffa, minutiPreventivati = null) {
+  const valore = Math.round(minuti / 60 * tariffa * 100) / 100;
+  const margine = Math.round((forfait - valore) * 100) / 100;
+  const prev = minutiPreventivati ?? (tariffa ? forfait / tariffa * 60 : 0);
+  return { valore, margine, tariffaEffettiva: minuti ? Math.round(forfait / (minuti / 60) * 100) / 100 : null,
+    minutiPreventivati: Math.round(prev), percOre: prev ? Math.round(minuti / prev * 100) : null,
+    esito: !forfait ? null : valore <= forfait ? "ok" : valore <= forfait * 1.15 ? "urgente" : "scaduto" };
+}
+/** Come è fatturata una registrazione: pratica | extra | mandato | non */
+export function tipoFatturazione(r) {
+  if (r.praticaId) return "pratica";
+  if (r.fatturabile === false) return "non";
+  return r.extra ? "extra" : "mandato";
+}

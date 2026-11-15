@@ -29,7 +29,7 @@ export async function init(env) {
     if (!u) { utente = null; authListeners.forEach(cb => cb(null)); return; }
     let prof = null;
     try { prof = (await f.getDoc(f.doc(db, "utenti", u.uid))).data() || null; } catch (e) { prof = null; }
-    utente = { uid: u.uid, email: u.email, nome: prof?.nome || u.email, ruolo: prof?.ruolo || null, attivo: prof?.attivo !== false };
+    utente = { uid: u.uid, email: u.email, nome: prof?.nome || u.email, ruolo: prof?.ruolo || null, attivo: prof?.attivo !== false, fatturazione: prof?.fatturazione === true };
     authListeners.forEach(cb => cb(utente));
   });
 }
@@ -41,7 +41,7 @@ export function onAuth(cb) {
 
 export async function login(email, password) {
   // Demo: un indirizzo che inizia con "anna" entra come utente normale (per provare i permessi)
-  if (demo) { utente = /^anna/i.test(email) ? { uid: "u2", email, nome: "Anna", ruolo: "utente", attivo: true } : { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
+  if (demo) { utente = /^anna/i.test(email) ? { uid: "u2", email, nome: "Anna", ruolo: "utente", attivo: true, fatturazione: true } : { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
   await fb.signInWithEmailAndPassword(auth, email, password);
 }
 export async function logout() {
@@ -54,6 +54,8 @@ export async function recuperaPassword(email) {
 }
 export const utenteCorrente = () => utente;
 export const isAdmin = ADMIN;
+/** Può vedere i report e segnare le fatture: amministratori e chi ha il permesso "fatturazione". */
+export const puoFatturare = () => !!utente && (utente.ruolo === "admin" || utente.fatturazione === true);
 
 // ---------- primitive comuni ----------
 function nuovoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -155,8 +157,8 @@ export function listaRegistrazioni(clienteId) {
   return lista("registrazioni", f);
 }
 /** Registrazioni tra due date (ISO, incluse). Utente normale: solo le proprie (filtro data lato app, nessun indice composto). */
-export async function listaRegistrazioniPeriodo(da, a) {
-  if (ADMIN()) {
+export async function listaRegistrazioniPeriodo(da, a, tutte = false) {
+  if (ADMIN() || (tutte && puoFatturare())) {
     if (demo) return (await lista("registrazioni")).filter(r => r.data >= da && r.data <= a);
     const q = fb.query(fb.collection(db, "registrazioni"), fb.where("data", ">=", da), fb.where("data", "<=", a));
     return (await fb.getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
@@ -164,6 +166,15 @@ export async function listaRegistrazioniPeriodo(da, a) {
   return (await lista("registrazioni", [["autoreUid", "==", utente.uid]])).filter(r => r.data >= da && r.data <= a);
 }
 export const eliminaRegistrazione = (id) => elimina("registrazioni", id);
+/** Aggiorna solo alcuni campi (es. fatturataIl, voceFattura) di più registrazioni: per chi fattura. */
+export async function aggiornaRegistrazioni(ids, campi) {
+  await scriviMolti(ids.map(id => ({ col: "registrazioni", id, ...campi })));
+}
+
+// ---------- fatture dei forfait (stato per cliente, mandato e periodo) ----------
+export const listaFatture = () => lista("fatture");
+export const salvaFattura = (f) => scrivi("fatture", f);
+export const eliminaFattura = (id) => elimina("fatture", id);
 export const salvaRegistrazione = (r) => scrivi("registrazioni", { autoreUid: utente.uid, autoreNome: utente.nome, ...r });
 
 // ---------- compiti ----------
@@ -229,7 +240,7 @@ function creaDemo() {
       funzione: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2025-05-01", budget: 3000, funzioni: [{ ruolo: "Amministratore unico", persona: "Utente demo", firma: "Collettiva a due" }] },
       domiciliazione: { attivo: true, stato: "Mancante", aggiornareEntro: "2026-12-31", budget: 1200, tipo: "Recapito c/o" } } }),
     c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { responsabile: "Anna", localita: "Bellinzona", cantone: "TI", mandati: {
-      contabilita: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2026-03-01", budget: 4000, budgetOre: 25 } } }),
+      contabilita: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2026-03-01", budget: 4000, budgetOre: 25, fatturazione: "Trimestrale" } } }),
     c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true, mandati: {
       contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 1800 },
       domiciliazione: { attivo: true, stato: "Firmato aggiornato", budget: 900, tipo: "Domicilio con ufficio proprio" } } }),
@@ -255,6 +266,9 @@ function creaDemo() {
           ["u2", "Anna", [["d2", 120, true, "contabilita"], ["d3", 60 + (i % 2) * 60, true, "domiciliazione"], ["d1", 15, false, "contabilita"]]]
         ].flatMap(([uid, nome, voci]) => i === 2 && uid === "demo" ? [] : voci.map(([cli, min, fat, mand], j) => [`g_${uid}_${d}_${j}`,
           { id: `g_${uid}_${d}_${j}`, clienteId: cli, data: d, minuti: min - (i === 4 && uid === "demo" ? 30 : 0), fatturabile: fat, tipo: "lavoro", mandato: mand, descrizione: "Lavoro di esempio", autoreUid: uid, autoreNome: nome }])))),
+      r6: { id: "r6", clienteId: "d1", data: oggiPiu(-4), minuti: 75, fatturabile: true, extra: true, tipo: "lavoro", mandato: "contabilita", descrizione: "allora ho guardato con il cliente la questione del leasing della macchina nuova e abbiamo deciso di fare il contratto a nome della società, poi ho preparato la lettera per la banca", autoreUid: "demo", autoreNome: "Utente demo" },
+      r7: { id: "r7", clienteId: "d2", data: "2026-09-20", minuti: 600, fatturabile: true, tipo: "lavoro", mandato: "contabilita", descrizione: "Contabilità luglio-settembre", autoreUid: "u2", autoreNome: "Anna" },
+      r8: { id: "r8", clienteId: "d1", data: "2026-08-12", minuti: 180, fatturabile: true, tipo: "lavoro", mandato: "contabilita", descrizione: "Contabilità trimestre", autoreUid: "demo", autoreNome: "Utente demo" },
       r5: { id: "r5", clienteId: "d2", praticaId: "pr2", data: oggiPiu(-3), minuti: 60, fatturabile: true, tipo: "lavoro", descrizione: "Preparata richiesta di rateizzazione", autoreUid: "u2", autoreNome: "Anna" },
       r1: { id: "r1", clienteId: "d1", data: "2026-11-10", minuti: 45, fatturabile: true, tipo: "lavoro", descrizione: "Contabilità ottobre", autoreUid: "demo", autoreNome: "Utente demo" },
       r3: { id: "r3", clienteId: "d2", data: oggi, minuti: 90, fatturabile: true, tipo: "lavoro", descrizione: "Rendiconto IVA Q3", autoreUid: "demo", autoreNome: "Utente demo", creato: "1" },
@@ -294,6 +308,6 @@ function creaDemo() {
       "d3_iva_2026-T3": { id: "d3_iva_2026-T3", clienteId: "d3", servizio: "iva", periodo: "2026-T3", anno: 2026, stato: "In attesa cliente", note: "Mancano estratti conto" }
     },
     utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin", oreSettimanali: 42, percentuale: 100, accordo73b: "2026-11-02", giorniVacanza: 25, inizioPresenze: oggiPiu(-7) },
-      u2: { id: "u2", nome: "Anna", ruolo: "utente", oreSettimanali: 42, percentuale: 50, giorniVacanza: 25, pausaStandard: 0, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
+      u2: { id: "u2", nome: "Anna", ruolo: "utente", fatturazione: true, oreSettimanali: 42, percentuale: 50, giorniVacanza: 25, pausaStandard: 0, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
   };
 }

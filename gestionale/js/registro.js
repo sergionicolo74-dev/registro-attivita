@@ -61,7 +61,8 @@ export async function vistaRegistro(el) {
         <div class="chips">${DURATE.map(d => `<button type="button" data-min="${d}" aria-pressed="${m.minuti === d}">${d < 60 ? d + " min" : fmtDurata(d)}</button>`).join("")}
           <input name="minuti" id="f_minuti" type="number" min="0" step="5" value="${e(m.minuti ?? "")}" placeholder="minuti" aria-label="Minuti" style="width:100px"></div></div>
       ${campo("data", "Data", m.data || giorno, "date")}
-      <div class="solo-lavoro">${campo("fatturabile", "Fatturabile", m.id ? !!m.fatturabile : true, "checkbox")}</div>
+      <div class="solo-lavoro"><label for="f_fatt">Fatturazione</label><select id="f_fatt" name="fatt">
+        ${[["mandato", "Compreso nel mandato"], ["extra", "Extra: da fatturare a parte"], ["non", "Non fatturabile"]].map(([k, n]) => `<option value="${k}"${k === (m.id ? (m.fatturabile === false ? "non" : m.extra ? "extra" : "mandato") : "mandato") ? " selected" : ""}>${n}</option>`).join("")}</select></div>
       <div class="solo-lavoro solo-nuova">${campo("riscontro", "Attende riscontro (crea un compito in attesa)", false, "checkbox")}</div>
       <div class="solo-riscontro">${campo("attesaEntro", "Risposta attesa entro", aggiungiGiorni(giorno, 30), "date")}</div>
       <div class="solo-dafare">${campo("scadenza", "Scadenza", "", "date")}</div>
@@ -76,7 +77,7 @@ export async function vistaRegistro(el) {
       ${delGiorno.map(r => `<tr><td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
         <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
         ${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
-        <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : ""}</td>
+        <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : r.extra ? '<div class="tenue">extra</div>' : ""}</td>
         <td style="white-space:nowrap">${admin || r.autoreUid === u.uid ? `<button class="btn piccolo" data-mod="${e(r.id)}">Modifica</button> <button class="btn piccolo" data-del="${e(r.id)}" aria-label="Elimina">✕</button>` : ""}</td></tr>`).join("")}
     </tbody></table>` : `<div class="vuoto">Nessuna registrazione in questo giorno.</div>`}
   </section>
@@ -163,7 +164,7 @@ export async function vistaRegistro(el) {
     const minuti = t === "nota" ? 0 : Number(form.minuti.value || 0);
     if (t === "lavoro" && !minuti) { form.minuti.focus(); avviso("Indica la durata"); return; }
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
-      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatturabile.checked : false, tipo: t, descrizione,
+      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatt.value !== "non" : false, extra: t === "lavoro" && form.fatt.value === "extra" && !form.mandato.value.startsWith("pratica:"), tipo: t, descrizione,
       mandato: t === "lavoro" ? (form.mandato.value.startsWith("pratica:") ? "pratica" : form.mandato.value || null) : null,
       praticaId: t === "lavoro" && form.mandato.value.startsWith("pratica:") ? form.mandato.value.slice(8) : null };
     const id = await D.salvaRegistrazione(dati);

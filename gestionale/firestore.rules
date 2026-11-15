@@ -10,6 +10,7 @@ service cloud.firestore {
     function attivo() { return loggato() && exists(/databases/$(database)/documents/utenti/$(request.auth.uid)) && profilo().attivo != false; }
     function admin() { return attivo() && profilo().ruolo == "admin"; }
     function mio(campo) { return resource.data[campo] == request.auth.uid; }
+    function fatt() { return attivo() && (profilo().ruolo == "admin" || profilo().fatturazione == true); }
 
     // Profili utente: gli utenti attivi vedono l'elenco dei colleghi (per assegnare i compiti); solo l'amministratore modifica
     match /utenti/{uid} {
@@ -33,9 +34,9 @@ service cloud.firestore {
 
     // Ore e diario: ognuno vede e scrive le proprie, l'amministratore tutte
     match /registrazioni/{id} {
-      allow read: if admin() || (attivo() && mio("autoreUid"));
+      allow read: if fatt() || (attivo() && mio("autoreUid"));
       allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
-      allow update: if admin() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid);
+      allow update: if fatt() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid);
       allow delete: if admin() || (attivo() && mio("autoreUid"));
     }
 
@@ -45,6 +46,12 @@ service cloud.firestore {
       allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
       allow update: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
       allow delete: if admin() || (attivo() && mio("autoreUid"));
+    }
+
+    // Fatture dei forfait: solo amministratori e chi ha il permesso di fatturazione
+    match /fatture/{id} {
+      allow read, create, update: if fatt();
+      allow delete: if admin();
     }
 
     // Scadenziario: si salva solo lo stato delle scadenze (calcolate dai servizi); tutti gli utenti attivi le vedono e le aggiornano

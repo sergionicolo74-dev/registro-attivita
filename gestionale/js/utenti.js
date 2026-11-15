@@ -30,7 +30,7 @@ export async function vistaUtenti(el) {
     ${utenti.map(u => `<tr class="cliccabile" data-id="${e(u.id)}" tabindex="0">
       <td><strong>${e(u.nome || "(senza nome)")}</strong>${u.id === me.uid ? ' <span class="tenue">· tu</span>' : ""}</td>
       <td>${col[u.id] ? `<span class="leg-p"><i style="background:${col[u.id]}"></i>${e(NOMI_COLORE[COLORI_PERSONA.indexOf(col[u.id])])}</span>` : "–"}</td><td>${e(u.email || "")}</td>
-      <td>${u.ruolo === "admin" ? stato("info", "Amministratore") : u.ruolo === "utente" ? stato("neutro", "Utente") : stato("urgente", "Nessun ruolo")}</td>
+      <td>${u.ruolo === "admin" ? stato("info", "Amministratore") : u.ruolo === "utente" ? stato("neutro", "Utente") : stato("urgente", "Nessun ruolo")}${u.ruolo === "utente" && u.fatturazione ? " " + stato("info", "Report e fatture") : ""}</td>
       <td>${u.attivo === false ? stato("scaduto", "Disattivato") : stato("ok", "Attivo")}</td>
       <td>${u.accordo73b ? e(fmtData(u.accordo73b)) : '<span class="tenue">–</span>'}</td>
       <td>${e(u.oreSettimanali || 42)} h · ${e(u.percentuale ?? 100)}%</td></tr>`).join("")}</tbody></table>
@@ -55,6 +55,7 @@ function cassetto(u, ricarica, col = {}) {
       <div class="largo"><label>Colore nel calendario delle vacanze</label><div class="scegli-col" role="radiogroup" aria-label="Colore">
         ${COLORI_PERSONA.map((c, i) => { const scelto = u?.colore ? u.colore === i + 1 : col[u?.id] === c;
           return `<label class="leg-p"><input type="radio" name="colore" value="${i + 1}"${scelto ? " checked" : ""}><i style="background:${c}"></i>${NOMI_COLORE[i]}</label>`; }).join("")}</div></div>
+      <div class="largo" id="box-fatt"${(u?.ruolo || "utente") === "admin" ? " hidden" : ""}>${campo("fatturazione", "Può vedere i Report e fatturare (ore di tutti, fatture, redditività)", !!u?.fatturazione, "checkbox", [], true)}</div>
       ${nuovo ? "" : `<div><label for="f_att">Accesso</label><select id="f_att" name="attivo"${io ? " disabled" : ""}><option value="si"${u.attivo !== false ? " selected" : ""}>Attivo</option><option value="no"${u.attivo === false ? " selected" : ""}>Disattivato</option></select></div>`}
     </div>
     ${nuovo ? `<p class="tenue" style="font-size:13px;margin-top:12px">Il collaboratore riceve un'email per scegliere la propria password (controllare anche lo spam). Poi entra dall'indirizzo del gestionale con la sua email.</p>`
@@ -65,6 +66,7 @@ function cassetto(u, ricarica, col = {}) {
   const form = box.querySelector("form");
   const chiudi = () => { velo.remove(); box.remove(); };
   velo.addEventListener("click", chiudi); box.querySelector("#annulla-u").addEventListener("click", chiudi);
+  form.ruolo.addEventListener("change", () => { box.querySelector("#box-fatt").hidden = form.ruolo.value === "admin"; });
   box.querySelector("#reinvia")?.addEventListener("click", async () => {
     try { await D.recuperaPassword(u.email); avviso(`Email inviata a ${u.email}`); } catch { avviso("Invio non riuscito"); }
   });
@@ -81,7 +83,7 @@ function cassetto(u, ricarica, col = {}) {
       try {
         const id = await D.creaCollaboratore({ nome: d.nome, email: d.email.toLowerCase(), ruolo: d.ruolo });
         const scelto = form.querySelector("input[name=colore]:checked");
-        if (scelto) await D.salvaUtente({ id, colore: +scelto.value });
+        await D.salvaUtente({ id, ...(scelto ? { colore: +scelto.value } : {}), fatturazione: d.ruolo === "utente" && !!d.fatturazione });
         chiudi(); avviso(`Account creato: email inviata a ${d.email}`); ricarica();
       } catch (x) {
         console.error(x); btn.disabled = false; btn.textContent = "Crea e invia email";
@@ -90,7 +92,7 @@ function cassetto(u, ricarica, col = {}) {
       return;
     }
     const scelto = form.querySelector("input[name=colore]:checked");
-    await D.salvaUtente({ id: u.id, nome: d.nome, ...(scelto ? { colore: +scelto.value } : {}), ...(io ? {} : { ruolo: d.ruolo, attivo: d.attivo !== "no" }) });
+    await D.salvaUtente({ id: u.id, nome: d.nome, ...(scelto ? { colore: +scelto.value } : {}), ...(io ? {} : { ruolo: d.ruolo, attivo: d.attivo !== "no", fatturazione: d.ruolo === "utente" && !!d.fatturazione }) });
     chiudi(); avviso("Utente aggiornato"); ricarica();
   });
   form.nome.focus();

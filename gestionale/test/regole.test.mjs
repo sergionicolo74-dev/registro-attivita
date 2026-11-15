@@ -218,3 +218,20 @@ console.log("Test compiti superati");
   ok(R.campiMancanti({ ...pf, df: {} }, 0, null).includes("Documenti per la dichiarazione"), true, "documenti DF da scegliere");
   ok(R.urgenzaScadenza({ data: "2026-04-30", annuale: true, stato: "Da fare" }, new Date(2026, 3, 1)), "preavviso", "preavviso dal 31.03");
 }
+
+// ---------- Fatturazione e redditività ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  const t = R.periodiFatturazione("Trimestrale", 2026);
+  ok([t.length, t[2].periodo, t[2].da, t[2].a, t[2].etichetta], [4, "2026-T3", "2026-07-01", "2026-09-30", "3° trimestre 2026"], "trimestri");
+  ok(R.periodiFatturazione("Mensile", 2026)[1].a, "2026-02-28", "febbraio");
+  ok(R.periodiFatturazione("Annuale", 2026)[0], { periodo: "2026", da: "2026-01-01", a: "2026-12-31", etichetta: "2026", quota: 1 }, "annuale");
+  // forfait trimestrale 550 (2200/4), tariffa 150: 3h = 450 ok; 4h = 600 (+9%) al limite; 5h = 750 in perdita
+  ok(R.redditivita(550, 180, 150).esito, "ok", "3 ore su 550: redditizio");
+  ok([R.redditivita(550, 240, 150).esito, R.redditivita(550, 240, 150).margine], ["urgente", -50], "4 ore: al limite, -50");
+  ok(R.redditivita(550, 300, 150).esito, "scaduto", "5 ore: in perdita");
+  ok([R.redditivita(550, 300, 150).tariffaEffettiva, R.redditivita(550, 300, 150).minutiPreventivati], [110, 220], "tariffa effettiva 110 CHF/h, 3h40 preventivate");
+  ok(R.redditivita(550, 300, 150, 240).percOre, 125, "ore preventivate indicate: 125%");
+  ok([R.tipoFatturazione({ praticaId: "x" }), R.tipoFatturazione({ fatturabile: false }), R.tipoFatturazione({ fatturabile: true, extra: true }), R.tipoFatturazione({ fatturabile: true })], ["pratica", "non", "extra", "mandato"], "tipo di fatturazione");
+}

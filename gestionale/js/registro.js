@@ -1,10 +1,9 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
-import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi } from "./regole.js";
+import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
-const OBIETTIVO_MIN = 480; // 8 ore: diventerà la presenza reale con il modulo Presenze
 const TIPI = [["lavoro", "Lavoro svolto"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
 
 let giorno = oggiISO();
@@ -14,14 +13,19 @@ let modifica = null; // registrazione in modifica
 export async function vistaRegistro(el) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
   const lun = lunedi(giorno), dom = aggiungiGiorni(lun, 6);
-  const [clienti, reg] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom)]);
+  const [clienti, reg, profilo, presOggi] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
+    D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => [])]);
   const nomeCli = Object.fromEntries(clienti.map(c => [c.id, `${c.codice} · ${c.ragioneSociale}`]));
   const settimana = reg.filter(r => !admin || !soloMie || r.autoreUid === u.uid);
   const delGiorno = settimana.filter(r => r.data === giorno).sort((a, b) => String(b.creato || b.aggiornato || "").localeCompare(String(a.creato || a.aggiornato || "")));
   const lavoro = delGiorno.filter(r => r.tipo !== "nota");
   const minTot = lavoro.reduce((s, r) => s + (r.minuti || 0), 0);
   const minFat = lavoro.filter(r => r.fatturabile).reduce((s, r) => s + (r.minuti || 0), 0);
-  const obiettivo = admin && !soloMie ? null : OBIETTIVO_MIN;
+  // Obiettivo della giornata: la presenza registrata; altrimenti le ore dovute secondo l'orario (0 nei festivi e nel fine settimana)
+  const presenza = presOggi[0]?.minuti;
+  const dovuti = minutiDovuti(profilo || {}, giorno);
+  const obiettivo = admin && !soloMie ? null : (presenza ?? dovuti) || (minTot ? minTot : null);
+  const fonte = presenza != null ? "di presenza" : dovuti ? "previste dall'orario" : "(giorno non lavorativo)";
   const m = modifica || {};
   const tipo = m.tipo || "lavoro";
   const clientiOrd = [...clienti].sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
@@ -38,7 +42,7 @@ export async function vistaRegistro(el) {
     </div>
   </div>
 
-  ${obiettivo ? barraGiornata(minTot, minFat, obiettivo) : `<div class="pannello" style="margin-bottom:14px"><strong>${fmtDurata(minTot)}</strong> registrate dallo studio oggi · ${fmtDurata(minFat)} fatturabili</div>`}
+  ${admin && !soloMie ? `<div class="pannello" style="margin-bottom:14px"><strong>${fmtDurata(minTot)}</strong> registrate dallo studio oggi · ${fmtDurata(minFat)} fatturabili</div>` : obiettivo ? barraGiornata(minTot, minFat, obiettivo, fonte) : `<div class="pannello tenue" style="margin-bottom:14px">Giorno non lavorativo: nessuna ora prevista.</div>`}
 
   <form class="pannello" id="nuova" style="margin-bottom:14px">
     <div class="testata" style="margin-bottom:12px"><h2 style="font-size:16px">${modifica ? "Modifica registrazione" : "Nuova registrazione"}</h2>
@@ -176,11 +180,11 @@ function nomeGiorno(iso) {
   return `${g.charAt(0).toUpperCase() + g.slice(1)} ${fmtData(iso)}${iso === oggiISO() ? " · oggi" : ""}`;
 }
 
-function barraGiornata(tot, fat, obiettivo) {
+function barraGiornata(tot, fat, obiettivo, fonte) {
   const p = x => Math.min(100, Math.round(x / obiettivo * 100));
   const scoperto = Math.max(0, obiettivo - tot);
   return `<div class="pannello giornata" style="margin-bottom:14px">
-    <div class="fatti"><div><span>Registrate</span><strong>${fmtDurata(tot)}</strong> su ${fmtDurata(obiettivo)}</div>
+    <div class="fatti"><div><span>Registrate</span><strong>${fmtDurata(tot)}</strong> su ${fmtDurata(obiettivo)} ${fonte}</div>
       <div><span>Fatturabili</span><strong>${fmtDurata(fat)}</strong></div>
       <div><span>Non fatturabili</span>${fmtDurata(tot - fat)}</div>
       <div><span>Da registrare</span>${scoperto ? fmtDurata(scoperto) : stato("ok", "Giornata coperta")}</div></div>

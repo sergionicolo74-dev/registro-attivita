@@ -2,7 +2,8 @@
 import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
-  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale } from "./regole.js";
+  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza } from "./regole.js";
+import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
 
@@ -132,7 +133,7 @@ export async function vistaScheda(el, id) {
   if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica);
   if (scheda === "dati") return schedaDati(p, c, kyc, ricarica);
   if (scheda === "mandati") return schedaMandati(p, c, ricarica);
-  if (scheda === "servizi") return schedaServizi(p, c, ricarica);
+  if (scheda === "servizi") return await schedaServizi(p, c, ricarica);
   if (scheda === "compiti") return schedaCompiti(p, c);
   if (scheda === "ore") return schedaOre(p, c);
   if (scheda === "note") return schedaNote(p, c, ricarica);
@@ -284,23 +285,30 @@ function schedaMandati(p, c, ricarica) {
 }
 
 // ---------- Servizi ----------
-function schedaServizi(p, c, ricarica) {
+async function schedaServizi(p, c, ricarica) {
   const admin = D.isAdmin(), s = c.servizi || {};
+  const prossime = await prossimeDelCliente(c).catch(() => []);
   p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
     <h3 style="font-size:14px;margin-bottom:10px">Servizi svolti dallo studio</h3>
     <div class="servizi">${SERVIZI.map(([k, n]) => `<label><input type="checkbox" name="servizi.${k}" ${s[k] || (k === "revisione" && c.revisione) ? "checked" : ""}> ${e(n)}</label>`).join("")}</div>
     <div class="sezione"><h3>Dati per il calcolo delle scadenze</h3><div class="griglia">
+      ${campo("contabilitaPeriodicita", "Contabilità registrata", c.contabilitaPeriodicita || "Mensile", "select", ["Mensile", "Trimestrale"])}
       ${campo("iva.regime", "Regime IVA", c.iva?.regime, "select", ["Non assoggettato", "Effettivo", "Aliquote saldo", "Aliquote forfetarie"])}
-      ${campo("iva.periodicita", "Periodicità IVA", c.iva?.periodicita, "select", ["Trimestrale", "Semestrale", "Mensile"])}
+      ${campo("iva.periodicita", "Periodicità IVA", c.iva?.periodicita, "select", ["Trimestrale", "Semestrale", "Mensile", "Annuale"])}
+      ${campo("giornoPaga", "Giorno di paga stipendi (1–31)", c.giornoPaga, "number")}
       ${campo("dipendenti", "N. dipendenti", c.dipendenti, "number")}${campo("cassaAvs", "Cassa AVS", c.cassaAvs)}
       ${campo("lainf", "Assicuratore LAINF", c.lainf)}${campo("lpp", "Istituto LPP", c.lpp)}
     </div></div></fieldset>
-    <p class="tenue" style="margin-top:14px">Le scadenze di questi servizi verranno generate in automatico dallo scadenziario (fase 2).</p>
-    ${admin ? '<div class="azioni"><button class="btn primario">Salva</button></div>' : ""}</form>`;
+    ${admin ? '<div class="azioni"><button class="btn primario">Salva</button></div>' : ""}</form>
+    <div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:10px">Prossime scadenze</h3>
+      ${prossime.length ? `<ul class="prossime-s">${prossime.map(o => { const g = urgenzaScadenza(o); return `<li><span class="d">${e(fmtData(o.data))}</span><span style="flex:1">${e(o.etichetta)}</span>${g ? stato(g === "preavviso" ? "info" : g, g === "scaduto" ? "Scaduta" : g === "urgente" ? "Entro 5 giorni" : "Preavviso") : ""}${o.stato !== "Da fare" ? stato("neutro", o.stato) : ""}</li>`; }).join("")}</ul>`
+        : '<p class="tenue">Nessuna scadenza aperta. Spunta i servizi qui sopra per generarle.</p>'}
+      <div class="azioni"><a class="btn" href="#/scadenziario/${encodeURIComponent(c.id)}">Apri nello Scadenziario</a></div></div>`;
   if (!admin) return;
   p.querySelector("form").addEventListener("submit", async ev => {
     ev.preventDefault();
     const d = leggiForm(ev.target);
+    if (d.giornoPaga != null && (d.giornoPaga < 1 || d.giornoPaga > 31 || !Number.isInteger(d.giornoPaga))) { avviso("Giorno di paga: un numero da 1 a 31"); return; }
     await D.salvaCliente({ ...c, ...d, revisione: !!d.servizi.revisione, iva: { ...c.iva, ...d.iva } });
     avviso("Servizi salvati"); ricarica();
   });

@@ -39,7 +39,8 @@ export function onAuth(cb) {
 }
 
 export async function login(email, password) {
-  if (demo) { utente = { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
+  // Demo: un indirizzo che inizia con "anna" entra come utente normale (per provare i permessi)
+  if (demo) { utente = /^anna/i.test(email) ? { uid: "u2", email, nome: "Anna", ruolo: "utente", attivo: true } : { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
   await fb.signInWithEmailAndPassword(auth, email, password);
 }
 export async function logout() {
@@ -153,18 +154,45 @@ export async function listaCompiti(clienteId) {
 export const eliminaCompito = (id) => elimina("compiti", id);
 export const salvaCompito = (c) => scrivi("compiti", { autoreUid: utente.uid, ...c });
 
+// ---------- scadenze (solo lo stato: le scadenze si calcolano dalle regole) ----------
+/** Stati salvati delle scadenze con data originale negli anni indicati. Visibili a tutti gli utenti attivi. */
+export async function listaScadenzeSalvate(anni) {
+  if (demo) return (await lista("scadenze")).filter(x => anni.includes(x.anno));
+  const q = fb.query(fb.collection(db, "scadenze"), fb.where("anno", "in", anni));
+  return (await fb.getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+}
+export const salvaScadenza = (s) => scrivi("scadenze", s);
+
+// ---------- presenze (art. 73b OLL 1: durata giornaliera del lavoro) ----------
+// id = uid_data. Un utente normale vede e scrive solo le proprie (filtro data lato app, nessun indice composto).
+export async function listaPresenze(uid, da, a) {
+  return (await lista("presenze", [["uid", "==", uid]])).filter(p => p.data >= da && p.data <= a);
+}
+/** Tutte le presenze dello studio nel periodo (solo amministratori). */
+export async function listaPresenzeStudio(da, a) {
+  if (!ADMIN()) return [];
+  if (demo) return (await lista("presenze")).filter(p => p.data >= da && p.data <= a);
+  const q = fb.query(fb.collection(db, "presenze"), fb.where("data", ">=", da), fb.where("data", "<=", a));
+  return (await fb.getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+}
+export const salvaPresenza = (p) => scrivi("presenze", { ...p, id: `${p.uid}_${p.data}` });
+export const eliminaPresenza = (uid, data) => elimina("presenze", `${uid}_${data}`);
+export const leggiProfilo = (uid) => leggi("utenti", uid);
+/** Profilo orario di un collaboratore (solo amministratori). */
+export const salvaProfilo = (uid, dati) => scrivi("utenti", { ...dati, id: uid });
+
 // ---------- dati demo (inventati) ----------
 function creaDemo() {
   const oggiPiu = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const t = new Date(), oggi = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
   const c = (id, codice, rs, forma, extra = {}) => [id, { id, codice, ragioneSociale: rs, forma, stato: "Attivo", responsabile: "Utente demo",
-    servizi: { contabilita: true, iva: true, dichiarazione: true }, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
+    servizi: { contabilita: true, iva: true, dichiarazione: true, stipendi: true, avsLainfIpg: true, lpp: true }, iva: { regime: "Effettivo", periodicita: "Trimestrale" }, giornoPaga: 25, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
   const clienti = Object.fromEntries([
     c("d1", "C001", "Alfa Servizi SA", "SA", { localita: "Lugano", cantone: "TI", mandati: {
       contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 2200, budgetOre: 15 },
       funzione: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2025-05-01", budget: 3000, funzioni: [{ ruolo: "Amministratore unico", persona: "Utente demo", firma: "Collettiva a due" }] },
       domiciliazione: { attivo: true, stato: "Mancante", aggiornareEntro: "2026-12-31", budget: 1200, tipo: "Recapito c/o" } } }),
-    c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { localita: "Bellinzona", cantone: "TI", mandati: {
+    c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { responsabile: "Anna", localita: "Bellinzona", cantone: "TI", mandati: {
       contabilita: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2026-03-01", budget: 4000, budgetOre: 25 } } }),
     c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true, mandati: {
       contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 1800 },
@@ -192,6 +220,16 @@ function creaDemo() {
       k4: { id: "k4", clienteId: null, titolo: "Rinnovo licenza software", tipo: "Richiesta interna", stato: "In attesa", motivoAttesa: "Attendo preventivo fornitore", scadenza: oggiPiu(20), visibilita: "studio", autoreUid: "demo", assegnatoUid: "demo", assegnatoNome: "Utente demo", aggiornato: "2026-11-01T09:00:00Z",
         cronologia: [{ quando: "2026-11-01T09:00:00Z", nome: "Utente demo", testo: "Chiesto preventivo" }] }
     },
-    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin" }, u2: { id: "u2", nome: "Anna", ruolo: "utente" }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
+    presenze: Object.fromEntries([-1, -2, -3, -4, -5, -6, -7].map(n => oggiPiu(n)).filter(d => { const g = new Date(d + "T12:00:00").getDay(); return g > 0 && g < 6; })
+      .flatMap((d, i) => [[`demo_${d}`, { id: `demo_${d}`, uid: "demo", nome: "Utente demo", data: d, minuti: i === 2 ? null : 480 + i * 15, assenza: i === 2 ? "Vacanza" : "" }],
+        [`u2_${d}`, { id: `u2_${d}`, uid: "u2", nome: "Anna", data: d, minuti: 252 }]])),
+    scadenze: {
+      "d1_contabilita_2026-09": { id: "d1_contabilita_2026-09", clienteId: "d1", servizio: "contabilita", periodo: "2026-09", anno: 2026, stato: "Fatto", fattoIl: oggi, fattoDa: "Utente demo" },
+      "d2_dichiarazione_2025": { id: "d2_dichiarazione_2025", clienteId: "d2", servizio: "dichiarazione", periodo: "2025", anno: 2026, stato: "Prorogato", nuovaData: oggiPiu(12),
+        cronologia: [{ quando: "2026-06-20T09:00:00Z", nome: "Utente demo", testo: "Proroga concessa con lettera del 18.06.2026" }] },
+      "d3_iva_2026-T3": { id: "d3_iva_2026-T3", clienteId: "d3", servizio: "iva", periodo: "2026-T3", anno: 2026, stato: "In attesa cliente", note: "Mancano estratti conto" }
+    },
+    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin", oreSettimanali: 42, percentuale: 100, accordo73b: "2026-11-02", inizioPresenze: oggiPiu(-7) },
+      u2: { id: "u2", nome: "Anna", ruolo: "utente", oreSettimanali: 42, percentuale: 50, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
   };
 }

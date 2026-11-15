@@ -72,3 +72,76 @@ assert.equal(r4.urgenzaCompito({ stato: "Preso in carico", scadenza: "2026-12-20
 assert.equal(r4.urgenzaCompito({ stato: "In attesa riscontro", scadenza: "2026-12-20", aggiornato: "2026-11-01T10:00:00Z" }, o4), null);
 assert.equal(r4.urgenzaCompito({ stato: "Fatto", scadenza: "2026-11-01" }, o4), null);
 console.log("Test compiti superati");
+
+// ---------- Scadenziario ----------
+{
+  const R = await import("../js/regole.js");
+  const cli = { id: "x", codice: "C001", forma: "SA", stato: "Attivo", chiusuraEsercizio: "31.12",
+    servizi: { contabilita: true, iva: true, stipendi: true, ifTrimestrale: true, avsLainfIpg: true, lpp: true, dichiarazione: true, revisione: true },
+    iva: { regime: "Effettivo", periodicita: "Trimestrale" }, giornoPaga: 31,
+    mandati: { funzione: { attivo: true, funzioni: [{ ruolo: "Amministratore unico" }] } } };
+  const l = R.scadenzeCliente(cli, 2026);
+  const per = (s, p) => l.find(o => o.servizio === s && o.periodo === p)?.scadenza;
+  const ok = (a, b, n) => { if (a !== b) { console.error("FALLITO", n, a, "≠", b); process.exitCode = 1; } else console.log("ok", n); };
+  ok(per("iva", "2026-T1"), "2026-05-30", "IVA T1 = 30.05");
+  ok(per("iva", "2026-T2"), "2026-08-29", "IVA T2 = 29.08");
+  ok(per("iva", "2026-T3"), "2026-11-29", "IVA T3 = 29.11");
+  ok(per("iva", "2025-T4"), "2026-03-01", "IVA T4 2025 = 01.03.2026");
+  ok(per("ivaRiconciliazione", "2025"), "2026-08-28", "Riconciliazione IVA 2025 = 28.08.2026");
+  ok(per("contabilita", "2026-10"), "2026-11-20", "Contabilità ottobre = 20.11");
+  ok(per("contabilita", "2025-12"), "2026-01-20", "Contabilità dicembre 2025 = 20.01.2026");
+  ok(per("stipendi", "2026-02"), "2026-02-28", "Stipendi febbraio con paga il 31 = 28.02");
+  ok(per("ifTrimestrale", "2026-T1"), "2026-04-10", "IF T1 = 10.04");
+  ok(per("ifTrimestrale", "2026-T3"), "2026-10-10", "IF T3 = 10.10");
+  ok(l.some(o => o.servizio === "ifTrimestrale" && o.periodo.endsWith("T4")), false, "IF T4 non separato");
+  ok(per("ifAnnuale", "2025"), "2026-01-31", "IF conguaglio 2025 = 31.01.2026");
+  ok(per("avsLainfIpg", "2025"), "2026-01-30", "AVS 2025 = 30.01.2026");
+  ok(per("lpp", "2027"), "2026-12-31", "LPP salari 2027 = 31.12.2026");
+  ok(per("dichiarazione", "2025"), "2026-06-30", "Dichiarazione 2025 = 30.06.2026");
+  ok(per("assemblea", "2025"), "2026-06-30", "Assemblea 2025 = 30.06.2026");
+  const rev = l.find(o => o.servizio === "revisione" && o.periodo === "2025");
+  ok(rev?.scadenza + "/" + rev?.avvisoDal, "2026-06-30/2026-03-31", "Revisione: allerta 31.03, entro 30.06");
+  // anno bisestile: T4 2027 + 60 giorni = 29.02.2028
+  ok(R.scadenzeCliente(cli, 2028).find(o => o.servizio === "iva" && o.periodo === "2027-T4")?.scadenza, "2028-02-29", "IVA T4 2027 = 29.02.2028");
+  // chiusura al 30.06
+  const c2 = { ...cli, chiusuraEsercizio: "30.06" };
+  ok(R.scadenzeCliente(c2, 2026).find(o => o.servizio === "assemblea" && o.periodo === "2026")?.scadenza, "2026-12-31", "Assemblea con chiusura 30.06 = 31.12");
+  // persona fisica: niente assemblea né revisione; cliente cessato: nulla
+  ok(R.scadenzeCliente({ ...cli, forma: "Persona fisica" }, 2026).some(o => o.servizio === "assemblea" || o.servizio === "revisione"), false, "Persona fisica senza assemblea");
+  ok(R.scadenzeCliente({ ...cli, stato: "Cessato" }, 2026).length, 0, "Cliente cessato senza scadenze");
+  // urgenza
+  const oggi = new Date(2026, 10, 15);
+  const u = (data, annuale, stato = "Da fare", avvisoDal) => R.urgenzaScadenza({ data, annuale, stato, avvisoDal }, oggi);
+  ok(u("2026-11-14", false), "scaduto", "scaduta ieri");
+  ok(u("2026-11-20", false), "urgente", "entro 5 giorni");
+  ok(u("2026-11-21", false), null, "6 giorni: nessun avviso");
+  ok(u("2026-12-10", true), "preavviso", "annuale entro 30 giorni");
+  ok(u("2026-11-01", false, "Fatto"), null, "fatta");
+  ok(u("2027-06-30", true, "Da fare", "2026-11-01"), "preavviso", "revisione dopo data di allerta");
+  const pr = R.conStato({ scadenza: "2026-06-30" }, { stato: "Prorogato", nuovaData: "2026-12-31" });
+  ok(pr.data, "2026-12-31", "proroga sposta la data");
+}
+
+// ---------- Presenze ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  ok(R.pasqua(2026), "2026-04-05", "Pasqua 2026 = 05.04");
+  ok(R.pasqua(2027), "2027-03-28", "Pasqua 2027 = 28.03");
+  ok(R.pasqua(2025), "2025-04-20", "Pasqua 2025 = 20.04");
+  const f = R.festiviTicino(2026);
+  ok(Object.keys(f).length, 15, "15 festivi in Ticino");
+  ok([f["2026-04-06"], f["2026-05-14"], f["2026-05-25"], f["2026-06-04"]], ["Lunedì di Pasqua", "Ascensione", "Lunedì di Pentecoste", "Corpus Domini"], "festivi mobili 2026");
+  ok(f["2026-04-03"], undefined, "Venerdì Santo non festivo");
+  ok(R.minutiDovuti({ oreSettimanali: 42 }, "2026-11-16"), 504, "42 h settimanali = 8h24 al giorno");
+  ok(R.minutiDovuti({ oreSettimanali: 42, percentuale: 50 }, "2026-11-16"), 252, "50%");
+  ok(R.minutiDovuti({}, "2026-11-15"), 0, "domenica");
+  ok(R.minutiDovuti({}, "2026-12-08"), 0, "Immacolata");
+  ok([R.parseOre("8:30"), R.parseOre("8.5"), R.parseOre("8,25"), R.parseOre("8h"), R.parseOre("7h45"), R.parseOre("90m"), R.parseOre("")], [510, 510, 495, 480, 465, 90, null], "lettura ore");
+  ok([isNaN(R.parseOre("25:00")), isNaN(R.parseOre("8:75")), isNaN(R.parseOre("abc"))], [true, true, true], "ore non valide");
+  // settimana 16–20.11.2026, 42h: lun 9h, mar 8h, mer vacanza, gio mezza vacanza + 4h, ven vuoto (passato)
+  const pres = { "2026-11-16": { minuti: 540 }, "2026-11-17": { minuti: 480 }, "2026-11-18": { assenza: "Vacanza" }, "2026-11-19": { minuti: 240, assenza: "Vacanza mezza giornata" } };
+  const r = R.riepilogoPresenze(pres, { oreSettimanali: 42 }, "2026-11-16", "2026-11-22", "2026-11-16", "2026-11-23");
+  ok([r.dovute, r.lavorate, r.credito, r.saldo, r.vacanze, r.daCompilare], [2520, 1260, 756, -504, 1.5, 1], "riepilogo settimana");
+  ok(R.fmtSaldo(-504), "−8h 24", "saldo negativo");
+}

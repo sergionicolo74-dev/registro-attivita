@@ -11,6 +11,8 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 | `persone_kyc/{personaId}` | admin | admin | `nazionalita`, `domicilio`, `tipoDocumento`, `scadenzaDocumento`, `copiaArchivio` |
 | `registrazioni/{id}` | autore, admin | autore, admin | ore e note di lavoro |
 | `compiti/{id}` | autore, assegnatario, admin | autore, assegnatario, admin | promemoria, deleghe, pratiche |
+| `scadenze/{cliente_servizio_periodo}` | utenti attivi | utenti attivi (elimina: admin) | solo lo stato delle scadenze calcolate |
+| `presenze/{uid_data}` | proprietario, admin | proprietario, admin | ore lavorate al giorno (art. 73b OLL 1) |
 
 ## clienti
 
@@ -22,7 +24,7 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
   `funzione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `funzioni`: [{`ruolo`, `persona`, `firma`, `inizio`}]},
   `domiciliazione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `tipo` (Domicilio con ufficio proprio / Recapito c/o), `dal`}
 } — `stato`: Firmato aggiornato / Da aggiornare / Mancante. I campi vecchi `mandato`, `funzione`, `onorario` vengono letti e convertiti (regole.js, mandatiDi),
-`iva` {`regime`, `periodicita`}, `dipendenti`, `cassaAvs`, `lainf`, `lpp`,
+`iva` {`regime`, `periodicita` (Trimestrale/Semestrale/Mensile/Annuale)}, `contabilitaPeriodicita` (Mensile/Trimestrale), `giornoPaga` (1–31), `dipendenti`, `cassaAvs`, `lainf`, `lpp`,
 `servizi` {`contabilita`, `iva`, `stipendi`, `ifTrimestrale`, `ifAnnuale`, `dichiarazione`, `avsLainfIpg`, `lpp`, `domiciliazione`, `revisione`} (vero/falso), `revisione`,
 
 
@@ -39,3 +41,21 @@ Il numero del documento d'identità non si registra: resta nella copia in archiv
 
 `clienteId` (o null), `titolo`, `tipo` (Promemoria/Delega/…), `stato`, `scadenza`, `completatoIl`, `visibilita` (`privato`/`studio`),
 `autoreUid`, `assegnatoUid`, `assegnatoNome`.
+
+## scadenze
+
+Le scadenze **non si inseriscono**: si calcolano dai servizi del cliente (regole.js, `scadenzeCliente`). Si salva solo lo stato:
+`clienteId`, `servizio`, `periodo` (es. 2026-T3, 2026-10, 2025), `anno` (anno della data prevista), `scadenzaPrevista`,
+`stato` (Da fare/In corso/In attesa cliente/Prorogato/Fatto/Non dovuto), `nuovaData` (se prorogata), `responsabileUid`, `responsabileNome`,
+`fattoIl`, `fattoDa`, `cronologia` [{`quando`, `nome`, `testo`}].
+Regole: contabilità il 20 del mese dopo; IVA 60 giorni dopo il periodo; riconciliazione IVA 240 giorni dopo la chiusura (art. 72 LIVA);
+stipendi al giorno di paga; IF trimestrale 10.04/10.07/10.10, conguaglio 31.01; AVS/LAINF/IPG 30.01; LPP 31.12 per l'anno dopo;
+dichiarazione 30.06 dell'anno dopo; assemblea e revisione 6 mesi dopo la chiusura (revisione con allerta dopo 3 mesi); KYC alla data in scheda.
+Preavvisi: −5 e −2 giorni, −30 per le annuali. Prima di `INIZIO_SCADENZIARIO` nessun arretrato.
+
+## presenze
+
+`uid`, `nome`, `data`, `minuti` (totale lavorato nel giorno), `assenza` (Vacanza / Vacanza mezza giornata / Assenza / Assenza mezza giornata / Recupero ore).
+Il motivo delle assenze non si registra.
+Nel profilo `utenti/{uid}`: `oreSettimanali`, `percentuale`, `giorniVacanza`, `accordo73b` (data dell'accordo scritto), `inizioPresenze`, `saldoRiportatoMinuti`.
+Ore dovute: lunedì–venerdì, esclusi i 15 festivi ufficiali del Ticino. Conservazione: 5 anni (art. 73 cpv. 2 OLL 1), con l'esportazione CSV annuale.

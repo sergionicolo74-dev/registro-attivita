@@ -47,6 +47,20 @@ service cloud.firestore {
       allow delete: if admin() || (attivo() && mio("autoreUid"));
     }
 
+    // Scadenziario: si salva solo lo stato delle scadenze (calcolate dai servizi); tutti gli utenti attivi le vedono e le aggiornano
+    match /scadenze/{id} {
+      allow read, create, update: if attivo();
+      allow delete: if admin();
+    }
+
+    // Presenze (art. 73b OLL 1): ognuno vede e scrive le proprie, l'amministratore tutte
+    match /presenze/{id} {
+      allow read: if admin() || (attivo() && mio("uid"));
+      allow create: if admin() || (attivo() && request.resource.data.uid == request.auth.uid);
+      allow update: if admin() || (attivo() && mio("uid") && request.resource.data.uid == request.auth.uid);
+      allow delete: if admin() || (attivo() && mio("uid"));
+    }
+
     // SOLO NEL PROGETTO DI PROVA (attivita-88590): mantiene funzionante il vecchio registro.
     // Nel progetto di produzione (Zurigo) questo blocco si può togliere.
     match /registri/{doc} { allow read, write: if loggato(); }

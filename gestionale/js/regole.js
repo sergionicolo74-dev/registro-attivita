@@ -93,6 +93,7 @@ export function campiMancanti(c, nPersone, kyc) {
   if (mm.domiciliazione.attivo && vuoto(mm.domiciliazione.tipo)) m.push("Tipo di domiciliazione");
   if (!Object.values(c.servizi || {}).some(Boolean)) m.push("Servizi");
   if (c.servizi?.iva && vuoto(c.iva?.periodicita)) m.push("Periodicità IVA");
+  if (c.servizi?.stipendi && vuoto(c.giornoPaga)) m.push("Giorno di paga");
   if (!nPersone) m.push("Persone di contatto");
   if (kyc !== null && (vuoto(kyc?.stato) || vuoto(kyc?.rischio))) m.push("KYC e rischio");
   return m;
@@ -192,3 +193,175 @@ export function urgenzaCompito(k, oggi = new Date()) {
   if (f != null && f >= GIORNI_FERMO && k.stato !== "In attesa riscontro") return "fermo";
   return null;
 }
+
+// ---------- Scadenziario ----------
+// Le scadenze non si inseriscono a mano: si ricavano dai servizi del cliente con le regole qui sotto.
+// Nel database si salva solo lo stato di ognuna (fatto, prorogato…), con id = cliente_servizio_periodo.
+export const SERVIZI_SCADENZE = [
+  ["contabilita", "Contabilità"], ["iva", "IVA"], ["ivaRiconciliazione", "Riconciliazione IVA"], ["stipendi", "Stipendi"],
+  ["ifTrimestrale", "IF trimestrale"], ["ifAnnuale", "IF conguaglio"], ["avsLainfIpg", "AVS / LAINF / IPG"], ["lpp", "LPP"],
+  ["dichiarazione", "Dichiarazione fiscale"], ["assemblea", "Assemblea ordinaria"], ["revisione", "Revisione"], ["kyc", "Revisione KYC"]
+];
+export const NOME_SCADENZA = Object.fromEntries(SERVIZI_SCADENZE);
+export const STATI_SCADENZA = ["Da fare", "In corso", "In attesa cliente", "Prorogato", "Fatto", "Non dovuto"];
+export const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+/** Le scadenze precedenti a questa data non vengono mostrate come arretrate (avvio dello scadenziario). */
+export const INIZIO_SCADENZIARIO = "2026-11-15";
+
+const p2 = n => String(n).padStart(2, "0");
+const giorniNelMese = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+/** Data ISO; se il giorno non esiste nel mese (es. 31 in giugno) usa l'ultimo giorno. Il mese può superare 12. */
+export function dataISO(y, m, d) {
+  y += Math.floor((m - 1) / 12); m = ((m - 1) % 12 + 12) % 12 + 1;
+  return `${y}-${p2(m)}-${p2(Math.min(d, giorniNelMese(y, m)))}`;
+}
+const fineMese = (y, m) => dataISO(y, m, 31);
+
+/** "31.12" -> {g:31, m:12}; vuoto o non valido -> 31.12 */
+export function chiusuraDi(c) {
+  const r = /^(\d{1,2})[.\/](\d{1,2})/.exec(String(c.chiusuraEsercizio || ""));
+  const g = r ? +r[1] : 31, m = r ? +r[2] : 12;
+  return m >= 1 && m <= 12 && g >= 1 && g <= 31 ? { g, m } : { g: 31, m: 12 };
+}
+/** Chiusura dell'esercizio che termina nell'anno y, più n mesi (se la chiusura è a fine mese resta a fine mese). */
+function dopoChiusura(ch, y, n) {
+  return ch.g >= giorniNelMese(y, ch.m) ? fineMese(y, ch.m + n) : dataISO(y, ch.m + n, ch.g);
+}
+
+const ANNUALI = new Set(["ivaRiconciliazione", "ifAnnuale", "avsLainfIpg", "lpp", "dichiarazione", "assemblea", "revisione", "kyc"]);
+
+/**
+ * Scadenze di un cliente con data che cade nell'anno indicato.
+ * kyc: dati KYC del cliente (solo amministratori), per la revisione KYC.
+ */
+export function scadenzeCliente(c, anno, kyc = null) {
+  if (!c || c.codice === "C000" || (c.stato && c.stato !== "Attivo")) return [];
+  const s = { ...(c.servizi || {}) }, out = [];
+  if (c.revisione) s.revisione = true;
+  const mm = mandatiDi(c), ch = chiusuraDi(c), pf = c.forma === "Persona fisica";
+  const add = (servizio, periodo, etichetta, scadenza, extra = {}) =>
+    out.push({ id: `${c.id}_${servizio}_${periodo}`, clienteId: c.id, servizio, periodo, etichetta, scadenza, annuale: ANNUALI.has(servizio), ...extra });
+
+  for (let y = anno - 2; y <= anno + 1; y++) {
+    if (s.contabilita) {
+      if (c.contabilitaPeriodicita === "Trimestrale") for (let q = 1; q <= 4; q++) add("contabilita", `${y}-T${q}`, `Contabilità ${q}° trimestre ${y}`, dataISO(y, q * 3 + 1, 20));
+      else for (let m = 1; m <= 12; m++) add("contabilita", `${y}-${p2(m)}`, `Contabilità ${MESI[m - 1]} ${y}`, dataISO(y, m + 1, 20));
+    }
+    if (s.iva && c.iva?.regime !== "Non assoggettato") {
+      const per = c.iva?.periodicita || "Trimestrale";
+      if (per === "Mensile") for (let m = 1; m <= 12; m++) add("iva", `${y}-${p2(m)}`, `IVA ${MESI[m - 1]} ${y}`, aggiungiGiorni(fineMese(y, m), 60));
+      else if (per === "Semestrale") for (let h = 1; h <= 2; h++) add("iva", `${y}-S${h}`, `IVA ${h}° semestre ${y}`, aggiungiGiorni(fineMese(y, h * 6), 60));
+      else if (per === "Annuale") add("iva", `${y}`, `IVA rendiconto annuale ${y}`, aggiungiGiorni(fineMese(y, 12), 60));
+      else for (let q = 1; q <= 4; q++) add("iva", `${y}-T${q}`, `IVA ${q}° trimestre ${y}`, aggiungiGiorni(fineMese(y, q * 3), 60));
+      add("ivaRiconciliazione", `${y}`, `Riconciliazione IVA esercizio ${y}`, aggiungiGiorni(dataISO(y, ch.m, ch.g), 240));
+    }
+    if (s.stipendi) {
+      const g = Math.min(Math.max(+c.giornoPaga || 25, 1), 31);
+      for (let m = 1; m <= 12; m++) add("stipendi", `${y}-${p2(m)}`, `Stipendi ${MESI[m - 1]} ${y}`, dataISO(y, m, g));
+    }
+    if (s.ifTrimestrale) for (let q = 1; q <= 3; q++) add("ifTrimestrale", `${y}-T${q}`, `IF ${q}° trimestre ${y}`, dataISO(y, q * 3 + 1, 10));
+    if (s.ifAnnuale || s.ifTrimestrale) add("ifAnnuale", `${y}`, `IF conguaglio ${y}${s.ifTrimestrale ? " (con IV trimestre)" : ""}`, dataISO(y + 1, 1, 31));
+    if (s.avsLainfIpg) add("avsLainfIpg", `${y}`, `AVS / LAINF / IPG salari ${y}`, dataISO(y + 1, 1, 30));
+    if (s.lpp) add("lpp", `${y + 1}`, `LPP annuncio salari ${y + 1}`, dataISO(y, 12, 31));
+    if (s.dichiarazione) add("dichiarazione", `${y}`, `Dichiarazione fiscale ${y}`, dataISO(y + 1, 6, 30));
+    if (mm.funzione.attivo && !pf) add("assemblea", `${y}`, `Assemblea ordinaria esercizio ${y}`, dopoChiusura(ch, y, 6));
+    if (s.revisione && !pf) add("revisione", `${y}`, `Revisione esercizio ${y}`, dopoChiusura(ch, y, 6), { avvisoDal: dopoChiusura(ch, y, 3) });
+  }
+  if (kyc?.prossimaRevisione) add("kyc", kyc.prossimaRevisione, "Revisione KYC", kyc.prossimaRevisione);
+  return out.filter(o => o.scadenza.slice(0, 4) === String(anno));
+}
+
+/** Unisce la scadenza calcolata con lo stato salvato. */
+export function conStato(o, salvato) {
+  const s = salvato || {};
+  return { ...o, stato: s.stato || "Da fare", nuovaData: s.nuovaData || null, responsabileUid: s.responsabileUid || null, responsabileNome: s.responsabileNome || "",
+    note: s.note || "", cronologia: s.cronologia || [], fattoIl: s.fattoIl || null, fattoDa: s.fattoDa || "", salvato: !!salvato,
+    data: (s.stato === "Prorogato" && s.nuovaData) ? s.nuovaData : o.scadenza };
+}
+export const chiusa = o => o.stato === "Fatto" || o.stato === "Non dovuto";
+
+/**
+ * Urgenza di una scadenza aperta: scaduto | urgente (-5/-2 giorni) | preavviso (-30 giorni per le annuali, o dal 31.03 per la revisione) | null
+ */
+export function urgenzaScadenza(o, oggi = new Date()) {
+  if (chiusa(o)) return null;
+  const g = giorniA(o.data, oggi);
+  if (g < 0) return "scaduto";
+  if (g <= 5) return "urgente";
+  if (o.annuale && g <= 30) return "preavviso";
+  if (o.avvisoDal && giorniA(o.avvisoDal, oggi) <= 0) return "preavviso";
+  return null;
+}
+
+// ---------- Presenze (registrazione semplificata, art. 73b OLL 1) ----------
+// Si registra solo la durata giornaliera del lavoro. Il motivo delle assenze non si registra.
+export const TIPI_ASSENZA = ["Vacanza", "Vacanza mezza giornata", "Assenza", "Assenza mezza giornata", "Recupero ore"];
+
+/** Domenica di Pasqua (calendario gregoriano). */
+export function pasqua(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+    g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4,
+    l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mese = Math.floor((h + l - 7 * m + 114) / 31), giorno = ((h + l - 7 * m + 114) % 31) + 1;
+  return dataISO(y, mese, giorno);
+}
+/** I 15 giorni festivi ufficiali del Cantone Ticino (Legge concernente i giorni festivi ufficiali, 843.200). Venerdì Santo escluso. */
+export function festiviTicino(y) {
+  const p = pasqua(y);
+  return {
+    [dataISO(y, 1, 1)]: "Capodanno", [dataISO(y, 1, 6)]: "Epifania", [dataISO(y, 3, 19)]: "San Giuseppe",
+    [aggiungiGiorni(p, 1)]: "Lunedì di Pasqua", [dataISO(y, 5, 1)]: "Primo maggio", [aggiungiGiorni(p, 39)]: "Ascensione",
+    [aggiungiGiorni(p, 50)]: "Lunedì di Pentecoste", [aggiungiGiorni(p, 60)]: "Corpus Domini", [dataISO(y, 6, 29)]: "SS. Pietro e Paolo",
+    [dataISO(y, 8, 1)]: "Festa nazionale", [dataISO(y, 8, 15)]: "Assunzione", [dataISO(y, 11, 1)]: "Ognissanti",
+    [dataISO(y, 12, 8)]: "Immacolata", [dataISO(y, 12, 25)]: "Natale", [dataISO(y, 12, 26)]: "Santo Stefano"
+  };
+}
+/** 0 = lunedì … 6 = domenica */
+export function giornoSettimana(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+}
+/** Minuti dovuti in un giorno secondo il profilo orario (ore settimanali su 5 giorni × percentuale). */
+export function minutiDovuti(profilo, iso) {
+  if (giornoSettimana(iso) >= 5 || festiviTicino(+iso.slice(0, 4))[iso]) return 0;
+  const ore = Number(profilo?.oreSettimanali) || 42, perc = profilo?.percentuale == null || profilo.percentuale === "" ? 100 : Number(profilo.percentuale);
+  return Math.round(ore * 60 / 5 * perc / 100);
+}
+/** "8:30", "8.5", "8,5", "8h30", "8 h", "510m" -> minuti; vuoto -> null; non valido -> NaN */
+export function parseOre(v) {
+  const s = String(v ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!s) return null;
+  let m = /^(\d{1,2})[:h](\d{1,2})?$/.exec(s);
+  if (m) return +m[1] * 60 + (+m[2] || 0) <= 24 * 60 && (+m[2] || 0) < 60 ? +m[1] * 60 + (+m[2] || 0) : NaN;
+  m = /^(\d{1,3})m(in)?$/.exec(s);
+  if (m) return +m[1] <= 1440 ? +m[1] : NaN;
+  m = /^(\d{1,2})([.,]\d+)?$/.exec(s);
+  if (m) { const n = Math.round(parseFloat(s.replace(",", ".")) * 60); return n <= 1440 ? n : NaN; }
+  return NaN;
+}
+/** Credito di un'assenza: giornata intera = dovuto, mezza = metà, recupero ore = 0 (usa il saldo). */
+export function minutiCredito(tipo, dovuti) {
+  if (tipo === "Vacanza" || tipo === "Assenza") return dovuti;
+  if (tipo === "Vacanza mezza giornata" || tipo === "Assenza mezza giornata") return Math.round(dovuti / 2);
+  return 0;
+}
+/**
+ * Riepilogo di un periodo [da, a] (ISO incluse).
+ * presenze: oggetto data -> {minuti, assenza}. Da "dal" in poi si contano le ore dovute (inizio registrazione).
+ */
+export function riepilogoPresenze(presenze, profilo, da, a, dal = da, oggi = oggiISO()) {
+  const r = { dovute: 0, lavorate: 0, credito: 0, saldo: 0, vacanze: 0, assenze: 0, daCompilare: 0 };
+  for (let d = da; d <= a; d = aggiungiGiorni(d, 1)) {
+    const p = presenze[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0;
+    r.lavorate += p.minuti || 0;
+    const cr = minutiCredito(p.assenza, dov);
+    r.credito += cr; r.dovute += dov;
+    if (p.assenza === "Vacanza") r.vacanze += 1; else if (p.assenza === "Vacanza mezza giornata") r.vacanze += 0.5;
+    if (p.assenza === "Assenza") r.assenze += 1; else if (p.assenza === "Assenza mezza giornata") r.assenze += 0.5;
+    if (dov && d < oggi && p.minuti == null && !p.assenza) r.daCompilare += 1;
+  }
+  r.saldo = r.lavorate + r.credito - r.dovute;
+  return r;
+}
+/** Minuti con segno in ore: -90 -> "-1h 30" */
+export const fmtSaldo = (min) => (min < 0 ? "−" : min > 0 ? "+" : "") + fmtDurata(Math.abs(min));

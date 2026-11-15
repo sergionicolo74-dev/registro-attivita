@@ -3,7 +3,7 @@
 App web unica dello studio: anagrafica clienti, registro ore, scadenziario, compiti, presenze, vacanze e dashboard.
 Il vecchio registro (`index.html` nella cartella principale) resta in uso finché il gestionale non lo sostituisce.
 
-## Stato (fase 1)
+## Stato
 
 - Accesso con email e password, ruoli `admin` / `utente`
 - Clienti: elenco con ricerca e filtri, scheda a schede (Persone, Dati e mandato, Servizi e scadenze, Compiti, Ore e diario, Note)
@@ -13,7 +13,9 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch�
 - Mandati: fino a tre per cliente (Contabilità e Tax, Funzione societaria, Domiciliazione), ognuno con stato, date e budget; riepilogo con grafico budget/ore lavorate e griglia per cliente
 - Compiti: elenco per urgenza o a colonne, assegnazione, stati con motivo d'attesa, aggiornamenti, scaduti / entro 5 giorni / fermi da 5 giorni
 - Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
-- Moduli Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
+- Scadenziario: scadenze ricorrenti calcolate dai servizi di ogni cliente; elenco per urgenza con riepilogo cliccabile, griglia clienti × servizi per anno, proroghe, responsabile, aggiornamenti
+- Presenze: registrazione semplificata art. 73b OLL 1 (ore totali al giorno), festivi ticinesi, saldi mese/anno, vacanze, panoramica dello studio, esportazione CSV annuale; il Registro ore usa la presenza del giorno
+- Moduli Vacanze e Dashboard: fasi successive
 
 ## Ambienti
 

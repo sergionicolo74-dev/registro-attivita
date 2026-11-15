@@ -1,5 +1,5 @@
 // Trasformazioni pure per gli import (testabili senza browser né database).
-import { parseData, normNome, mandatiDi } from "./regole.js";
+import { parseData, normNome, mandatiDi, DOCUMENTI_DF } from "./regole.js";
 
 const X = v => String(v ?? "").trim().toLowerCase() === "x";
 const T = v => (v == null ? "" : String(v).trim());
@@ -11,8 +11,75 @@ const MAPPA_SERVIZI = {
   "LPP": "lpp", "Domiciliazione": "domiciliazione", "Revisione": "revisione"
 };
 
-/** Righe del foglio "Clienti" (oggetti con le intestazioni come chiavi) -> { clienti, kyc, errori } */
+const PREF_MANDATO = { contabilita: "Contabilità", funzione: "Funzione", domiciliazione: "Domiciliazione", intestazione: "Intestazione" };
+const chiusuraDa = v => v instanceof Date ? `${String(v.getDate()).padStart(2, "0")}.${String(v.getMonth() + 1).padStart(2, "0")}` : T(v);
+
+/** Figli scritti come "Giulia 01.09.2012; Luca 15.03.2015" */
+export function figliDaTesto(t) {
+  return T(t).split(/[;\n]/).map(x => x.trim()).filter(Boolean).map(x => {
+    const m = /^(.*?)[\s,]+(\d{1,2}[.\/]\d{1,2}[.\/]\d{2,4})$/.exec(x);
+    return m ? { nome: m[1].trim(), nascita: parseData(m[2]), situazione: "" } : { nome: x, nascita: null, situazione: "" };
+  });
+}
+
+/** Modello completo (versione 3): mandati separati, persone fisiche, documenti DF. */
+function clientiDaExcelV3(righe) {
+  const clienti = [], kyc = [], errori = [];
+  righe.forEach((r, i) => {
+    const codice = T(r["Codice cliente"]);
+    if (!codice || codice.toUpperCase() === "ESEMPIO") return;
+    const rs = T(r["Ragione sociale"]);
+    if (!rs) { errori.push(`Riga ${i + 3}: manca la ragione sociale (codice ${codice})`); return; }
+    const servizi = {};
+    for (const [col, k] of Object.entries(MAPPA_SERVIZI)) if (col in r) servizi[k] = X(r[col]);
+    const m = (k, extra = {}) => {
+      const p = PREF_MANDATO[k];
+      return { attivo: X(r[`${p} – mandato attivo`]), stato: T(r[`${p} – stato mandato firmato`]), dataFirma: parseData(r[`${p} – data firma`]),
+        aggiornareEntro: parseData(r[`${p} – aggiornare entro`]), budget: N(r[`${p} – forfait annuo CHF`]), fatturazione: T(r[`${p} – fatturazione`]), ...extra };
+    };
+    const ruolo = T(r["Funzione – ruolo"]), persona = T(r["Funzione – persona dello studio"]);
+    const mandati = {
+      contabilita: m("contabilita", { budgetOre: N(r["Contabilità – budget ore annue"]), tariffa: N(r["Contabilità – tariffa oraria CHF"]) }),
+      funzione: m("funzione", { funzioni: ruolo || persona ? [{ ruolo, persona, firma: T(r["Funzione – diritto di firma"]), inizio: parseData(r["Funzione – dal"]) }] : [] }),
+      domiciliazione: m("domiciliazione", { tipo: T(r["Domiciliazione – tipo"]), dal: parseData(r["Domiciliazione – dal"]) }),
+      intestazione: m("intestazione", { tipoTitoli: T(r["Intestazione – titoli"]), numero: N(r["Intestazione – numero"]), valoreNominale: N(r["Intestazione – valore nominale CHF"]),
+        percentuale: N(r["Intestazione – quota del capitale %"]), intestatario: T(r["Intestazione – intestate a"]), dal: parseData(r["Intestazione – dal"]),
+        contratto: T(r["Intestazione – contratto fiduciario"]), iscrizione: T(r["Intestazione – libro azioni / RC"]) })
+    };
+    if (mandati.domiciliazione.attivo) servizi.domiciliazione = true;
+    const forma = T(r["Forma giuridica"]);
+    const documenti = {};
+    for (const [k, n] of DOCUMENTI_DF) if (X(r[`DF – ${n}`])) documenti[k] = true;
+    const coniugeNome = T(r["PF – coniuge cognome e nome"]);
+    const df = forma === "Persona fisica" ? {
+      nascita: parseData(r["PF – data di nascita"]), statoCivile: T(r["PF – stato civile"]), attivita: T(r["PF – attività"]), tassazione: T(r["PF – tassazione"]),
+      comune: T(r["PF – comune di domicilio fiscale"]), note: T(r["PF – note per la dichiarazione"]), figli: figliDaTesto(r["PF – figli"]), documenti,
+      coniuge: coniugeNome ? { nome: coniugeNome, nascita: parseData(r["PF – coniuge data di nascita"]), attivita: T(r["PF – coniuge attività"]) } : null
+    } : null;
+    clienti.push({
+      codice, ragioneSociale: rs, forma, idi: T(r["IDI"]), responsabile: T(r["Responsabile interno"]), sostituto: T(r["Sostituto"]),
+      stato: T(r["Stato cliente"]) || "Attivo", chiusuraEsercizio: chiusuraDa(r["Chiusura esercizio"]),
+      indirizzo: T(r["Indirizzo"]), npa: T(r["NPA"]), localita: T(r["Località"]), cantone: T(r["Cantone"]),
+      emailGenerale: T(r["Email generale"]), lingua: T(r["Lingua corrispondenza"]),
+      iva: { regime: T(r["Regime IVA"]), periodicita: T(r["Periodicità IVA"]) }, contabilitaPeriodicita: T(r["Contabilità registrata"]),
+      giornoPaga: N(r["Giorno di paga"]), dipendenti: N(r["N. dipendenti"]), cassaAvs: T(r["Cassa AVS"]), lainf: T(r["Assicuratore LAINF"]), lpp: T(r["Istituto LPP"]),
+      servizi, revisione: !!servizi.revisione, mandati, ...(df ? { df } : {}),
+      cartella: T(r["Cartella archivio"]), note: T(r["Note"])
+    });
+    const fid = T(r["Fiduciante (intestazione fiduciaria)"]);
+    kyc.push({ codice, stato: T(r["Stato KYC"]), rischio: T(r["Rischio"]), ultimaVerifica: parseData(r["Ultima verifica KYC"]), prossimaRevisione: parseData(r["Prossima revisione KYC"]),
+      ...(fid ? { intestazione: { fiduciante: fid } } : {}) });
+  });
+  return { clienti, kyc, errori };
+}
+
+/** Righe del foglio "Clienti" (oggetti con le intestazioni come chiavi) -> { clienti, kyc, errori }. Riconosce il modello completo e quello precedente. */
 export function clientiDaExcel(righe) {
+  if (righe.some(r => "Contabilità – mandato attivo" in r)) {
+    const out = clientiDaExcelV3(righe), visti = new Set();
+    for (const c of out.clienti) { if (visti.has(c.codice)) out.errori.push(`Codice ${c.codice} ripetuto`); visti.add(c.codice); }
+    return out;
+  }
   const clienti = [], kyc = [], errori = [];
   righe.forEach((r, i) => {
     const codice = T(r["Codice cliente"]);
@@ -95,14 +162,15 @@ export function documentiDaBackup(backup, abbinamenti, autore) {
   return docs;
 }
 
-const vuoto = v => v == null || v === "" || v === false || (typeof v === "object" && !Array.isArray(v) && Object.values(v).every(vuoto));
+const vuoto = v => v == null || v === "" || v === false || (Array.isArray(v) && !v.length) || (typeof v === "object" && !Array.isArray(v) && Object.values(v).every(vuoto));
 
 /** Aggiorna un cliente esistente con i dati dell'Excel senza cancellare ciò che è già stato inserito nel gestionale:
  *  le celle vuote non sovrascrivono, i mandati già impostati nel gestionale restano. */
 export function unisciCliente(esistente, nuovo) {
   const out = { ...esistente };
   for (const [k, v] of Object.entries(nuovo)) {
-    if (k === "mandati") { if (!esistente.mandati) out.mandati = v; continue; }
+    // mandati: le celle compilate aggiornano, quelle vuote non toccano ciò che è già nel gestionale
+    if (k === "mandati") { out.mandati = esistente.mandati && Object.keys(esistente.mandati).length ? unisciCliente(mandatiDi(esistente), v) : v; continue; }
     if (vuoto(v)) continue;
     if (typeof v === "object" && !Array.isArray(v) && esistente[k] && typeof esistente[k] === "object") out[k] = unisciCliente(esistente[k], v);
     else out[k] = v;

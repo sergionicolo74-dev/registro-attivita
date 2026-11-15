@@ -15,7 +15,7 @@ export async function vistaImporta(el) {
   el.innerHTML = `<div class="testata"><h1>Importa dati</h1></div>
   <div class="passi">
     <section class="pannello"><h2 style="font-size:16px">1 · Anagrafica clienti da Excel</h2>
-      <p class="tenue">Usa il modello "Anagrafica clienti". I clienti già presenti con lo stesso codice vengono aggiornati solo con le celle compilate: quello che hai già inserito nel gestionale non viene cancellato. Le persone vengono aggiunte.</p>
+      <p class="tenue">Usa il modello "Anagrafica clienti" (completo o precedente). I clienti già presenti, riconosciuti per codice o per nome, vengono aggiornati solo con le celle compilate: quello che hai già inserito nel gestionale non viene cancellato. Le persone vengono aggiunte.</p>
       <input type="file" id="file-xlsx" accept=".xlsx,.xls" aria-label="File Excel">
       <div id="anteprima-xlsx" style="margin-top:12px"></div></section>
     <section class="pannello"><h2 style="font-size:16px">2 · Backup del vecchio registro attività</h2>
@@ -32,7 +32,12 @@ async function anteprimaExcel(file, box) {
   let XLSX;
   try { XLSX = await caricaSheetJS(); } catch { box.innerHTML = stato("scaduto", "Non riesco a caricare il lettore Excel"); return; }
   const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
-  const foglio = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: "" }) : [];
+  // Il modello completo ha una riga di gruppi sopra le intestazioni: in quel caso le intestazioni sono nella riga 2
+  const foglio = n => {
+    const sh = wb.Sheets[n]; if (!sh) return [];
+    const a1 = String(sh["A1"]?.v ?? "").trim();
+    return XLSX.utils.sheet_to_json(sh, { defval: "", range: a1 === "Codice cliente" ? 0 : 1 });
+  };
   if (!wb.Sheets["Clienti"]) { box.innerHTML = stato("scaduto", "Nel file manca il foglio Clienti"); return; }
   const { clienti, kyc, errori } = clientiDaExcel(foglio("Clienti"));
   const esistenti = await D.listaClienti();
@@ -69,7 +74,10 @@ async function anteprimaExcel(file, box) {
       const alias = new Set([...(ex?.aliasNomi || []), ...(ex && ex.ragioneSociale !== c.ragioneSociale ? [ex.ragioneSociale] : [])]);
       ids[c.codice] = await D.salvaCliente({ ...(ex ? { ...unisciCliente(ex, c), codice: c.codice } : c), aliasNomi: [...alias] });
     }
-    for (const { codice, ...r } of kyc) if (Object.values(r).some(Boolean)) await D.salvaKycCliente(ids[codice], r);
+    for (const { codice, ...r } of kyc) {
+      const pieni = Object.fromEntries(Object.entries(r).filter(([, v]) => v != null && v !== ""));
+      if (Object.keys(pieni).length) await D.salvaKycCliente(ids[codice], pieni);
+    }
     // 2) persone
     for (const p of persone) {
       const clienteId = ids[p.codice] || perCodice[p.codice]?.id;

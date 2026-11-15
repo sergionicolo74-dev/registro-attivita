@@ -184,3 +184,9 @@ console.log("Test compiti superati");
   ok(R.colonnePeriodo("trimestre", "2026-10-01", "2026-12-31")[0], { da: "2026-10-01", a: "2026-10-04", etichetta: "01.10" }, "prima settimana del trimestre");
   ok([R.statoCopertura(38, 40), R.statoCopertura(33, 40), R.statoCopertura(20, 40), R.statoCopertura(5, 0)], ["ok", "urgente", "scaduto", null], "copertura");
 }
+{
+  const R = await import("../js/regole.js");
+  const c = R.coloriUtenti([{ id: "b", creato: "2026-02" }, { id: "a", creato: "2026-01" }, { id: "c", colore: 1 }]);
+  const ok = (a, b, n) => { if (JSON.stringify(a) !== JSON.stringify(b)) { console.error("FALLITO", n, a, b); process.exitCode = 1; } else console.log("ok", n); };
+  ok([c.c, c.a, c.b], ["#2a78d6", "#eb6834", "#1baf7a"], "colori: scelto e poi ordine di creazione");
+}

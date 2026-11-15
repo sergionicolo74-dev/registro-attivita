@@ -110,7 +110,7 @@ export const listaUtenti = () => lista("utenti");
  */
 export async function creaCollaboratore({ nome, email, ruolo }) {
   if (!ADMIN()) throw new Error("Solo un amministratore può creare utenti");
-  if (demo) { const id = "u" + Date.now().toString(36); demo.utenti[id] = { id, nome, email, ruolo, attivo: true }; return id; }
+  if (demo) { const id = "u" + Date.now().toString(36); const occ = Object.values(demo.utenti).map(x => x.colore); demo.utenti[id] = { id, nome, email, ruolo, attivo: true, colore: [1, 2, 3, 4, 5, 6, 7, 8].find(n => !occ.includes(n)) || 1 }; return id; }
   const nomeApp = "creazione-utenti";
   const sec = appMod.getApps().find(x => x.name === nomeApp) || appMod.initializeApp(configFb, nomeApp);
   const secAuth = fb.getAuth(sec);
@@ -118,7 +118,9 @@ export async function creaCollaboratore({ nome, email, ruolo }) {
   const cred = await fb.createUserWithEmailAndPassword(secAuth, email, pw);
   const uid = cred.user.uid;
   await fb.signOut(secAuth);
-  await scrivi("utenti", { id: uid, nome, email, ruolo, attivo: true, creato: ora(), oreSettimanali: 42, percentuale: 100, pausaStandard: 60, entrataStandard: "08:00" });
+  const occupati = (await lista("utenti")).filter(x => x.attivo !== false).map(x => x.colore);
+  const colore = [1, 2, 3, 4, 5, 6, 7, 8].find(n => !occupati.includes(n)) || 1;
+  await scrivi("utenti", { id: uid, nome, email, ruolo, attivo: true, creato: ora(), colore, oreSettimanali: 42, percentuale: 100, pausaStandard: 60, entrataStandard: "08:00" });
   await fb.sendPasswordResetEmail(auth, email);
   return uid;
 }

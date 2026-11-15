@@ -453,3 +453,16 @@ export function statoCopertura(reg, pres) {
   const p = reg / pres;
   return p >= 0.95 ? "ok" : p >= 0.8 ? "urgente" : "scaduto";
 }
+
+// ---------- Colori dei collaboratori ----------
+// Otto colori in ordine fisso (verificati per il daltonismo); il colore segue la persona, non la posizione in elenco.
+export const COLORI_PERSONA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+/** id utente -> colore. Usa il colore scelto (utente.colore = 1..8) o l'ordine di creazione. */
+export function coloriUtenti(utenti) {
+  const out = {}, usati = new Set();
+  for (const u of utenti) if (u.colore >= 1 && u.colore <= 8) { out[u.id] = COLORI_PERSONA[u.colore - 1]; usati.add(u.colore - 1); }
+  const liberi = COLORI_PERSONA.map((_, i) => i).filter(i => !usati.has(i));
+  [...utenti].filter(u => !out[u.id]).sort((a, b) => String(a.creato || "").localeCompare(String(b.creato || "")) || String(a.id).localeCompare(String(b.id)))
+    .forEach((u, i) => { out[u.id] = COLORI_PERSONA[liberi.length ? liberi[i % liberi.length] : i % 8]; });
+  return out;
+}

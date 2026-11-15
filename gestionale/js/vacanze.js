@@ -3,10 +3,12 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, giorniLavorativi, giorniRichiesta, vacanzeUsate,
-  chiusa, TIPI_VACANZA, GIORNI, MESI } from "./regole.js";
+  chiusa, TIPI_VACANZA, GIORNI, MESI, coloriUtenti, lunedi } from "./regole.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
 let mese = oggiISO().slice(0, 7);
+let vistaV = "calendario";   // calendario | tabella
+let scala = "mese";          // mese | anno (solo calendario)
 const meseDopo = (m, n) => dataISO(+m.slice(0, 4), +m.slice(5, 7) + n, 1).slice(0, 7);
 const SIGLA = { Vacanza: "V", "Recupero ore": "R", Assenza: "A" };
 
@@ -23,6 +25,7 @@ export async function vistaVacanze(el) {
   const utenti = utentiTutti.filter(x => x.attivo !== false && x.ruolo).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   if (!utenti.some(x => x.id === u.uid)) utenti.unshift({ id: u.uid, nome: u.nome });
   const scadenze = sc.tutte || [];
+  const col = coloriUtenti(utentiTutti.length ? utentiTutti : utenti);
   const da = `${mese}-01`, a = dataISO(anno, +mese.slice(5, 7), 31), fest = festiviTicino(anno);
   const giorni = []; for (let d = da; d <= a; d = aggiungiGiorni(d, 1)) giorni.push(d);
   const attive = vacanze.filter(v => v.stato !== "Rifiutata");
@@ -45,14 +48,17 @@ export async function vistaVacanze(el) {
   el.innerHTML = `
   <div class="testata">
     <div><h1>Vacanze</h1><div class="tenue">${oggiFuori.length ? `Oggi assenti: ${oggiFuori.map(v => e(v.nome)).join(", ")}` : "Oggi tutti presenti"}</div></div>
-    <div class="barra"><button class="btn" id="m-prec" aria-label="Mese precedente">◀</button>
-      <span style="min-width:130px;text-align:center;font-weight:600">${e(MESI[+mese.slice(5, 7) - 1])} ${anno}</span>
-      <button class="btn" id="m-succ" aria-label="Mese successivo">▶</button><button class="btn" id="m-oggi">Oggi</button>
+    <div class="barra">
+      <div class="segmenti" role="radiogroup" aria-label="Vista"><button type="button" role="radio" data-vv="mese" aria-checked="${vistaV === "calendario" && scala === "mese"}">Calendario mese</button><button type="button" role="radio" data-vv="anno" aria-checked="${vistaV === "calendario" && scala === "anno"}">Anno</button><button type="button" role="radio" data-vv="tabella" aria-checked="${vistaV === "tabella"}">Tabella</button></div>
+      <button class="btn" id="m-prec" aria-label="Precedente">◀</button>
+      <span style="min-width:130px;text-align:center;font-weight:600">${vistaV === "calendario" && scala === "anno" ? anno : `${e(MESI[+mese.slice(5, 7) - 1])} ${anno}`}</span>
+      <button class="btn" id="m-succ" aria-label="Successivo">▶</button><button class="btn" id="m-oggi">Oggi</button>
       <button class="btn primario" id="nuova-v">${admin ? "Nuova assenza" : "Chiedi vacanza"}</button></div>
   </div>
   ${inAttesa.length ? `<section class="pannello" style="margin-bottom:14px"><h2 style="font-size:15px;margin-bottom:8px">${admin ? "Richieste da approvare" : "Le tue richieste in attesa"} <span class="tenue">${inAttesa.length}</span></h2>
     <ul class="richieste">${inAttesa.map(rigaRichiesta).join("")}</ul></section>` : ""}
-  <section class="pannello" style="padding:0;margin-bottom:14px"><div class="scorri"><table class="piano">
+  ${legendaPersone(utenti, col)}
+  ${vistaV === "tabella" ? `<section class="pannello" style="padding:0;margin-bottom:14px"><div class="scorri"><table class="piano">
     <thead><tr><th class="nome">Collaboratore</th>${giorni.map(d => { const gs = giornoSettimana(d), lib = gs >= 5 || fest[d];
       return `<th class="${lib ? "lib" : ""}${d === oggi ? " oggi" : ""}" title="${e(fest[d] || "")}"><span>${GIORNI[gs].charAt(0)}</span>${+d.slice(8)}</th>`; }).join("")}</tr></thead>
     <tbody>${utenti.map(x => `<tr><th class="nome">${e(x.nome || x.id)}</th>${giorni.map(d => {
@@ -61,10 +67,11 @@ export async function vistaVacanze(el) {
       if (!v) return `<td class="${d === oggi ? "oggi" : ""}"></td>`;
       const cl = v.stato === "Richiesta" ? "chiesta" : v.tipo === "Vacanza" ? "vac" : "alt";
       const t = `${x.nome}: ${v.tipo}${v.mezza ? " (mezza giornata)" : ""}${v.stato === "Richiesta" ? " — da approvare" : ""}`;
-      return `<td class="${d === oggi ? "oggi" : ""}"><button type="button" class="pv ${cl}" data-apri="${e(v.id)}" title="${e(t)}" aria-label="${e(t + " " + fmtData(d))}">${v.stato === "Richiesta" ? "?" : SIGLA[v.tipo] || "•"}${v.mezza ? "½" : ""}</button></td>`;
+      const st = cl === "vac" ? ` style="background:${col[x.id]}"` : cl === "chiesta" ? ` style="border-color:${col[x.id]};color:var(--inchiostro)"` : "";
+      return `<td class="${d === oggi ? "oggi" : ""}"><button type="button" class="pv ${cl}"${st} data-apri="${e(v.id)}" title="${e(t)}" aria-label="${e(t + " " + fmtData(d))}">${v.stato === "Richiesta" ? "?" : SIGLA[v.tipo] || "•"}${v.mezza ? "½" : ""}</button></td>`;
     }).join("")}</tr>`).join("")}</tbody></table></div>
     <p class="legenda" style="padding:10px 14px">${[["vac", "V", "Vacanza approvata"], ["alt", "R", "Recupero ore / A Assenza"], ["chiesta", "?", "Richiesta da approvare"]].map(([c, s, n]) => `<span><span class="pv ${c}" aria-hidden="true">${s}</span> ${n}</span>`).join("")}
-      <span><span class="pv lib-l" aria-hidden="true"></span> Fine settimana e festivi ticinesi</span></p></section>
+      <span><span class="pv lib-l" aria-hidden="true"></span> Fine settimana e festivi ticinesi</span></p></section>` : scala === "anno" ? calendarioAnno(anno, utenti, attive, col, oggi) : calendarioMese(mese, utenti, attive, col, oggi, admin, u)}
   <section class="pannello"><h2 style="font-size:15px;margin-bottom:10px">Saldo vacanze ${anno}</h2>
     <table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Diritto</th><th class="num">Approvate</th><th class="num">In attesa</th><th class="num">Restanti</th><th style="width:40%"></th></tr></thead><tbody>
     ${utenti.filter(x => admin || x.id === u.uid).map(x => {
@@ -81,8 +88,15 @@ export async function vistaVacanze(el) {
   </section>`;
 
   const ricarica = () => vistaVacanze(el);
-  el.querySelector("#m-prec").addEventListener("click", () => { mese = meseDopo(mese, -1); ricarica(); });
-  el.querySelector("#m-succ").addEventListener("click", () => { mese = meseDopo(mese, 1); ricarica(); });
+  const passo = vistaV === "calendario" && scala === "anno" ? 12 : 1;
+  el.querySelector("#m-prec").addEventListener("click", () => { mese = meseDopo(mese, -passo); ricarica(); });
+  el.querySelector("#m-succ").addEventListener("click", () => { mese = meseDopo(mese, passo); ricarica(); });
+  el.querySelectorAll("[data-vv]").forEach(b => b.addEventListener("click", () => { if (b.dataset.vv === "tabella") vistaV = "tabella"; else { vistaV = "calendario"; scala = b.dataset.vv; } ricarica(); }));
+  el.querySelectorAll("[data-mese]").forEach(b => b.addEventListener("click", () => { mese = b.dataset.mese; scala = "mese"; ricarica(); }));
+  el.querySelectorAll("[data-nuovo]").forEach(b => b.addEventListener("click", ev => {
+    if (ev.target.closest("[data-apri]")) return;
+    cassetto({ uid: u.uid, nome: u.nome, tipo: "Vacanza", stato: admin ? "Approvata" : "Richiesta", dal: b.dataset.nuovo, al: b.dataset.nuovo }, utenti, vacanze, scadenze, ricarica);
+  }));
   el.querySelector("#m-oggi").addEventListener("click", () => { mese = oggiISO().slice(0, 7); ricarica(); });
   el.querySelector("#nuova-v").addEventListener("click", () => cassetto({ uid: u.uid, nome: u.nome, tipo: "Vacanza", stato: admin ? "Approvata" : "Richiesta" }, utenti, vacanze, scadenze, ricarica));
   const cambia = async (id, nuovo) => {
@@ -154,4 +168,54 @@ function cassetto(v, utenti, vacanze, scadenze, ricarica) {
     if (!confirm("Eliminare questa assenza?")) return;
     await D.eliminaVacanza(v.id); chiudi(); avviso("Eliminata"); ricarica();
   });
+}
+
+
+// ---------- Calendario ----------
+const dentro = (v, d) => d >= v.dal && d <= (v.mezza ? v.dal : v.al);
+
+function legendaPersone(utenti, col) {
+  return `<div class="leg-persone" aria-label="Colori dei collaboratori">${utenti.map(x => `<span class="leg-p"><i style="background:${col[x.id]}"></i>${e(x.nome || x.id)}</span>`).join("")}
+    <span class="leg-p tenue"><i class="trat"></i>Richiesta da approvare</span></div>`;
+}
+
+/** Chip di una persona assente: colore della persona + nome scritto (mai solo il colore). */
+function chip(v, col) {
+  const t = `${v.nome}: ${v.tipo}${v.mezza ? " (mezza giornata)" : ""}${v.stato === "Richiesta" ? " — richiesta da approvare" : ""}`;
+  const pend = v.stato === "Richiesta";
+  return `<button type="button" class="chip-v${pend ? " pend" : ""}" data-apri="${e(v.id)}" title="${e(t)}" aria-label="${e(t)}"
+    style="--c:${col[v.uid] || "#888"}"><i></i>${e(v.nome)}${v.mezza ? " ½" : ""}${v.tipo !== "Vacanza" ? ` <span class="tenue">${v.tipo === "Recupero ore" ? "rec." : "ass."}</span>` : ""}${pend ? " ?" : ""}</button>`;
+}
+
+function calendarioMese(mese, utenti, attive, col, oggi, admin, u) {
+  const y = +mese.slice(0, 4), m = +mese.slice(5, 7), fest = festiviTicino(y);
+  const primo = `${mese}-01`, ultimo = dataISO(y, m, 31);
+  const giorni = []; for (let d = lunedi(primo); d <= ultimo || giornoSettimana(d) !== 0; d = aggiungiGiorni(d, 1)) giorni.push(d);
+  const ord = (p, q) => utenti.findIndex(x => x.id === p.uid) - utenti.findIndex(x => x.id === q.uid);
+  return `<section class="pannello cal-m" style="margin-bottom:14px">
+    <div class="cal-testa">${GIORNI.map(g => `<span>${g}</span>`).join("")}</div>
+    <div class="cal-griglia">${giorni.map(d => {
+      const fuori = d.slice(0, 7) !== mese, gs = giornoSettimana(d), lib = gs >= 5 || fest[d];
+      const ass = lib ? [] : attive.filter(v => dentro(v, d)).sort(ord);
+      return `<div class="cal-g${fuori ? " fuori" : ""}${lib ? " lib" : ""}${d === oggi ? " oggi" : ""}"${!lib && !fuori ? ` data-nuovo="${d}" title="Clic per ${admin ? "inserire un'assenza" : "chiedere una vacanza"} dal ${fmtData(d)}"` : ""}>
+        <div class="cal-n"><strong>${+d.slice(8)}</strong>${fest[d] ? `<span>${e(fest[d])}</span>` : ""}${!lib && !fuori && ass.length ? `<span class="cal-cnt">${ass.length} ${ass.length === 1 ? "assente" : "assenti"}</span>` : ""}</div>
+        ${ass.map(v => chip(v, col)).join("")}</div>`;
+    }).join("")}</div>
+    <p class="tenue" style="font-size:13px;margin-top:10px">Clicca un giorno libero per ${admin ? "inserire un'assenza" : "chiedere una vacanza"}; clicca un nome per i dettagli. Fine settimana e festivi ticinesi sono grigi.</p></section>`;
+}
+
+function calendarioAnno(anno, utenti, attive, col, oggi) {
+  const fest = festiviTicino(anno);
+  return `<section class="pannello" style="margin-bottom:14px"><div class="cal-anno">${MESI.map((nome, i) => {
+    const m = i + 1, primo = dataISO(anno, m, 1), ultimo = dataISO(anno, m, 31), giorni = [];
+    for (let d = lunedi(primo); d <= ultimo; d = aggiungiGiorni(d, 1)) giorni.push(d);
+    return `<div class="mini-m"><button type="button" class="mini-tit" data-mese="${primo.slice(0, 7)}">${e(nome)}</button>
+      <div class="mini-g">${GIORNI.map(g => `<span class="mini-h">${g.charAt(0)}</span>`).join("")}${giorni.map(d => {
+        if (d.slice(0, 7) !== primo.slice(0, 7)) return "<span></span>";
+        const lib = giornoSettimana(d) >= 5 || fest[d], ass = lib ? [] : attive.filter(v => dentro(v, d));
+        const t = ass.length ? `${fmtData(d)}: ${ass.map(v => v.nome + (v.stato === "Richiesta" ? " (richiesta)" : "")).join(", ")}` : fmtData(d) + (fest[d] ? " " + fest[d] : "");
+        return `<span class="mini-d${lib ? " lib" : ""}${d === oggi ? " oggi" : ""}" title="${e(t)}">${+d.slice(8)}${ass.length ? `<b>${ass.slice(0, 4).map(v => `<i class="${v.stato === "Richiesta" ? "pend" : ""}" style="--c:${col[v.uid]}"></i>`).join("")}</b>` : ""}</span>`;
+      }).join("")}</div></div>`;
+  }).join("")}</div>
+  <p class="tenue" style="font-size:13px;margin-top:10px">Sotto ogni giorno una lineetta per ogni persona assente, nel suo colore. Passa sopra un giorno per vedere i nomi; clicca il mese per aprirlo.</p></section>`;
 }

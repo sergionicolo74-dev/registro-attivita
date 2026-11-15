@@ -59,7 +59,7 @@ export async function vistaMandati(el) {
       return `<div class="gruppo"><div class="nome">${e(n)}</div>
         <div class="riga"><span class="etichetta">Onorario</span><div class="pista"><div class="b budget" style="width:${t.budget / maxVal * 100}%"></div></div><span class="valore">CHF ${fmtNum(t.budget, 0)}</span></div>
         <div class="riga"><span class="etichetta">Ore lavorate</span><div class="pista"><div class="b lavoro${sforo ? " sforo" : ""}" style="width:${t.valore / maxVal * 100}%"></div></div><span class="valore">CHF ${fmtNum(t.valore, 0)} · ${fmtOre(t.minuti)} h</span></div>
-        ${t.budget ? `<div class="tenue" style="font-size:12px;margin-left:110px">${sforo ? stato("scaduto", `Oltre il budget di CHF ${fmtNum(t.valore - t.budget, 0)}`) : `Usato ${Math.round(t.valore / t.budget * 100)}% dell'onorario`}</div>` : ""}</div>`;
+        ${t.budget ? `<div class="tenue" style="font-size:12px;margin-left:110px">${sforo ? stato("scaduto", `Oltre l'onorario di CHF ${fmtNum(t.valore - t.budget, 0)}`) : `Usato ${Math.round(t.valore / t.budget * 100)}% dell'onorario`}</div>` : ""}</div>`;
     }).join("")}
     </div>
     ${tot.pratica.minuti ? `<p class="tenue" style="font-size:13px">${fmtOre(tot.pratica.minuti)} ore registrate su pratiche amministrative (fuori mandato, si fatturano a parte): <a href="#/pratiche">vedi Pratiche</a>.</p>` : ""}

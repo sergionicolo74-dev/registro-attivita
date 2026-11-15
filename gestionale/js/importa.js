@@ -2,7 +2,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
 import { fmtOre } from "./regole.js";
-import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup } from "./mappa-import.js";
+import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup, unisciCliente } from "./mappa-import.js";
 
 // SheetJS (licenza Apache 2.0) incluso nel progetto, così non dipende da siti esterni
 const SHEETJS = new URL("../lib/xlsx.full.min.js", import.meta.url).href;
@@ -15,7 +15,7 @@ export async function vistaImporta(el) {
   el.innerHTML = `<div class="testata"><h1>Importa dati</h1></div>
   <div class="passi">
     <section class="pannello"><h2 style="font-size:16px">1 · Anagrafica clienti da Excel</h2>
-      <p class="tenue">Usa il modello "Anagrafica clienti". I clienti già presenti con lo stesso codice vengono aggiornati, gli altri creati. Le persone vengono aggiunte.</p>
+      <p class="tenue">Usa il modello "Anagrafica clienti". I clienti già presenti con lo stesso codice vengono aggiornati solo con le celle compilate: quello che hai già inserito nel gestionale non viene cancellato. Le persone vengono aggiunte.</p>
       <input type="file" id="file-xlsx" accept=".xlsx,.xls" aria-label="File Excel">
       <div id="anteprima-xlsx" style="margin-top:12px"></div></section>
     <section class="pannello"><h2 style="font-size:16px">2 · Backup del vecchio registro attività</h2>
@@ -53,7 +53,7 @@ async function anteprimaExcel(file, box) {
     for (const c of clienti) {
       const ex = perCodice[c.codice];
       const alias = new Set([...(ex?.aliasNomi || []), ...(ex && ex.ragioneSociale !== c.ragioneSociale ? [ex.ragioneSociale] : [])]);
-      ids[c.codice] = await D.salvaCliente({ ...(ex ? { id: ex.id } : {}), ...c, aliasNomi: [...alias] });
+      ids[c.codice] = await D.salvaCliente({ ...(ex ? unisciCliente(ex, c) : c), aliasNomi: [...alias] });
     }
     for (const { codice, ...r } of kyc) if (Object.values(r).some(Boolean)) await D.salvaKycCliente(ids[codice], r);
     // 2) persone

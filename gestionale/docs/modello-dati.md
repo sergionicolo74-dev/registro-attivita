@@ -17,10 +17,14 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 `codice` (C001…; C000 = clienti occasionali), `ragioneSociale`, `aliasNomi` (nomi precedenti, per abbinare dati vecchi), `forma`, `idi`,
 `responsabile`, `sostituto`, `stato` (Attivo/Sospeso/Cessato), `inizioMandato`, `chiusuraEsercizio` (gg.mm), `indirizzo`, `npa`, `localita`, `cantone`,
 `emailGenerale`, `lingua`, `cartella`, `note`,
-`mandato` {`tipo`, `stato` (Firmato aggiornato / Da aggiornare / Mancante), `dataFirma`, `aggiornareEntro`},
+`mandati` {
+  `contabilita` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget` (CHF/anno), `budgetOre`, `tariffa`, `fatturazione`, `note`},
+  `funzione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `funzioni`: [{`ruolo`, `persona`, `firma`, `inizio`}]},
+  `domiciliazione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `tipo` (Domicilio con ufficio proprio / Recapito c/o), `dal`}
+} — `stato`: Firmato aggiornato / Da aggiornare / Mancante. I campi vecchi `mandato`, `funzione`, `onorario` vengono letti e convertiti (regole.js, mandatiDi),
 `iva` {`regime`, `periodicita`}, `dipendenti`, `cassaAvs`, `lainf`, `lpp`,
 `servizi` {`contabilita`, `iva`, `stipendi`, `ifTrimestrale`, `ifAnnuale`, `dichiarazione`, `avsLainfIpg`, `lpp`, `domiciliazione`, `revisione`} (vero/falso), `revisione`,
-`funzione` {`tipo`, `persona`, `firma`, `inizio`}, `onorario` {`tipo`, `forfait`, `tariffa`, `budgetOre`, `fatturazione`}.
+
 
 ## persone
 
@@ -29,7 +33,7 @@ Il numero del documento d'identità non si registra: resta nella copia in archiv
 
 ## registrazioni
 
-`clienteId`, `data`, `minuti`, `fatturabile`, `tipo` (`lavoro`/`nota`), `descrizione`, `autoreUid`, `autoreNome`, `migratoDa` (se importata).
+`clienteId`, `data`, `minuti`, `fatturabile`, `tipo` (`lavoro`/`nota`), `mandato` (`contabilita`/`funzione`/`domiciliazione`), `descrizione`, `autoreUid`, `autoreNome`, `migratoDa` (se importata).
 
 ## compiti
 

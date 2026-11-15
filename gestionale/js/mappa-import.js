@@ -1,5 +1,5 @@
 // Trasformazioni pure per gli import (testabili senza browser né database).
-import { parseData, normNome } from "./regole.js";
+import { parseData, normNome, mandatiDi } from "./regole.js";
 
 const X = v => String(v ?? "").trim().toLowerCase() === "x";
 const T = v => (v == null ? "" : String(v).trim());
@@ -38,6 +38,8 @@ export function clientiDaExcel(righe) {
       onorario: { tipo: T(r["Tipo onorario"]), forfait: N(r["Forfait annuo CHF"]), tariffa: N(r["Tariffa oraria CHF"]), budgetOre: N(r["Budget ore annue"]), fatturazione: T(r["Fatturazione"]) },
       cartella: T(r["Cartella archivio"]), note: T(r["Note"])
     });
+    const ultimo = clienti[clienti.length - 1];
+    ultimo.mandati = mandatiDi(ultimo);
     kyc.push({ codice, stato: T(r["Stato KYC"]), rischio: T(r["Rischio"]), ultimaVerifica: parseData(r["Ultima verifica KYC"]), prossimaRevisione: parseData(r["Prossima revisione KYC"]) });
   });
   const visti = new Set();
@@ -91,4 +93,19 @@ export function documentiDaBackup(backup, abbinamenti, autore) {
       visibilita: "studio", autoreUid: autore.uid, assegnatoUid: null, assegnatoNome: d.collaboratore || "", migratoDa: "registro-attivita", creato: d.creato || null });
   }
   return docs;
+}
+
+const vuoto = v => v == null || v === "" || v === false || (typeof v === "object" && !Array.isArray(v) && Object.values(v).every(vuoto));
+
+/** Aggiorna un cliente esistente con i dati dell'Excel senza cancellare ciò che è già stato inserito nel gestionale:
+ *  le celle vuote non sovrascrivono, i mandati già impostati nel gestionale restano. */
+export function unisciCliente(esistente, nuovo) {
+  const out = { ...esistente };
+  for (const [k, v] of Object.entries(nuovo)) {
+    if (k === "mandati") { if (!esistente.mandati) out.mandati = v; continue; }
+    if (vuoto(v)) continue;
+    if (typeof v === "object" && !Array.isArray(v) && esistente[k] && typeof esistente[k] === "object") out[k] = unisciCliente(esistente[k], v);
+    else out[k] = v;
+  }
+  return out;
 }

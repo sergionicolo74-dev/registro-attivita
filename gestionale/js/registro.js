@@ -1,7 +1,7 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
-import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI } from "./regole.js";
+import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
 const OBIETTIVO_MIN = 480; // 8 ore: diventerà la presenza reale con il modulo Presenze
@@ -49,6 +49,7 @@ export async function vistaRegistro(el) {
       <div class="largo"><label for="f_cliente">Cliente</label>
         <input id="f_cliente" list="lista-clienti" autocomplete="off" placeholder="Scrivi nome o codice" value="${e(m.clienteId ? nomeCli[m.clienteId] || "" : "")}">
         <datalist id="lista-clienti">${clientiOrd.map(c => `<option value="${e(nomeCli[c.id])}"></option>`).join("")}</datalist></div>
+      <div class="solo-lavoro"><label for="f_mandato">Mandato</label><select id="f_mandato" name="mandato"></select></div>
       <div class="largo"><label for="f_descrizione" id="lbl-desc">Descrizione</label>
         <div style="display:flex;gap:8px;align-items:flex-start"><textarea id="f_descrizione" name="descrizione" rows="3" style="flex:1">${e(m.descrizione || "")}</textarea>
         <button type="button" class="btn" id="detta" title="Detta a voce" aria-label="Detta a voce">🎤</button></div></div>
@@ -69,7 +70,7 @@ export async function vistaRegistro(el) {
     <h2 style="font-size:16px;margin-bottom:10px">${e(fmtData(giorno))}</h2>
     ${delGiorno.length ? `<table class="tabella"><thead><tr><th>Cliente</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th class="num">Durata</th><th></th></tr></thead><tbody>
       ${delGiorno.map(r => `<tr><td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
-        <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}</td>
+        <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
         ${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : ""}</td>
         <td style="white-space:nowrap">${admin || r.autoreUid === u.uid ? `<button class="btn piccolo" data-mod="${e(r.id)}">Modifica</button> <button class="btn piccolo" data-del="${e(r.id)}" aria-label="Elimina">✕</button>` : ""}</td></tr>`).join("")}
@@ -101,6 +102,22 @@ export async function vistaRegistro(el) {
     form.querySelectorAll("[data-min]").forEach(x => x.setAttribute("aria-pressed", x === b));
   }));
   impostaDettatura(el.querySelector("#detta"), form.descrizione);
+  // Mandato: si propongono i mandati attivi del cliente scelto
+  const trovaCliente = (t) => clientiOrd.find(c => nomeCli[c.id] === t)
+    || clientiOrd.find(c => normNome(c.ragioneSociale) === normNome(t) || normNome(c.codice) === normNome(t));
+  let ultimoCli;
+  const aggiornaMandati = (scelto) => {
+    const cli = trovaCliente(el.querySelector("#f_cliente").value.trim());
+    if (scelto === undefined && cli?.id === ultimoCli) return; // stesso cliente: non toccare la scelta
+    ultimoCli = cli?.id;
+    const mm = cli ? mandatiDi(cli) : null;
+    const att = mm ? TIPI_MANDATO.filter(([k]) => mm[k].attivo) : [];
+    const opz = att.length ? att : TIPI_MANDATO;
+    form.mandato.innerHTML = opz.map(([k, n]) => `<option value="${k}"${k === scelto ? " selected" : ""}>${e(n)}</option>`).join("");
+  };
+  aggiornaMandati(m.mandato);
+  el.querySelector("#f_cliente").addEventListener("change", () => aggiornaMandati());
+  el.querySelector("#f_cliente").addEventListener("input", () => aggiornaMandati());
 
   const ricarica = () => vistaRegistro(el);
   const vai = (d) => { giorno = d; modifica = null; ricarica(); };
@@ -124,8 +141,7 @@ export async function vistaRegistro(el) {
     const bad = dataNonValida(form); if (bad) { bad.focus(); avviso("Data non valida: usa gg.mm.aaaa"); return; }
     const t = form.tipo.value;
     const testoCli = el.querySelector("#f_cliente").value.trim();
-    const cli = clientiOrd.find(c => nomeCli[c.id] === testoCli)
-      || clientiOrd.find(c => normNome(c.ragioneSociale) === normNome(testoCli) || normNome(c.codice) === normNome(testoCli));
+    const cli = trovaCliente(testoCli);
     if (!cli && t !== "dafare") { el.querySelector("#f_cliente").focus(); avviso("Scegli un cliente dall'elenco"); return; }
     const descrizione = form.descrizione.value.trim();
     if (!descrizione) { form.descrizione.focus(); avviso("Scrivi una descrizione"); return; }
@@ -140,7 +156,8 @@ export async function vistaRegistro(el) {
     const minuti = t === "nota" ? 0 : Number(form.minuti.value || 0);
     if (t === "lavoro" && !minuti) { form.minuti.focus(); avviso("Indica la durata"); return; }
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
-      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatturabile.checked : false, tipo: t, descrizione };
+      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatturabile.checked : false, tipo: t, descrizione,
+      mandato: t === "lavoro" ? form.mandato.value || null : null };
     const id = await D.salvaRegistrazione(dati);
     if (t === "lavoro" && !modifica && form.riscontro.checked) {
       await D.salvaCompito({ clienteId: cli.id, titolo: descrizione, tipo: "Attesa riscontro", stato: "In attesa riscontro",

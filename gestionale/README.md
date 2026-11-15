@@ -10,6 +10,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Dati KYC (clienti e persone) separati e visibili solo agli amministratori
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
 - Completezza: per ogni cliente l'elenco dei dati mancanti (filtro "Dati da completare")
+- Mandati: fino a tre per cliente (Contabilit√† e Tax, Funzione societaria, Domiciliazione), ognuno con stato, date e budget; riepilogo con grafico budget/ore lavorate e griglia per cliente
 - Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
 - Moduli Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
 
@@ -33,6 +34,8 @@ gestionale/
   js/mappa-import.js    trasformazione di Excel e backup nei dati del gestionale
   js/app.js, ui.js      avvio, menu, aiuti di interfaccia
   js/clienti.js         modulo Clienti
+  js/mandati.js         riepilogo Mandati
+  js/registro.js        modulo Registro ore
   js/importa.js         modulo Importa dati
   lib/                  SheetJS per leggere Excel (licenza Apache 2.0)
   firestore.rules       regole di accesso

@@ -85,8 +85,12 @@ export function campiMancanti(c, nPersone, kyc) {
   if (vuoto(c.responsabile)) m.push("Responsabile");
   if (vuoto(c.indirizzo) || vuoto(c.npa) || vuoto(c.localita)) m.push("Indirizzo");
   if (!pf && vuoto(c.chiusuraEsercizio)) m.push("Chiusura esercizio");
-  if (vuoto(c.mandato?.tipo)) m.push("Tipo mandato");
-  if (vuoto(c.mandato?.stato)) m.push("Stato mandato");
+  const mm = mandatiDi(c);
+  const attivi = TIPI_MANDATO.filter(([k]) => mm[k].attivo);
+  if (!attivi.length) m.push("Mandati");
+  for (const [k, n] of attivi) if (vuoto(mm[k].stato)) m.push(`Stato mandato ${n}`);
+  if (mm.funzione.attivo && !mm.funzione.funzioni.some(f => f.ruolo)) m.push("Ruolo nella funzione societaria");
+  if (mm.domiciliazione.attivo && vuoto(mm.domiciliazione.tipo)) m.push("Tipo di domiciliazione");
   if (!Object.values(c.servizi || {}).some(Boolean)) m.push("Servizi");
   if (c.servizi?.iva && vuoto(c.iva?.periodicita)) m.push("Periodicità IVA");
   if (!nPersone) m.push("Persone di contatto");
@@ -116,3 +120,51 @@ export function fmtDurata(min) {
   return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}`;
 }
 export const GIORNI = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
+
+// ---------- Mandati ----------
+// Un cliente può avere fino a tre mandati, ognuno con stato, date e budget propri.
+export const TIPI_MANDATO = [
+  ["contabilita", "Contabilità e Tax"],
+  ["funzione", "Funzione societaria"],
+  ["domiciliazione", "Domiciliazione"]
+];
+export const NOME_MANDATO = Object.fromEntries(TIPI_MANDATO);
+export const STATI_MANDATO = ["Firmato aggiornato", "Da aggiornare", "Mancante"];
+export const RUOLI_FUNZIONE = ["Amministratore unico", "Membro CdA", "Presidente CdA", "Gerente", "Presidente dei gerenti", "Direttore", "Nessuna funzione (responsabile)"];
+export const TIPI_DOMICILIO = ["Domicilio con ufficio proprio", "Recapito c/o"];
+
+const RUOLO_VECCHIO = { "Amministratore": "Amministratore unico", "Membro CdA / gerenza": "Membro CdA", "Senza funzione - responsabile": "Nessuna funzione (responsabile)" };
+
+/** Mandati del cliente nella struttura nuova; ricava quelli dei dati vecchi (mandato/funzione/onorario/servizi). */
+export function mandatiDi(c) {
+  const base = { attivo: false, stato: "", dataFirma: null, aggiornareEntro: null, budget: null, note: "" };
+  if (c.mandati) {
+    return {
+      contabilita: { ...base, budgetOre: null, tariffa: null, fatturazione: "", ...c.mandati.contabilita },
+      funzione: { ...base, ...c.mandati.funzione, funzioni: c.mandati.funzione?.funzioni || [] },
+      domiciliazione: { ...base, tipo: "", dal: null, ...c.mandati.domiciliazione }
+    };
+  }
+  const m = c.mandato || {}, s = c.servizi || {}, o = c.onorario || {}, f = c.funzione || {};
+  const comune = { stato: m.stato || "", dataFirma: m.dataFirma || null, aggiornareEntro: m.aggiornareEntro || null };
+  const conTipo = (...t) => t.includes(m.tipo);
+  return {
+    contabilita: { ...base, ...comune, attivo: !!(s.contabilita || s.dichiarazione || s.iva || s.stipendi || conTipo("Contabilità e fiscale", "Completo")),
+      budget: o.forfait ?? null, budgetOre: o.budgetOre ?? null, tariffa: o.tariffa ?? null, fatturazione: o.fatturazione || "" },
+    funzione: { ...base, ...(conTipo("Amministrazione fiduciaria", "Completo") ? comune : { aggiornareEntro: m.aggiornareEntro || null }),
+      attivo: !!(f.tipo || conTipo("Amministrazione fiduciaria", "Completo")),
+      funzioni: f.tipo ? [{ ruolo: RUOLO_VECCHIO[f.tipo] || f.tipo, persona: f.persona || "", firma: f.firma || "", inizio: f.inizio || null }] : [] },
+    domiciliazione: { ...base, ...(conTipo("Domiciliazione", "Completo") ? comune : { aggiornareEntro: m.aggiornareEntro || null }),
+      attivo: !!(s.domiciliazione || conTipo("Domiciliazione", "Completo")), tipo: "", dal: null }
+  };
+}
+
+/** Stato sintetico di un mandato attivo: ok | urgente | scaduto | neutro (da aggiornare/mancante senza urgenza). */
+export function statoMandato(m, oggi = new Date()) {
+  if (!m.attivo) return null;
+  if (m.stato === "Firmato aggiornato") return "ok";
+  const s = statoScadenza(m.aggiornareEntro, 45, oggi);
+  return s === "scaduto" || s === "urgente" ? s : "neutro";
+}
+export const daAggiornare = (m) => m.attivo && m.stato !== "Firmato aggiornato";
+export const budgetTotale = (mm) => TIPI_MANDATO.reduce((s, [k]) => s + (mm[k].attivo ? Number(mm[k].budget) || 0 : 0), 0);

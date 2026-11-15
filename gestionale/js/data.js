@@ -158,9 +158,15 @@ function creaDemo() {
   const c = (id, codice, rs, forma, extra = {}) => [id, { id, codice, ragioneSociale: rs, forma, stato: "Attivo", responsabile: "Utente demo",
     servizi: { contabilita: true, iva: true, dichiarazione: true }, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
   const clienti = Object.fromEntries([
-    c("d1", "C001", "Alfa Servizi SA", "SA", { localita: "Lugano", cantone: "TI", funzione: { tipo: "Amministratore", persona: "Utente demo", firma: "Collettiva a due" } }),
-    c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { localita: "Bellinzona", cantone: "TI", mandato: { tipo: "Completo", stato: "Firmato aggiornato", dataFirma: "2026-03-01", aggiornareEntro: "2027-12-31" } }),
-    c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true }),
+    c("d1", "C001", "Alfa Servizi SA", "SA", { localita: "Lugano", cantone: "TI", mandati: {
+      contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 2200, budgetOre: 15 },
+      funzione: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2025-05-01", budget: 3000, funzioni: [{ ruolo: "Amministratore unico", persona: "Utente demo", firma: "Collettiva a due" }] },
+      domiciliazione: { attivo: true, stato: "Mancante", aggiornareEntro: "2026-12-31", budget: 1200, tipo: "Recapito c/o" } } }),
+    c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { localita: "Bellinzona", cantone: "TI", mandati: {
+      contabilita: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2026-03-01", budget: 4000, budgetOre: 25 } } }),
+    c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true, mandati: {
+      contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 1800 },
+      domiciliazione: { attivo: true, stato: "Firmato aggiornato", budget: 900, tipo: "Domicilio con ufficio proprio" } } }),
     ["d0", { id: "d0", codice: "C000", ragioneSociale: "Clienti occasionali", forma: "Altro", stato: "Attivo", servizi: {}, mandato: {} }]
   ]);
   return {

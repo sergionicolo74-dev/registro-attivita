@@ -1,10 +1,9 @@
 // Modulo Clienti: elenco e scheda cliente a schede.
 import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
-import { fmtData, fmtOre, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA } from "./regole.js";
+import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
+  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale } from "./regole.js";
 
-const STATI_MANDATO = ["Firmato aggiornato", "Da aggiornare", "Mancante"];
-const TIPI_MANDATO = ["Contabilità e fiscale", "Amministrazione fiduciaria", "Domiciliazione", "Completo", "Altro"];
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
 
 function bloccaDate(form) {
@@ -13,15 +12,20 @@ function bloccaDate(form) {
   el.focus(); avviso("Data non valida: usa il formato gg.mm.aaaa"); return true;
 }
 
-/** Segnale sintetico sul mandato. */
-function segnaleMandato(c) {
-  const m = c.mandato || {};
-  if (m.stato === "Firmato aggiornato") return stato("ok", "Mandato aggiornato");
-  const s = statoScadenza(m.aggiornareEntro, 45);
-  const testo = m.stato === "Mancante" ? "Mandato mancante" : "Mandato da aggiornare";
-  if (!m.stato) return stato("neutro", "Mandato non indicato");
-  return stato(s === "scaduto" || s === "urgente" ? s : "neutro", testo);
+/** Un'etichetta per ogni mandato attivo: verde se firmato e aggiornato, altrimenti da aggiornare (ambra/rosso se la data si avvicina o è passata). */
+function segnaliMandati(c, breve = false) {
+  if (c.codice === "C000") return "";
+  const mm = mandatiDi(c);
+  const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo);
+  if (!att.length) return stato("neutro", "Nessun mandato");
+  return att.map(([k, n]) => {
+    const st = statoMandato(mm[k]);
+    const nome = breve ? n.split(" ")[0] : n;
+    const extra = k === "funzione" && !breve && mm.funzione.funzioni[0]?.ruolo ? ` · ${mm.funzione.funzioni.map(f => f.ruolo).join(", ")}` : "";
+    return stato(st, st === "ok" ? nome + extra : `${nome}${extra}: ${mm[k].stato === "Mancante" ? "mancante" : "da aggiornare"}`);
+  }).join("");
 }
+const haDaAggiornare = c => c.codice !== "C000" && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]));
 
 // ======================= ELENCO =======================
 export async function vistaClienti(el) {
@@ -38,17 +42,17 @@ export async function vistaClienti(el) {
     if (s === "scaduto" || s === "urgente") docPerCliente[k.clienteId] = Math.max(docPerCliente[k.clienteId] || 0, s === "scaduto" ? 2 : 1);
   }
   clienti.sort((a, b) => (a.codice || "").localeCompare(b.codice || "") || (a.ragioneSociale || "").localeCompare(b.ragioneSociale || ""));
-  const daAggiornare = clienti.filter(c => c.mandato?.stato !== "Firmato aggiornato" && c.codice !== "C000").length;
+  const nDaAggiornare = clienti.filter(haDaAggiornare).length;
 
   el.innerHTML = `
     <div class="testata">
-      <div><h1>Clienti</h1><div class="tenue">${clienti.length} clienti · ${daAggiornare} mandati da aggiornare · ${incompleti} con dati da completare</div></div>
+      <div><h1>Clienti</h1><div class="tenue">${clienti.length} clienti · ${nDaAggiornare} con mandati da aggiornare · ${incompleti} con dati da completare</div></div>
       <div class="barra">
         <input type="search" id="cerca" placeholder="Cerca per nome o codice" aria-label="Cerca cliente">
         <select id="filtro" aria-label="Filtro">
           <option value="">Tutti</option><option value="incompleti">Dati da completare</option><option value="mandato">Mandato da aggiornare</option>
           ${D.isAdmin() ? '<option value="doc">Documenti in scadenza</option>' : ""}
-          <option value="funzione">Con funzione dello studio</option>
+          <option value="funzione">Con funzione societaria</option><option value="domiciliazione">Con domiciliazione</option>
         </select>
         ${D.isAdmin() ? '<button class="btn primario" id="nuovo">Nuovo cliente</button>' : ""}
       </div>
@@ -60,9 +64,9 @@ export async function vistaClienti(el) {
     const righe = clienti.filter(c => {
       if (q && !normNome(`${c.codice} ${c.ragioneSociale}`).includes(q)) return false;
       if (f === "incompleti") return manca[c.id].length > 0;
-      if (f === "mandato") return c.mandato?.stato !== "Firmato aggiornato" && c.codice !== "C000";
+      if (f === "mandato") return haDaAggiornare(c);
       if (f === "doc") return !!docPerCliente[c.id];
-      if (f === "funzione") return !!c.funzione?.tipo;
+      if (f === "funzione" || f === "domiciliazione") return mandatiDi(c)[f].attivo;
       return true;
     });
     const vediManca = f === "incompleti";
@@ -71,7 +75,7 @@ export async function vistaClienti(el) {
       const nServ = Object.values(c.servizi || {}).filter(Boolean).length;
       const doc = docPerCliente[c.id] ? stato(docPerCliente[c.id] === 2 ? "scaduto" : "urgente", "Documento in scadenza") : "";
       return `<tr class="cliccabile" data-id="${e(c.id)}" tabindex="0"><td>${e(c.codice)}</td><td><strong>${e(c.ragioneSociale)}</strong><div class="tenue">${e([c.forma, c.localita].filter(Boolean).join(" · "))}</div></td>
-        <td>${e(c.responsabile || "")}</td><td class="num">${nServ || ""}</td><td><div class="segnali">${c.codice === "C000" ? "" : segnaleMandato(c)}${doc}${c.funzione?.tipo ? stato("info", c.funzione.tipo) : ""}${!vediManca && manca[c.id].length ? stato("neutro", `${manca[c.id].length} dati da completare`) : ""}</div></td>
+        <td>${e(c.responsabile || "")}</td><td class="num">${nServ || ""}</td><td><div class="segnali">${segnaliMandati(c, true)}${doc}${!vediManca && manca[c.id].length ? stato("neutro", `${manca[c.id].length} dati da completare`) : ""}</div></td>
         ${vediManca ? `<td>${e(manca[c.id].join(", "))}</td>` : ""}</tr>`;
     }).join("") : `<tr><td colspan="6" class="vuoto">Nessun cliente trovato.</td></tr>`;
   };
@@ -83,13 +87,13 @@ export async function vistaClienti(el) {
   el.querySelector("#righe").addEventListener("keydown", ev => { if (ev.key === "Enter") apri(ev.target.closest("tr")); });
   el.querySelector("#nuovo")?.addEventListener("click", async () => {
     const max = clienti.map(c => +String(c.codice || "").replace(/\D/g, "") || 0).reduce((a, b) => Math.max(a, b), 0);
-    const id = await D.salvaCliente({ codice: "C" + String(max + 1).padStart(3, "0"), ragioneSociale: "Nuovo cliente", stato: "Attivo", servizi: {}, mandato: { stato: "Mancante" } });
+    const id = await D.salvaCliente({ codice: "C" + String(max + 1).padStart(3, "0"), ragioneSociale: "Nuovo cliente", stato: "Attivo", servizi: {}, mandati: {} });
     location.hash = "#/clienti/" + id + "/dati";
   });
 }
 
 // ======================= SCHEDA =======================
-const SCHEDE = [["persone", "Persone"], ["dati", "Dati e mandato"], ["servizi", "Servizi e scadenze"], ["compiti", "Compiti"], ["ore", "Ore e diario"], ["note", "Note"]];
+const SCHEDE = [["persone", "Persone"], ["dati", "Dati società"], ["mandati", "Mandati"], ["servizi", "Servizi e scadenze"], ["compiti", "Compiti"], ["ore", "Ore e diario"], ["note", "Note"]];
 
 export async function vistaScheda(el, id) {
   const scheda = location.hash.split("/")[3] || "persone";
@@ -105,10 +109,9 @@ export async function vistaScheda(el, id) {
     <section class="riepilogo" style="margin-top:10px">
       <div class="titolo">
         <div><div class="tenue">${e(c.codice)}</div><h1>${e(c.ragioneSociale)}</h1></div>
-        <div class="segnali">${c.codice === "C000" ? "" : segnaleMandato(c)}
+        <div class="segnali">${segnaliMandati(c)}
           ${docScad.map(x => stato(x.s, "Documento " + (x.s === "scaduto" ? "scaduto" : "in scadenza"))).join("")}
           ${kyc?.prossimaRevisione ? statoData(kyc.prossimaRevisione, "Revisione KYC", 30) : ""}
-          ${c.funzione?.tipo ? stato("info", c.funzione.tipo + (c.funzione.persona ? " · " + c.funzione.persona : "")) : ""}
           ${c.revisione || c.servizi?.revisione ? stato("info", "Revisione") : ""}</div>
       </div>
       <div class="fatti">
@@ -116,7 +119,7 @@ export async function vistaScheda(el, id) {
         <div><span>Responsabile</span>${e(c.responsabile || "–")}</div>
         <div><span>Contatto</span>${principale ? e(`${principale.nome || ""} ${principale.cognome || ""}`.trim()) : "–"}</div>
         <div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>
-        <div><span>Mandato da aggiornare entro</span>${e(fmtData(c.mandato?.aggiornareEntro) || "–")}</div>
+        ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Budget annuo</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
       </div>
       ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
@@ -128,6 +131,7 @@ export async function vistaScheda(el, id) {
   const ricarica = () => vistaScheda(el, id);
   if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica);
   if (scheda === "dati") return schedaDati(p, c, kyc, ricarica);
+  if (scheda === "mandati") return schedaMandati(p, c, ricarica);
   if (scheda === "servizi") return schedaServizi(p, c, ricarica);
   if (scheda === "compiti") return schedaCompiti(p, c);
   if (scheda === "ore") return schedaOre(p, c);
@@ -193,7 +197,7 @@ function cassettoPersona(x, k, ricarica) {
 
 // ---------- Dati e mandato ----------
 function schedaDati(p, c, kyc, ricarica) {
-  const admin = D.isAdmin(), m = c.mandato || {}, f = c.funzione || {}, o = c.onorario || {};
+  const admin = D.isAdmin();
   p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
     <h3 style="font-size:14px;margin-bottom:10px">Società</h3>
     <div class="griglia">
@@ -204,20 +208,7 @@ function schedaDati(p, c, kyc, ricarica) {
       ${campo("indirizzo", "Indirizzo", c.indirizzo)}${campo("npa", "NPA", c.npa)}${campo("localita", "Località", c.localita)}${campo("cantone", "Cantone", c.cantone)}
       ${campo("emailGenerale", "Email generale", c.emailGenerale, "email")}${campo("lingua", "Lingua corrispondenza", c.lingua, "select", ["Italiano", "Tedesco", "Francese", "Inglese"])}
     </div>
-    <div class="sezione"><h3>Mandato</h3><div class="griglia">
-      ${campo("mandato.tipo", "Tipo mandato", m.tipo, "select", TIPI_MANDATO)}${campo("mandato.stato", "Stato mandato firmato", m.stato, "select", STATI_MANDATO)}
-      ${campo("mandato.dataFirma", "Data firma", m.dataFirma, "date")}${campo("mandato.aggiornareEntro", "Aggiornare entro", m.aggiornareEntro, "date")}
-      ${campo("inizioMandato", "Inizio rapporto", c.inizioMandato, "date")}
-    </div></div>
-    <div class="sezione"><h3>Funzione dello studio nella società</h3><div class="griglia">
-      ${campo("funzione.tipo", "Funzione", f.tipo, "select", ["Amministratore", "Gerente", "Membro CdA / gerenza", "Direttore", "Senza funzione - responsabile"])}
-      ${campo("funzione.persona", "Persona con la funzione", f.persona)}${campo("funzione.firma", "Diritto di firma", f.firma, "select", ["Individuale", "Collettiva a due", "Nessuno"])}
-      ${campo("funzione.inizio", "Inizio funzione", f.inizio, "date")}
-    </div></div>
-    <div class="sezione"><h3>Onorario</h3><div class="griglia">
-      ${campo("onorario.tipo", "Tipo onorario", o.tipo, "select", ["Forfait", "A ore", "Misto"])}${campo("onorario.forfait", "Forfait annuo CHF", o.forfait, "number")}
-      ${campo("onorario.tariffa", "Tariffa oraria CHF", o.tariffa, "number")}${campo("onorario.budgetOre", "Budget ore annue", o.budgetOre, "number")}
-      ${campo("onorario.fatturazione", "Fatturazione", o.fatturazione, "select", ["Mensile", "Trimestrale", "Annuale"])}
+    <div class="sezione"><h3>Archivio</h3><div class="griglia">
       ${campo("cartella", "Cartella archivio (percorso)", c.cartella, "text", [], true)}
     </div></div>
     </fieldset>
@@ -231,9 +222,64 @@ function schedaDati(p, c, kyc, ricarica) {
     ev.preventDefault();
     if (bloccaDate(ev.target)) return;
     const { kyc: k, ...dati } = leggiForm(ev.target);
-    await D.salvaCliente({ ...c, ...dati, mandato: { ...c.mandato, ...dati.mandato }, funzione: { ...c.funzione, ...dati.funzione }, onorario: { ...c.onorario, ...dati.onorario } });
+    await D.salvaCliente({ ...c, ...dati });
     await D.salvaKycCliente(c.id, k);
     avviso("Dati salvati"); ricarica();
+  });
+}
+
+// ---------- Mandati ----------
+function rigaFunzione(i, f = {}) {
+  return `<div class="griglia riga-funzione" data-i="${i}">
+    ${campo(`mandati.funzione.funzioni.${i}.ruolo`, "Ruolo", f.ruolo, "select", RUOLI_FUNZIONE)}
+    ${campo(`mandati.funzione.funzioni.${i}.persona`, "Persona dello studio", f.persona)}
+    ${campo(`mandati.funzione.funzioni.${i}.firma`, "Diritto di firma", f.firma, "select", ["Individuale", "Collettiva a due", "Nessuno"])}
+    ${campo(`mandati.funzione.funzioni.${i}.inizio`, "Dal", f.inizio, "date")}</div>`;
+}
+
+function schedaMandati(p, c, ricarica) {
+  const admin = D.isAdmin(), mm = mandatiDi(c);
+  const comuni = (k) => `
+      ${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
+      ${campo(`mandati.${k}.dataFirma`, "Data firma", mm[k].dataFirma, "date")}
+      ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}
+      ${admin ? campo(`mandati.${k}.budget`, "Budget annuo CHF", mm[k].budget, "number") : ""}`;
+  const specifici = {
+    contabilita: `${admin ? campo("mandati.contabilita.budgetOre", "Budget ore annue", mm.contabilita.budgetOre, "number") + campo("mandati.contabilita.tariffa", "Tariffa oraria CHF (vuoto = 150)", mm.contabilita.tariffa, "number") : ""}
+      ${campo("mandati.contabilita.fatturazione", "Fatturazione", mm.contabilita.fatturazione, "select", ["Mensile", "Trimestrale", "Annuale"])}`,
+    funzione: "",
+    domiciliazione: `${campo("mandati.domiciliazione.tipo", "Tipo", mm.domiciliazione.tipo, "select", TIPI_DOMICILIO)}${campo("mandati.domiciliazione.dal", "Dal", mm.domiciliazione.dal, "date")}`
+  };
+  const funzioni = mm.funzione.funzioni.length ? mm.funzione.funzioni : [{}];
+  p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
+    <p class="tenue" style="margin:0 0 14px">Ogni mandato ha il suo stato, le sue date e il suo budget. Attiva solo quelli che lo studio svolge per questo cliente.</p>
+    <div class="mandati">${TIPI_MANDATO.map(([k, n]) => {
+      const st = statoMandato(mm[k]);
+      return `<section class="mandato${mm[k].attivo ? "" : " spento"}" data-k="${k}">
+        <div class="testa"><label class="interruttore"><input type="checkbox" name="mandati.${k}.attivo"${mm[k].attivo ? " checked" : ""}> <strong>${e(n)}</strong></label>
+          ${st ? stato(st, st === "ok" ? "Firmato e aggiornato" : mm[k].stato === "Mancante" ? "Mandato mancante" : "Da aggiornare") : '<span class="tenue">Non attivo</span>'}</div>
+        <div class="corpo">
+          ${k === "funzione" ? `<div id="funzioni">${funzioni.map((f, i) => rigaFunzione(i, f)).join("")}</div>${admin ? '<button type="button" class="btn piccolo" id="aggiungi-funzione" style="margin:8px 0 12px">+ Aggiungi funzione</button>' : ""}` : ""}
+          <div class="griglia">${specifici[k]}${comuni(k)}${campo(`mandati.${k}.note`, "Note", mm[k].note, "text", [], true)}</div>
+        </div></section>`;
+    }).join("")}</div></fieldset>
+    ${admin ? `<div class="fatti" style="margin-top:14px"><div><span>Budget annuo totale</span><strong>CHF ${fmtNum(budgetTotale(mm))}</strong></div></div>
+      <div class="azioni"><button class="btn primario">Salva</button></div>` : '<p class="tenue" style="margin-top:14px">Solo gli amministratori possono modificare i mandati.</p>'}
+  </form>`;
+  if (!admin) return;
+  const form = p.querySelector("form");
+  form.querySelectorAll(".interruttore input").forEach(cb => cb.addEventListener("change", () => cb.closest(".mandato").classList.toggle("spento", !cb.checked)));
+  p.querySelector("#aggiungi-funzione")?.addEventListener("click", () => {
+    const box = p.querySelector("#funzioni");
+    box.insertAdjacentHTML("beforeend", rigaFunzione(box.querySelectorAll(".riga-funzione").length));
+  });
+  form.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    if (bloccaDate(form)) return;
+    const { mandati } = leggiForm(form);
+    mandati.funzione.funzioni = Object.values(mandati.funzione.funzioni || {}).filter(f => f.ruolo || f.persona);
+    await D.salvaCliente({ ...c, mandati });
+    avviso("Mandati salvati"); ricarica();
   });
 }
 

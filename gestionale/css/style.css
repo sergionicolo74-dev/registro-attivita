@@ -210,3 +210,5 @@ div.kpi-b.fermo:hover { border-color: var(--linea); }
 .tabella.presenze tr.oggi td { box-shadow: inset 0 1px 0 var(--inchiostro), inset 0 -1px 0 var(--inchiostro); }
 .tabella.presenze input, .tabella.presenze select { padding: 5px 8px; }
 .neg { color: var(--rosso); font-weight: 600; }
+.tabella.presenze .t-in { width: 70px; text-align: center; font-variant-numeric: tabular-nums; }
+.tabella.presenze td { white-space: nowrap; }

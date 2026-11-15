@@ -221,8 +221,8 @@ function creaDemo() {
         cronologia: [{ quando: "2026-11-01T09:00:00Z", nome: "Utente demo", testo: "Chiesto preventivo" }] }
     },
     presenze: Object.fromEntries([-1, -2, -3, -4, -5, -6, -7].map(n => oggiPiu(n)).filter(d => { const g = new Date(d + "T12:00:00").getDay(); return g > 0 && g < 6; })
-      .flatMap((d, i) => [[`demo_${d}`, { id: `demo_${d}`, uid: "demo", nome: "Utente demo", data: d, minuti: i === 2 ? null : 480 + i * 15, assenza: i === 2 ? "Vacanza" : "" }],
-        [`u2_${d}`, { id: `u2_${d}`, uid: "u2", nome: "Anna", data: d, minuti: 252 }]])),
+      .flatMap((d, i) => [[`demo_${d}`, { id: `demo_${d}`, uid: "demo", nome: "Utente demo", data: d, ...(i === 2 ? { minuti: null, assenza: "Vacanza" } : { entrata: 480, pausa: 60, uscita: 540 + 480 + i * 15, minuti: 480 + i * 15, assenza: "" }) }],
+        [`u2_${d}`, { id: `u2_${d}`, uid: "u2", nome: "Anna", data: d, entrata: 510, pausa: 0, uscita: 762, minuti: 252 }]])),
     scadenze: {
       "d1_contabilita_2026-09": { id: "d1_contabilita_2026-09", clienteId: "d1", servizio: "contabilita", periodo: "2026-09", anno: 2026, stato: "Fatto", fattoIl: oggi, fattoDa: "Utente demo" },
       "d2_dichiarazione_2025": { id: "d2_dichiarazione_2025", clienteId: "d2", servizio: "dichiarazione", periodo: "2025", anno: 2026, stato: "Prorogato", nuovaData: oggiPiu(12),

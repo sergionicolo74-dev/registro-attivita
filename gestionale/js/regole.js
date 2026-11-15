@@ -365,3 +365,25 @@ export function riepilogoPresenze(presenze, profilo, da, a, dal = da, oggi = ogg
 }
 /** Minuti con segno in ore: -90 -> "-1h 30" */
 export const fmtSaldo = (min) => (min < 0 ? "−" : min > 0 ? "+" : "") + fmtDurata(Math.abs(min));
+
+/** Orario del giorno: "8", "8:00", "08.15", "815", "0815" -> minuti dalla mezzanotte; vuoto -> null; non valido -> NaN */
+export function parseOrario(v) {
+  const s = String(v ?? "").trim().replace(/\s+/g, "");
+  if (!s) return null;
+  let m = /^(\d{1,2})(?:[:.h](\d{2}))?$/.exec(s) || /^(\d{1,2})(\d{2})$/.exec(s);
+  if (!m) return NaN;
+  const h = +m[1], mi = +(m[2] || 0);
+  return h <= 23 && mi <= 59 ? h * 60 + mi : (h === 24 && mi === 0 ? 1440 : NaN);
+}
+/** 510 -> "08:30" */
+export const fmtOrario = (min) => min == null || Number.isNaN(min) ? "" : `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+/** Minuti lavorati da entrata, uscita e pausa (minuti). null se manca un orario; NaN se l'uscita non è dopo l'entrata più la pausa. */
+export function minutiDaOrari(entrata, uscita, pausa = 0) {
+  if (entrata == null || uscita == null) return null;
+  const n = uscita - entrata - (pausa || 0);
+  return uscita > entrata && n > 0 ? n : NaN;
+}
+/** Pausa minima secondo l'art. 15 LL: oltre 5½ ore 15 min, oltre 7 ore 30 min, oltre 9 ore 1 ora. */
+export function pausaMinima(minutiLavoro) {
+  return minutiLavoro > 540 ? 60 : minutiLavoro > 420 ? 30 : minutiLavoro > 330 ? 15 : 0;
+}

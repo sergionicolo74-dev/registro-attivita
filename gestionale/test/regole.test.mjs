@@ -145,3 +145,16 @@ console.log("Test compiti superati");
   ok([r.dovute, r.lavorate, r.credito, r.saldo, r.vacanze, r.daCompilare], [2520, 1260, 756, -504, 1.5, 1], "riepilogo settimana");
   ok(R.fmtSaldo(-504), "−8h 24", "saldo negativo");
 }
+
+// ---------- Orari di entrata e uscita ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  ok(["8", "8:00", "08.15", "815", "0815", "17:30", ""].map(R.parseOrario), [480, 480, 495, 495, 495, 1050, null], "lettura orari");
+  ok(["25:00", "8:60", "abc", "8:5"].map(v => Number.isNaN(R.parseOrario(v))), [true, true, true, true], "orari non validi");
+  ok(R.minutiDaOrari(480, 1050, 60), 510, "08:00–17:30 con 1 h di pausa = 8h30");
+  ok(R.minutiDaOrari(480, null, 60), null, "manca l'uscita");
+  ok(Number.isNaN(R.minutiDaOrari(1050, 480, 0)), true, "uscita prima dell'entrata");
+  ok([R.pausaMinima(330), R.pausaMinima(331), R.pausaMinima(420), R.pausaMinima(421), R.pausaMinima(541)], [0, 15, 15, 30, 60], "pause minime art. 15 LL");
+  ok(R.fmtOrario(495), "08:15", "formato orario");
+}

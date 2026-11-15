@@ -3,7 +3,9 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtDurata, fmtSaldo, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, minutiDovuti, minutiCredito,
-  parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI } from "./regole.js";
+  parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima } from "./regole.js";
+
+const PAUSE = [0, 15, 30, 45, 60, 75, 90, 120];
 
 let mese = oggiISO().slice(0, 7);   // "2026-11"
 let chi = null;                     // uid mostrato
@@ -42,6 +44,7 @@ export async function vistaPresenze(el) {
   const saldoAnno = rAnno.saldo + (Number(profilo.saldoRiportatoMinuti) || 0);
   const fest = festiviTicino(+anno);
   const nomeChi = admin ? (utenti.find(x => x.id === chi)?.nome || u.nome) : u.nome;
+  const entStd = parseOrario(profilo.entrataStandard) ?? 480, pausaStd = profilo.pausaStandard != null && profilo.pausaStandard !== "" ? Number(profilo.pausaStandard) : 60;
 
   el.innerHTML = `
   <div class="testata">
@@ -66,7 +69,7 @@ export async function vistaPresenze(el) {
     <div class="kpi-b fermo"><span class="tenue">Giorni da compilare</span><strong>${rMese.daCompilare ? stato("urgente", String(rMese.daCompilare)) : stato("ok", "0")}</strong></div>
   </div>
   <div class="pannello" style="padding:0">
-    <table class="tabella presenze"><thead><tr><th>Giorno</th><th class="num">Dovute</th><th>Ore lavorate</th><th>Assenza</th><th class="num">Registro ore</th><th class="num">Saldo</th></tr></thead><tbody>
+    <div class="scorri"><table class="tabella presenze"><thead><tr><th>Giorno</th><th class="num">Dovute</th><th>Entrata</th><th>Uscita</th><th>Pausa</th><th class="num">Lavorate</th><th>Assenza</th><th class="num">Registro ore</th><th class="num">Saldo</th></tr></thead><tbody>
     ${giorniDelMese().map(d => {
       const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0, gs = giornoSettimana(d), f = fest[d];
       const lib = gs >= 5 || f, futuro = d > oggi;
@@ -76,14 +79,18 @@ export async function vistaPresenze(el) {
       return `<tr class="${lib ? "libero" : ""}${d === oggi ? " oggi" : ""}" data-d="${d}">
         <td style="white-space:nowrap"><strong>${GIORNI[gs]} ${e(fmtData(d).slice(0, 5))}</strong>${f ? `<div class="tenue">${e(f)}</div>` : ""}${manca ? `<div>${stato("urgente", "Da compilare")}</div>` : ""}</td>
         <td class="num">${dov ? ore(dov) : "–"}</td>
-        <td><div style="display:flex;gap:6px;align-items:center"><input class="ore-in" value="${e(ore(p.minuti))}" placeholder="${lib ? "" : "es. 8:30"}" inputmode="decimal" aria-label="Ore lavorate ${e(fmtData(d))}" style="width:86px">
-          ${dov && p.minuti == null && !p.assenza && !lib ? `<button type="button" class="btn piccolo" data-std="${dov}" title="Inserisci ${ore(dov)}">= ${ore(dov)}</button>` : ""}</div></td>
+        <td><input class="t-in ent" value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
+        <td><input class="t-in usc" value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
+        <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></td>
+        <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
+          ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
+          ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
         <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select></td>
         <td class="num">${reg ? `${fmtDurata(reg)}${p.minuti && reg > p.minuti ? `<div>${stato("urgente", "più della presenza")}</div>` : ""}` : '<span class="tenue">–</span>'}</td>
         <td class="num">${saldo == null ? "" : `<span class="${saldo < 0 ? "neg" : ""}">${fmtSaldo(saldo)}</span>`}</td></tr>`;
     }).join("")}
-    </tbody></table></div>
-  <p class="tenue" style="margin-top:10px">Scrivi le ore lavorate in totale nel giorno (es. 8:30 oppure 8.5), pause escluse. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>
+    </tbody></table></div></div>
+  <p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>
   ${admin ? formProfilo(profilo, nomeChi) : `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:8px">Orario e accordo</h3><div class="fatti">
       <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}%</div>
       <div><span>Accordo art. 73b</span>${profilo.accordo73b ? e(fmtData(profilo.accordo73b)) : "–"}</div></div></div>`}`;
@@ -96,17 +103,24 @@ export async function vistaPresenze(el) {
   el.querySelector("#esporta").addEventListener("click", () => esportaAnno(nomeChi, profilo, presAnno, +anno, dal));
 
   const salvaRiga = async (tr) => {
-    const d = tr.dataset.d, inp = tr.querySelector(".ore-in"), sel = tr.querySelector(".ass-in");
-    const min = parseOre(inp.value);
-    if (Number.isNaN(min)) { inp.focus(); avviso("Ore non valide: scrivi ad esempio 8:30 o 8.5"); return; }
-    if (min == null && !sel.value) { if (pres[d]) await D.eliminaPresenza(chi, d); }
-    else await D.salvaPresenza({ uid: chi, nome: nomeChi, data: d, minuti: min, assenza: sel.value });
-    avviso("Salvato"); ricarica();
+    const d = tr.dataset.d, ent = tr.querySelector(".ent"), usc = tr.querySelector(".usc"), sel = tr.querySelector(".ass-in");
+    const pausa = +tr.querySelector(".pausa").value, eMin = parseOrario(ent.value), uMin = parseOrario(usc.value);
+    if (Number.isNaN(eMin)) { ent.focus(); avviso("Ora di entrata non valida: es. 8:00"); return; }
+    if (Number.isNaN(uMin)) { usc.focus(); avviso("Ora di uscita non valida: es. 17:30"); return; }
+    if (eMin == null && uMin != null) { ent.focus(); avviso("Manca l'ora di entrata"); return; }
+    const minuti = minutiDaOrari(eMin, uMin, pausa);
+    if (Number.isNaN(minuti)) { usc.focus(); avviso("L'uscita deve essere dopo l'entrata più la pausa"); return; }
+    if (eMin == null && !sel.value) { if (pres[d]) await D.eliminaPresenza(chi, d); }
+    else await D.salvaPresenza({ uid: chi, nome: nomeChi, data: d, entrata: eMin, uscita: uMin, pausa: eMin == null ? null : pausa, minuti, assenza: sel.value });
+    avviso(minuti != null ? `Salvato: ${ore(minuti)} lavorate` : "Salvato"); ricarica();
   };
   el.querySelectorAll("tr[data-d]").forEach(tr => {
-    tr.querySelector(".ore-in").addEventListener("change", () => salvaRiga(tr));
-    tr.querySelector(".ass-in").addEventListener("change", () => salvaRiga(tr));
-    tr.querySelector("[data-std]")?.addEventListener("click", ev => { tr.querySelector(".ore-in").value = ore(+ev.currentTarget.dataset.std); salvaRiga(tr); });
+    tr.querySelectorAll(".ent, .usc, .pausa, .ass-in").forEach(x => x.addEventListener("change", () => salvaRiga(tr)));
+    tr.querySelector("[data-std]")?.addEventListener("click", () => {
+      const dov = minutiDovuti(profilo, tr.dataset.d);
+      tr.querySelector(".ent").value = fmtOrario(entStd); tr.querySelector(".usc").value = fmtOrario(entStd + dov + pausaStd);
+      tr.querySelector(".pausa").value = String(pausaStd); salvaRiga(tr);
+    });
   });
   el.querySelector("#form-profilo")?.addEventListener("submit", async ev => {
     ev.preventDefault();
@@ -115,7 +129,9 @@ export async function vistaPresenze(el) {
     const d = leggiForm(f), saldo = parseOre(String(d.saldoRiportato || "").replace(/^[+−-]/, ""));
     if (Number.isNaN(saldo)) { avviso("Saldo riportato non valido: es. 12:30 oppure -4:00"); return; }
     const segno = /^[−-]/.test(String(d.saldoRiportato || "").trim()) ? -1 : 1;
-    await D.salvaProfilo(chi, { oreSettimanali: d.oreSettimanali, percentuale: d.percentuale, giorniVacanza: d.giorniVacanza,
+    if (Number.isNaN(parseOrario(d.entrataStandard))) { avviso("Entrata abituale non valida: es. 8:00"); return; }
+    await D.salvaProfilo(chi, { entrataStandard: fmtOrario(parseOrario(d.entrataStandard)) || "", pausaStandard: d.pausaStandard === "" ? 60 : Number(d.pausaStandard),
+      oreSettimanali: d.oreSettimanali, percentuale: d.percentuale, giorniVacanza: d.giorniVacanza,
       accordo73b: d.accordo73b, inizioPresenze: d.inizioPresenze, saldoRiportatoMinuti: saldo == null ? 0 : segno * saldo });
     avviso("Orario salvato"); ricarica();
   });
@@ -130,6 +146,8 @@ function formProfilo(p, nome) {
       ${campo("oreSettimanali", "Ore settimanali a tempo pieno", p.oreSettimanali ?? 42, "number")}
       ${campo("percentuale", "Grado di occupazione (%)", p.percentuale ?? 100, "number")}
       ${campo("giorniVacanza", "Giorni di vacanza all'anno", p.giorniVacanza, "number")}
+      ${campo("entrataStandard", "Entrata abituale (per il pulsante Standard)", p.entrataStandard || "08:00")}
+      <div><label for="f_pausaStandard">Pausa abituale</label><select id="f_pausaStandard" name="pausaStandard">${PAUSE.map(x => `<option value="${x}"${x === (p.pausaStandard ?? 60) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></div>
       ${campo("accordo73b", "Accordo scritto art. 73b firmato il", p.accordo73b, "date")}
       ${campo("inizioPresenze", "Registrazione delle presenze dal", p.inizioPresenze, "date")}
       ${campo("saldoRiportato", "Saldo ore riportato a inizio anno (es. 12:30 o -4:00)", sr ? (sr < 0 ? "-" : "") + Math.floor(Math.abs(sr) / 60) + ":" + String(Math.abs(sr) % 60).padStart(2, "0") : "")}
@@ -173,18 +191,18 @@ async function vistaPanoramica(el, utenti) {
 /** CSV dell'anno per la conservazione (5 anni, art. 73 OLL 1): separatore ;, date gg.mm.aaaa, ore in hh:mm. */
 function esportaAnno(nome, profilo, presAnno, anno, dal) {
   const pres = Object.fromEntries(presAnno.map(p => [p.data, p])), fest = festiviTicino(anno);
-  const righe = [[`Presenze ${anno} - ${nome}`], [`Registrazione semplificata art. 73b OLL 1${profilo.accordo73b ? ` - accordo scritto del ${fmtData(profilo.accordo73b)}` : " - accordo scritto non indicato"}`],
+  const righe = [[`Presenze ${anno} - ${nome}`], [`Registrazione della durata del lavoro (art. 73 / 73b OLL 1)${profilo.accordo73b ? ` - accordo scritto del ${fmtData(profilo.accordo73b)}` : " - accordo scritto non indicato"}`],
     [`Orario: ${profilo.oreSettimanali || 42} h settimanali al ${profilo.percentuale ?? 100}%`], [],
-    ["Data", "Giorno", "Festivo", "Ore dovute", "Ore lavorate", "Assenza", "Saldo giorno"]];
+    ["Data", "Giorno", "Festivo", "Ore dovute", "Entrata", "Uscita", "Pausa", "Ore lavorate", "Assenza", "Saldo giorno"]];
   let saldo = Number(profilo.saldoRiportatoMinuti) || 0;
   for (let d = `${anno}-01-01`; d <= `${anno}-12-31`; d = aggiungiGiorni(d, 1)) {
     const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0;
     if (!dov && p.minuti == null && !p.assenza) continue;
     const s = (p.minuti != null || p.assenza || d < oggiISO()) ? (p.minuti || 0) + minutiCredito(p.assenza, dov) - dov : 0;
     saldo += s;
-    righe.push([fmtData(d), GIORNI[giornoSettimana(d)], fest[d] || "", ore(dov), ore(p.minuti), p.assenza || "", fmtSaldo(s).replace("−", "-")]);
+    righe.push([fmtData(d), GIORNI[giornoSettimana(d)], fest[d] || "", ore(dov), fmtOrario(p.entrata), fmtOrario(p.uscita), p.pausa != null ? ore(p.pausa) : "", ore(p.minuti), p.assenza || "", fmtSaldo(s).replace("−", "-")]);
   }
-  righe.push([], ["Saldo a fine periodo", "", "", "", "", "", fmtSaldo(saldo).replace("−", "-")]);
+  righe.push([], ["Saldo a fine periodo", "", "", "", "", "", "", "", "", fmtSaldo(saldo).replace("−", "-")]);
   const csv = "﻿" + righe.map(r => r.map(c => /[;"\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(";")).join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));

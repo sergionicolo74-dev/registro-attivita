@@ -203,6 +203,11 @@ export const leggiProfilo = (uid) => leggi("utenti", uid);
 /** Profilo orario di un collaboratore (solo amministratori). */
 export const salvaProfilo = (uid, dati) => scrivi("utenti", { ...dati, id: uid });
 
+// ---------- vacanze (visibili a tutti; ognuno chiede le proprie, l'amministratore approva) ----------
+export const listaVacanze = () => lista("vacanze");
+export const salvaVacanza = (v) => scrivi("vacanze", v);
+export const eliminaVacanza = (id) => elimina("vacanze", id);
+
 // ---------- dati demo (inventati) ----------
 function creaDemo() {
   const oggiPiu = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -230,6 +235,13 @@ function creaDemo() {
     },
     persone_kyc: { p1: { id: "p1", clienteId: "d1", nazionalita: "Italia", domicilio: "Italia", tipoDocumento: "Passaporto", scadenzaDocumento: "2026-12-20", copiaArchivio: true } },
     registrazioni: {
+      // ore della settimana scorsa, per provare la Dashboard (circa l'85% della presenza)
+      ...Object.fromEntries([-1, -2, -3, -4, -5, -6, -7].map(n => oggiPiu(n)).filter(d => { const g = new Date(d + "T12:00:00").getDay(); return g > 0 && g < 6; })
+        .flatMap((d, i) => [
+          ["demo", "Utente demo", [["d1", 150, true, "contabilita"], ["d2", 120, true, "contabilita"], ["d1", 60, true, "funzione"], ["d3", 45, false, "contabilita"], ["d0", 30, false, null]]],
+          ["u2", "Anna", [["d2", 120, true, "contabilita"], ["d3", 60 + (i % 2) * 60, true, "domiciliazione"], ["d1", 15, false, "contabilita"]]]
+        ].flatMap(([uid, nome, voci]) => i === 2 && uid === "demo" ? [] : voci.map(([cli, min, fat, mand], j) => [`g_${uid}_${d}_${j}`,
+          { id: `g_${uid}_${d}_${j}`, clienteId: cli, data: d, minuti: min - (i === 4 && uid === "demo" ? 30 : 0), fatturabile: fat, tipo: "lavoro", mandato: mand, descrizione: "Lavoro di esempio", autoreUid: uid, autoreNome: nome }])))),
       r1: { id: "r1", clienteId: "d1", data: "2026-11-10", minuti: 45, fatturabile: true, tipo: "lavoro", descrizione: "Contabilità ottobre", autoreUid: "demo", autoreNome: "Utente demo" },
       r3: { id: "r3", clienteId: "d2", data: oggi, minuti: 90, fatturabile: true, tipo: "lavoro", descrizione: "Rendiconto IVA Q3", autoreUid: "demo", autoreNome: "Utente demo", creato: "1" },
       r4: { id: "r4", clienteId: "d3", data: oggi, minuti: 30, fatturabile: false, tipo: "lavoro", descrizione: "Telefonata di cortesia", autoreUid: "demo", autoreNome: "Utente demo", creato: "2" },
@@ -245,13 +257,18 @@ function creaDemo() {
     presenze: Object.fromEntries([-1, -2, -3, -4, -5, -6, -7].map(n => oggiPiu(n)).filter(d => { const g = new Date(d + "T12:00:00").getDay(); return g > 0 && g < 6; })
       .flatMap((d, i) => [[`demo_${d}`, { id: `demo_${d}`, uid: "demo", nome: "Utente demo", data: d, ...(i === 2 ? { minuti: null, assenza: "Vacanza" } : { entrata: 480, pausa: 60, uscita: 540 + 480 + i * 15, minuti: 480 + i * 15, assenza: "" }) }],
         [`u2_${d}`, { id: `u2_${d}`, uid: "u2", nome: "Anna", data: d, entrata: 510, pausa: 0, uscita: 762, minuti: 252 }]])),
+    vacanze: {
+      v1: { id: "v1", uid: "u2", nome: "Anna", dal: oggiPiu(8), al: oggiPiu(15), tipo: "Vacanza", stato: "Approvata", creato: "2026-11-01T09:00:00Z" },
+      v2: { id: "v2", uid: "u3", nome: "Marco", dal: oggiPiu(3), al: oggiPiu(4), tipo: "Vacanza", stato: "Richiesta", creato: "2026-11-10T09:00:00Z" },
+      v3: { id: "v3", uid: "demo", nome: "Utente demo", dal: "2026-12-24", al: "2026-12-31", tipo: "Vacanza", stato: "Approvata", creato: "2026-10-01T09:00:00Z" }
+    },
     scadenze: {
       "d1_contabilita_2026-09": { id: "d1_contabilita_2026-09", clienteId: "d1", servizio: "contabilita", periodo: "2026-09", anno: 2026, stato: "Fatto", fattoIl: oggi, fattoDa: "Utente demo" },
       "d2_dichiarazione_2025": { id: "d2_dichiarazione_2025", clienteId: "d2", servizio: "dichiarazione", periodo: "2025", anno: 2026, stato: "Prorogato", nuovaData: oggiPiu(12),
         cronologia: [{ quando: "2026-06-20T09:00:00Z", nome: "Utente demo", testo: "Proroga concessa con lettera del 18.06.2026" }] },
       "d3_iva_2026-T3": { id: "d3_iva_2026-T3", clienteId: "d3", servizio: "iva", periodo: "2026-T3", anno: 2026, stato: "In attesa cliente", note: "Mancano estratti conto" }
     },
-    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin", oreSettimanali: 42, percentuale: 100, accordo73b: "2026-11-02", inizioPresenze: oggiPiu(-7) },
-      u2: { id: "u2", nome: "Anna", ruolo: "utente", oreSettimanali: 42, percentuale: 50, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
+    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin", oreSettimanali: 42, percentuale: 100, accordo73b: "2026-11-02", giorniVacanza: 25, inizioPresenze: oggiPiu(-7) },
+      u2: { id: "u2", nome: "Anna", ruolo: "utente", oreSettimanali: 42, percentuale: 50, giorniVacanza: 25, pausaStandard: 0, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
   };
 }

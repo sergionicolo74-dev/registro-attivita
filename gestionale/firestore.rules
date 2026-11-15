@@ -61,6 +61,14 @@ service cloud.firestore {
       allow delete: if admin() || (attivo() && mio("uid"));
     }
 
+    // Vacanze: tutti vedono il piano; ognuno chiede le proprie, solo l'amministratore approva
+    match /vacanze/{id} {
+      allow read: if attivo();
+      allow create: if admin() || (attivo() && request.resource.data.uid == request.auth.uid && request.resource.data.stato == "Richiesta");
+      allow update: if admin() || (attivo() && mio("uid") && resource.data.stato == "Richiesta" && request.resource.data.uid == request.auth.uid && request.resource.data.stato == "Richiesta");
+      allow delete: if admin() || (attivo() && mio("uid") && resource.data.stato == "Richiesta");
+    }
+
     // SOLO NEL PROGETTO DI PROVA (attivita-88590): mantiene funzionante il vecchio registro.
     // Nel progetto di produzione (Zurigo) questo blocco si può togliere.
     match /registri/{doc} { allow read, write: if loggato(); }

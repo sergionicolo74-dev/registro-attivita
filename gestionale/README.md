@@ -14,8 +14,10 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Compiti: elenco per urgenza o a colonne, assegnazione, stati con motivo d'attesa, aggiornamenti, scaduti / entro 5 giorni / fermi da 5 giorni
 - Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
 - Scadenziario: scadenze ricorrenti calcolate dai servizi di ogni cliente; elenco per urgenza con riepilogo cliccabile, griglia clienti √ó servizi per anno, proroghe, responsabile, aggiornamenti
-- Presenze: registrazione semplificata art. 73b OLL 1 (ore totali al giorno), festivi ticinesi, saldi mese/anno, vacanze, panoramica dello studio, esportazione CSV annuale; il Registro ore usa la presenza del giorno
-- Moduli Vacanze e Dashboard: fasi successive
+- Presenze: registrazione semplificata art. 73b OLL 1 (entrata, uscita e pausa), festivi ticinesi, saldi mese/anno, vacanze, panoramica dello studio, esportazione CSV annuale; il Registro ore usa la presenza del giorno
+- Vacanze: piano mensile visibile a tutti, richieste e approvazione, saldo giorni, avviso se una scadenza del responsabile cade durante l'assenza
+- Dashboard: filtri per periodo (settimana, mese, trimestre, anno) e persona; ore sui mandati, presenza e copertura per collaboratore, andamento, ore per mandato e per cliente, semafori dello studio
+- Utenti: creazione dei collaboratori con email per scegliere la password
 
 ## Ambienti
 

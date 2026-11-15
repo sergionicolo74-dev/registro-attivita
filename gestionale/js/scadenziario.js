@@ -16,7 +16,7 @@ const ETICHETTA_URG = { scaduto: "Scaduta", urgente: "Entro 5 giorni", preavviso
 const GIORNI_ELENCO = 60;
 
 /** Carica clienti, utenti e stati salvati e costruisce le scadenze degli anni indicati. */
-async function carica(anni) {
+export async function carica(anni) {
   const admin = D.isAdmin();
   const [clienti, utenti, salvate, kyc] = await Promise.all([D.listaClienti(), D.listaUtenti().catch(() => []),
     D.listaScadenzeSalvate(anni), admin ? D.listaTuttiKycClienti() : Promise.resolve([])]);

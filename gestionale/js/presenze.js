@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtDurata, fmtSaldo, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, minutiDovuti, minutiCredito,
-  parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima } from "./regole.js";
+  parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima, conVacanze } from "./regole.js";
 
 const PAUSE = [0, 15, 30, 45, 60, 75, 90, 120];
 
@@ -24,12 +24,14 @@ export async function vistaPresenze(el) {
   if (admin && panoramica) return vistaPanoramica(el, utenti);
 
   const anno = mese.slice(0, 4), da = primoDel(mese), a = ultimoDel(mese), inizioAnno = `${anno}-01-01`;
-  const [profilo, presAnno, regMese] = await Promise.all([
+  const [profilo, presAnno, regMese, vacanze] = await Promise.all([
     D.leggiProfilo(chi).then(p => p || {}),
     D.listaPresenze(chi, inizioAnno, `${anno}-12-31`),
-    chi === u.uid || admin ? D.listaRegistrazioniPeriodo(da, a).catch(() => []) : Promise.resolve([])
+    chi === u.uid || admin ? D.listaRegistrazioniPeriodo(da, a).catch(() => []) : Promise.resolve([]),
+    D.listaVacanze().catch(() => [])
   ]);
-  const pres = Object.fromEntries(presAnno.map(p => [p.data, p]));
+  // Le vacanze approvate entrano da sole nei giorni senza registrazione
+  const pres = conVacanze(Object.fromEntries(presAnno.map(p => [p.data, p])), vacanze, chi);
   const regGiorno = {};
   regMese.filter(r => r.autoreUid === chi && r.tipo !== "nota").forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + (r.minuti || 0); });
   const dal = profilo.inizioPresenze || presAnno.map(p => p.data).sort()[0] || da;
@@ -85,7 +87,7 @@ export async function vistaPresenze(el) {
         <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
           ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
           ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
-        <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select></td>
+        <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select>${p.daPiano ? '<div class="tenue" style="font-size:12px">dal piano vacanze</div>' : ""}</td>
         <td class="num">${reg ? `${fmtDurata(reg)}${p.minuti && reg > p.minuti ? `<div>${stato("urgente", "più della presenza")}</div>` : ""}` : '<span class="tenue">–</span>'}</td>
         <td class="num">${saldo == null ? "" : `<span class="${saldo < 0 ? "neg" : ""}">${fmtSaldo(saldo)}</span>`}</td></tr>`;
     }).join("")}
@@ -100,7 +102,7 @@ export async function vistaPresenze(el) {
   el.querySelector("#m-succ").addEventListener("click", () => { mese = meseDopo(mese, 1); ricarica(); });
   el.querySelector("#chi-p")?.addEventListener("change", ev => { chi = ev.target.value; ricarica(); });
   el.querySelector("#panoramica")?.addEventListener("click", () => { panoramica = true; ricarica(); });
-  el.querySelector("#esporta").addEventListener("click", () => esportaAnno(nomeChi, profilo, presAnno, +anno, dal));
+  el.querySelector("#esporta").addEventListener("click", () => esportaAnno(nomeChi, profilo, pres, +anno, dal));
 
   const salvaRiga = async (tr) => {
     const d = tr.dataset.d, ent = tr.querySelector(".ent"), usc = tr.querySelector(".usc"), sel = tr.querySelector(".ass-in");
@@ -158,9 +160,9 @@ function formProfilo(p, nome) {
 
 async function vistaPanoramica(el, utenti) {
   const anno = mese.slice(0, 4), da = primoDel(mese), a = ultimoDel(mese), oggi = oggiISO();
-  const tutte = await D.listaPresenzeStudio(`${anno}-01-01`, `${anno}-12-31`);
+  const [tutte, vacanze] = await Promise.all([D.listaPresenzeStudio(`${anno}-01-01`, `${anno}-12-31`), D.listaVacanze().catch(() => [])]);
   const righe = utenti.map(x => {
-    const mie = tutte.filter(p => p.uid === x.id), pres = Object.fromEntries(mie.map(p => [p.data, p]));
+    const mie = tutte.filter(p => p.uid === x.id), pres = conVacanze(Object.fromEntries(mie.map(p => [p.data, p])), vacanze, x.id);
     const dal = x.inizioPresenze || mie.map(p => p.data).sort()[0] || da;
     const finora = pres[oggi] ? oggi : aggiungiGiorni(oggi, -1), fine = a < finora ? a : finora;
     const rm = fine >= da ? riepilogoPresenze(pres, x, da, fine, dal) : riepilogoPresenze({}, x, da, da, "9999"), ra = riepilogoPresenze(pres, x, `${anno}-01-01`, fine, dal);
@@ -189,8 +191,8 @@ async function vistaPanoramica(el, utenti) {
 }
 
 /** CSV dell'anno per la conservazione (5 anni, art. 73 OLL 1): separatore ;, date gg.mm.aaaa, ore in hh:mm. */
-function esportaAnno(nome, profilo, presAnno, anno, dal) {
-  const pres = Object.fromEntries(presAnno.map(p => [p.data, p])), fest = festiviTicino(anno);
+function esportaAnno(nome, profilo, pres, anno, dal) {
+  const fest = festiviTicino(anno);
   const righe = [[`Presenze ${anno} - ${nome}`], [`Registrazione della durata del lavoro (art. 73 / 73b OLL 1)${profilo.accordo73b ? ` - accordo scritto del ${fmtData(profilo.accordo73b)}` : " - accordo scritto non indicato"}`],
     [`Orario: ${profilo.oreSettimanali || 42} h settimanali al ${profilo.percentuale ?? 100}%`], [],
     ["Data", "Giorno", "Festivo", "Ore dovute", "Entrata", "Uscita", "Pausa", "Ore lavorate", "Assenza", "Saldo giorno"]];

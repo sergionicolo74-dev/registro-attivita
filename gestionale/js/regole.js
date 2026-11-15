@@ -387,3 +387,69 @@ export function minutiDaOrari(entrata, uscita, pausa = 0) {
 export function pausaMinima(minutiLavoro) {
   return minutiLavoro > 540 ? 60 : minutiLavoro > 420 ? 30 : minutiLavoro > 330 ? 15 : 0;
 }
+
+// ---------- Vacanze ----------
+export const TIPI_VACANZA = ["Vacanza", "Recupero ore", "Assenza"];
+export const STATI_VACANZA = ["Richiesta", "Approvata", "Rifiutata"];
+/** Giorni lavorativi (lunedì–venerdì, esclusi i festivi ticinesi) tra due date incluse. */
+export function giorniLavorativi(da, a) {
+  let n = 0;
+  for (let d = da; d && a && d <= a; d = aggiungiGiorni(d, 1)) if (giornoSettimana(d) < 5 && !festiviTicino(+d.slice(0, 4))[d]) n++;
+  return n;
+}
+/** Giorni che una richiesta consuma: mezza giornata = 0.5 */
+export const giorniRichiesta = (v) => v.mezza ? (giorniLavorativi(v.dal, v.dal) ? 0.5 : 0) : giorniLavorativi(v.dal, v.al);
+/** Giorni di vacanza approvati di un utente in un anno (le richieste a cavallo d'anno contano per la parte nell'anno). */
+export function vacanzeUsate(vacanze, uid, anno) {
+  return vacanze.filter(v => v.uid === uid && v.stato === "Approvata" && v.tipo === "Vacanza").reduce((s, v) => {
+    if (v.mezza) return s + (v.dal.startsWith(String(anno)) ? giorniRichiesta(v) : 0);
+    const da = v.dal > `${anno}-01-01` ? v.dal : `${anno}-01-01`, a = v.al < `${anno}-12-31` ? v.al : `${anno}-12-31`;
+    return s + (da <= a ? giorniLavorativi(da, a) : 0);
+  }, 0);
+}
+/** Aggiunge alle presenze i giorni di vacanza/assenza approvati che non hanno già una registrazione. */
+export function conVacanze(pres, vacanze, uid) {
+  const out = { ...pres };
+  for (const v of vacanze) {
+    if (v.uid !== uid || v.stato !== "Approvata") continue;
+    const tipo = v.tipo === "Vacanza" ? (v.mezza ? "Vacanza mezza giornata" : "Vacanza") : v.tipo === "Assenza" ? (v.mezza ? "Assenza mezza giornata" : "Assenza") : "Recupero ore";
+    for (let d = v.dal; d <= (v.mezza ? v.dal : v.al); d = aggiungiGiorni(d, 1)) {
+      if (giornoSettimana(d) >= 5 || festiviTicino(+d.slice(0, 4))[d] || out[d]) continue;
+      out[d] = { data: d, assenza: tipo, minuti: null, daPiano: true };
+    }
+  }
+  return out;
+}
+
+// ---------- Periodi per la Dashboard ----------
+export const PERIODI = [["settimana", "Settimana"], ["mese", "Mese"], ["trimestre", "Trimestre"], ["anno", "Anno"]];
+/** Inizio, fine ed etichetta del periodo che contiene la data rif. */
+export function periodoDi(tipo, rif) {
+  const y = +rif.slice(0, 4), m = +rif.slice(5, 7);
+  if (tipo === "settimana") { const da = lunedi(rif), a = aggiungiGiorni(da, 6); return { da, a, etichetta: `${fmtData(da).slice(0, 5)} – ${fmtData(a)}` }; }
+  if (tipo === "mese") return { da: dataISO(y, m, 1), a: fineMese(y, m), etichetta: `${MESI[m - 1]} ${y}` };
+  if (tipo === "trimestre") { const q = Math.ceil(m / 3); return { da: dataISO(y, q * 3 - 2, 1), a: fineMese(y, q * 3), etichetta: `${q}° trimestre ${y}` }; }
+  return { da: `${y}-01-01`, a: `${y}-12-31`, etichetta: String(y) };
+}
+/** Data di riferimento spostata di n periodi. */
+export function spostaPeriodo(tipo, rif, n) {
+  const y = +rif.slice(0, 4), m = +rif.slice(5, 7);
+  if (tipo === "settimana") return aggiungiGiorni(rif, 7 * n);
+  if (tipo === "mese") return dataISO(y, m + n, 1);
+  if (tipo === "trimestre") return dataISO(y, m + 3 * n, 1);
+  return dataISO(y + n, 1, 1);
+}
+/** Colonne dell'andamento: giorni (settimana, mese), settimane (trimestre), mesi (anno). */
+export function colonnePeriodo(tipo, da, a) {
+  const out = [];
+  if (tipo === "settimana" || tipo === "mese") for (let d = da; d <= a; d = aggiungiGiorni(d, 1)) out.push({ da: d, a: d, etichetta: tipo === "settimana" ? GIORNI[giornoSettimana(d)] + " " + +d.slice(8) : String(+d.slice(8)), libero: giornoSettimana(d) >= 5 || !!festiviTicino(+d.slice(0, 4))[d] });
+  else if (tipo === "trimestre") for (let d = lunedi(da); d <= a; d = aggiungiGiorni(d, 7)) out.push({ da: d < da ? da : d, a: aggiungiGiorni(d, 6) > a ? a : aggiungiGiorni(d, 6), etichetta: fmtData(d < da ? da : d).slice(0, 5) });
+  else for (let m = 1; m <= 12; m++) out.push({ da: dataISO(+da.slice(0, 4), m, 1), a: fineMese(+da.slice(0, 4), m), etichetta: MESI[m - 1].slice(0, 3) });
+  return out;
+}
+/** Copertura: ore registrate sui mandati rispetto alle ore di presenza. ok >= 95%, quasi >= 80%, poi mancano. */
+export function statoCopertura(reg, pres) {
+  if (!pres) return null;
+  const p = reg / pres;
+  return p >= 0.95 ? "ok" : p >= 0.8 ? "urgente" : "scaduto";
+}

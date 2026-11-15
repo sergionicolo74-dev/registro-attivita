@@ -9,19 +9,21 @@ import { vistaCompiti } from "./compiti.js";
 import { vistaScadenziario } from "./scadenziario.js";
 import { vistaPresenze } from "./presenze.js";
 import { vistaUtenti } from "./utenti.js";
+import { vistaVacanze } from "./vacanze.js";
+import { vistaDashboard } from "./dashboard.js";
 
 const env = ambienteCorrente();
 
 // Moduli del menu. pronto=false: compare con "in arrivo" (fasi successive del piano).
 const MODULI = [
-  { id: "dashboard", nome: "Dashboard", pronto: false },
+  { id: "dashboard", nome: "Dashboard", pronto: true },
   { id: "clienti", nome: "Clienti", pronto: true },
   { id: "mandati", nome: "Mandati", pronto: true },
   { id: "registro", nome: "Registro ore", pronto: true },
   { id: "scadenziario", nome: "Scadenziario", pronto: true },
   { id: "compiti", nome: "Compiti", pronto: true },
   { id: "presenze", nome: "Presenze", pronto: true },
-  { id: "vacanze", nome: "Vacanze", pronto: false },
+  { id: "vacanze", nome: "Vacanze", pronto: true },
   { id: "utenti", nome: "Utenti", pronto: true, admin: true },
   { id: "importa", nome: "Importa dati", pronto: true, admin: true }
 ];
@@ -74,18 +76,20 @@ function disegnaMenu(attivo) {
 
 async function instrada() {
   if (!D.utenteCorrente()?.ruolo) return;
-  const [, mod = "clienti", id] = location.hash.replace(/^#/, "").split("/");
+  const [, mod = "dashboard", id] = location.hash.replace(/^#/, "").split("/");
   disegnaMenu(mod);
   const vista = document.getElementById("vista");
   const m = MODULI.find(x => x.id === mod);
   try {
-    if (mod === "clienti" && id) await vistaScheda(vista, decodeURIComponent(id));
+    if (mod === "dashboard") await vistaDashboard(vista);
+    else if (mod === "clienti" && id) await vistaScheda(vista, decodeURIComponent(id));
     else if (mod === "clienti") await vistaClienti(vista);
     else if (mod === "registro") await vistaRegistro(vista);
     else if (mod === "mandati") await vistaMandati(vista);
     else if (mod === "scadenziario") await vistaScadenziario(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "presenze") await vistaPresenze(vista);
     else if (mod === "compiti") await vistaCompiti(vista, id ? decodeURIComponent(id) : null);
+    else if (mod === "vacanze") await vistaVacanze(vista);
     else if (mod === "utenti" && D.isAdmin()) await vistaUtenti(vista);
     else if (mod === "importa" && D.isAdmin()) await vistaImporta(vista);
     else vista.innerHTML = `<div class="testata"><h1>${e(m?.nome || "Pagina")}</h1></div><div class="pannello vuoto">Questo modulo arriva nelle prossime fasi del piano.</div>`;

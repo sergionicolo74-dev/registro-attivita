@@ -158,3 +158,29 @@ console.log("Test compiti superati");
   ok([R.pausaMinima(330), R.pausaMinima(331), R.pausaMinima(420), R.pausaMinima(421), R.pausaMinima(541)], [0, 15, 15, 30, 60], "pause minime art. 15 LL");
   ok(R.fmtOrario(495), "08:15", "formato orario");
 }
+
+// ---------- Vacanze ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  ok(R.giorniLavorativi("2026-12-21", "2027-01-08"), 12, "Natale-Epifania: 12 giorni lavorativi");
+  ok(R.giorniLavorativi("2026-11-16", "2026-11-22"), 5, "una settimana = 5 giorni");
+  ok(R.giorniRichiesta({ dal: "2026-11-16", al: "2026-11-16", mezza: true }), 0.5, "mezza giornata");
+  const v = [{ uid: "a", stato: "Approvata", tipo: "Vacanza", dal: "2026-12-28", al: "2027-01-08" }, { uid: "a", stato: "Richiesta", tipo: "Vacanza", dal: "2026-07-01", al: "2026-07-10" }];
+  ok([R.vacanzeUsate(v, "a", 2026), R.vacanzeUsate(v, "a", 2027)], [4, 4], "vacanza a cavallo d'anno");
+  const p = R.conVacanze({ "2026-12-29": { minuti: 120 } }, v, "a");
+  ok([p["2026-12-28"]?.assenza, p["2026-12-29"]?.minuti, p["2027-01-01"], p["2027-01-06"]], ["Vacanza", 120, undefined, undefined], "vacanze nelle presenze, festivi esclusi, registrazioni rispettate");
+}
+
+// ---------- Periodi ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  ok(R.periodoDi("settimana", "2026-11-15"), { da: "2026-11-09", a: "2026-11-15", etichetta: "09.11 – 15.11.2026" }, "settimana");
+  ok([R.periodoDi("trimestre", "2026-11-15").da, R.periodoDi("trimestre", "2026-11-15").a], ["2026-10-01", "2026-12-31"], "trimestre");
+  ok(R.periodoDi("mese", "2026-02-10").a, "2026-02-28", "fine febbraio");
+  ok(R.spostaPeriodo("trimestre", "2026-11-01", 1), "2027-02-01", "trimestre successivo");
+  ok(R.colonnePeriodo("anno", "2026-01-01", "2026-12-31").length, 12, "12 mesi");
+  ok(R.colonnePeriodo("trimestre", "2026-10-01", "2026-12-31")[0], { da: "2026-10-01", a: "2026-10-04", etichetta: "01.10" }, "prima settimana del trimestre");
+  ok([R.statoCopertura(38, 40), R.statoCopertura(33, 40), R.statoCopertura(20, 40), R.statoCopertura(5, 0)], ["ok", "urgente", "scaduto", null], "copertura");
+}

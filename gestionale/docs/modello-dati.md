@@ -12,7 +12,8 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 | `registrazioni/{id}` | autore, admin | autore, admin | ore e note di lavoro |
 | `compiti/{id}` | autore, assegnatario, admin | autore, assegnatario, admin | promemoria, deleghe, pratiche |
 | `scadenze/{cliente_servizio_periodo}` | utenti attivi | utenti attivi (elimina: admin) | solo lo stato delle scadenze calcolate |
-| `presenze/{uid_data}` | proprietario, admin | proprietario, admin | ore lavorate al giorno (art. 73b OLL 1) |
+| `presenze/{uid_data}` | proprietario, admin | proprietario, admin | entrata, uscita, pausa e ore lavorate al giorno |
+| `vacanze/{id}` | utenti attivi | richiedente (solo se in attesa), admin | piano vacanze e assenze, approvazione |
 
 ## clienti
 
@@ -55,7 +56,17 @@ Preavvisi: −5 e −2 giorni, −30 per le annuali. Prima di `INIZIO_SCADENZIAR
 
 ## presenze
 
-`uid`, `nome`, `data`, `minuti` (totale lavorato nel giorno), `assenza` (Vacanza / Vacanza mezza giornata / Assenza / Assenza mezza giornata / Recupero ore).
+`uid`, `nome`, `data`, `entrata`, `uscita` (minuti dalla mezzanotte), `pausa` (minuti), `minuti` (lavorati: uscita − entrata − pausa), `assenza` (Vacanza / Vacanza mezza giornata / Assenza / Assenza mezza giornata / Recupero ore).
 Il motivo delle assenze non si registra.
 Nel profilo `utenti/{uid}`: `oreSettimanali`, `percentuale`, `giorniVacanza`, `accordo73b` (data dell'accordo scritto), `inizioPresenze`, `saldoRiportatoMinuti`.
 Ore dovute: lunedì–venerdì, esclusi i 15 festivi ufficiali del Ticino. Conservazione: 5 anni (art. 73 cpv. 2 OLL 1), con l'esportazione CSV annuale.
+
+## vacanze
+
+`uid`, `nome`, `dal`, `al`, `tipo` (Vacanza / Recupero ore / Assenza), `mezza` (vero/falso), `stato` (Richiesta / Approvata / Rifiutata), `decisoDa`, `decisoIl`.
+Nessun motivo. I giorni si contano lavorativi (festivi ticinesi esclusi). Le approvate entrano nelle Presenze nei giorni senza registrazione.
+
+## Dashboard
+
+Nessun dato proprio: legge registrazioni, presenze, vacanze, clienti, compiti e scadenze. Copertura = ore sui mandati / ore di presenza fino a ieri
+(≥ 95% completo, ≥ 80% quasi, sotto mancano ore). Valore alle tariffe del mandato contabilità o CHF 150/h.

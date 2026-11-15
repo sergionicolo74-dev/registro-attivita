@@ -1,6 +1,6 @@
 # Gestionale studio
 
-App web unica dello studio: anagrafica clienti, registro ore, scadenziario, compiti, presenze, vacanze e cruscotto.
+App web unica dello studio: anagrafica clienti, registro ore, scadenziario, compiti, presenze, vacanze e dashboard.
 Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√© il gestionale non lo sostituisce.
 
 ## Stato (fase 1)
@@ -9,7 +9,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Clienti: elenco con ricerca e filtri, scheda a schede (Persone, Dati e mandato, Servizi e scadenze, Compiti, Ore e diario, Note)
 - Dati KYC (clienti e persone) separati e visibili solo agli amministratori
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
-- Moduli Registro ore, Scadenziario, Compiti, Presenze, Vacanze, Cruscotto: fasi successive
+- Moduli Registro ore, Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
 
 ## Ambienti
 

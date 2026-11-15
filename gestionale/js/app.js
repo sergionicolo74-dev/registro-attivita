@@ -8,7 +8,7 @@ const env = ambienteCorrente();
 
 // Moduli del menu. pronto=false: compare con "in arrivo" (fasi successive del piano).
 const MODULI = [
-  { id: "cruscotto", nome: "Cruscotto", pronto: false },
+  { id: "dashboard", nome: "Dashboard", pronto: false },
   { id: "clienti", nome: "Clienti", pronto: true },
   { id: "registro", nome: "Registro ore", pronto: false },
   { id: "scadenziario", nome: "Scadenziario", pronto: false },

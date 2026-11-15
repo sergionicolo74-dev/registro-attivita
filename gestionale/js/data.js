@@ -207,6 +207,11 @@ export const leggiProfilo = (uid) => leggi("utenti", uid);
 /** Profilo orario di un collaboratore (solo amministratori). */
 export const salvaProfilo = (uid, dati) => scrivi("utenti", { ...dati, id: uid });
 
+// ---------- pratiche amministrative (fuori mandato; visibili a tutti gli utenti attivi) ----------
+export const listaPratiche = (clienteId) => lista("pratiche", clienteId ? [["clienteId", "==", clienteId]] : []);
+export const salvaPratica = (p) => scrivi("pratiche", p);
+export const eliminaPratica = (id) => elimina("pratiche", id);
+
 // ---------- vacanze (visibili a tutti; ognuno chiede le proprie, l'amministratore approva) ----------
 export const listaVacanze = () => lista("vacanze");
 export const salvaVacanza = (v) => scrivi("vacanze", v);
@@ -246,6 +251,7 @@ function creaDemo() {
           ["u2", "Anna", [["d2", 120, true, "contabilita"], ["d3", 60 + (i % 2) * 60, true, "domiciliazione"], ["d1", 15, false, "contabilita"]]]
         ].flatMap(([uid, nome, voci]) => i === 2 && uid === "demo" ? [] : voci.map(([cli, min, fat, mand], j) => [`g_${uid}_${d}_${j}`,
           { id: `g_${uid}_${d}_${j}`, clienteId: cli, data: d, minuti: min - (i === 4 && uid === "demo" ? 30 : 0), fatturabile: fat, tipo: "lavoro", mandato: mand, descrizione: "Lavoro di esempio", autoreUid: uid, autoreNome: nome }])))),
+      r5: { id: "r5", clienteId: "d2", praticaId: "pr2", data: oggiPiu(-3), minuti: 60, fatturabile: true, tipo: "lavoro", descrizione: "Preparata richiesta di rateizzazione", autoreUid: "u2", autoreNome: "Anna" },
       r1: { id: "r1", clienteId: "d1", data: "2026-11-10", minuti: 45, fatturabile: true, tipo: "lavoro", descrizione: "Contabilità ottobre", autoreUid: "demo", autoreNome: "Utente demo" },
       r3: { id: "r3", clienteId: "d2", data: oggi, minuti: 90, fatturabile: true, tipo: "lavoro", descrizione: "Rendiconto IVA Q3", autoreUid: "demo", autoreNome: "Utente demo", creato: "1" },
       r4: { id: "r4", clienteId: "d3", data: oggi, minuti: 30, fatturabile: false, tipo: "lavoro", descrizione: "Telefonata di cortesia", autoreUid: "demo", autoreNome: "Utente demo", creato: "2" },
@@ -261,6 +267,17 @@ function creaDemo() {
     presenze: Object.fromEntries([-1, -2, -3, -4, -5, -6, -7].map(n => oggiPiu(n)).filter(d => { const g = new Date(d + "T12:00:00").getDay(); return g > 0 && g < 6; })
       .flatMap((d, i) => [[`demo_${d}`, { id: `demo_${d}`, uid: "demo", nome: "Utente demo", data: d, ...(i === 2 ? { minuti: null, assenza: "Vacanza" } : { entrata: 480, pausa: 60, uscita: 540 + 480 + i * 15, minuti: 480 + i * 15, assenza: "" }) }],
         [`u2_${d}`, { id: `u2_${d}`, uid: "u2", nome: "Anna", data: d, entrata: 510, pausa: 0, uscita: 762, minuti: 252 }]])),
+    pratiche: {
+      pr1: { id: "pr1", clienteId: "d1", titolo: "Assegni figli per Mario Esempio", tipo: "Assegni familiari", ente: "Cassa assegni familiari", fase: "In attesa dell'ente",
+        apertaIl: oggiPiu(-40), inviataIl: oggiPiu(-35), prossimoControllo: oggiPiu(-3), concludereEntro: oggiPiu(20), solleciti: 0, responsabileUid: "demo", responsabileNome: "Utente demo",
+        fatturazione: { modo: "Forfait", importo: 250, stato: "Da fatturare" },
+        passi: [{ quando: oggiPiu(-40) + "T09:00:00Z", nome: "Utente demo", testo: "Pratica aperta", fase: "In preparazione" }, { quando: oggiPiu(-35) + "T09:00:00Z", nome: "Utente demo", testo: "Richiesta inviata all'ente", fase: "In attesa dell'ente" }] },
+      pr2: { id: "pr2", clienteId: "d2", titolo: "Rateizzazione imposte 2025", tipo: "Rateizzazione imposte", ente: "Ufficio esazione e condoni", fase: "Documenti richiesti",
+        apertaIl: oggiPiu(-20), inviataIl: oggiPiu(-18), prossimoControllo: oggiPiu(2), solleciti: 0, responsabileUid: "u2", responsabileNome: "Anna", fatturazione: { modo: "A ore", stato: "Da fatturare" },
+        passi: [{ quando: oggiPiu(-20) + "T09:00:00Z", nome: "Anna", testo: "Pratica aperta", fase: "In preparazione" }, { quando: oggiPiu(-3) + "T09:00:00Z", nome: "Anna", testo: "Chiesti estratti conto degli ultimi 3 mesi", fase: "Documenti richiesti" }] },
+      pr3: { id: "pr3", clienteId: "d3", titolo: "Estratto conto individuale AVS", tipo: "Estratto conto individuale AVS", ente: "Cassa AVS", fase: "Conclusa", apertaIl: oggiPiu(-60), conclusaIl: oggiPiu(-5),
+        solleciti: 1, responsabileUid: "demo", responsabileNome: "Utente demo", fatturazione: { modo: "Forfait", importo: 120, stato: "Da fatturare" }, passi: [] }
+    },
     vacanze: {
       v1: { id: "v1", uid: "u2", nome: "Anna", dal: oggiPiu(8), al: oggiPiu(15), tipo: "Vacanza", stato: "Approvata", creato: "2026-11-01T09:00:00Z" },
       v2: { id: "v2", uid: "u3", nome: "Marco", dal: oggiPiu(3), al: oggiPiu(4), tipo: "Vacanza", stato: "Richiesta", creato: "2026-11-10T09:00:00Z" },

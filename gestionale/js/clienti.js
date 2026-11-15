@@ -2,7 +2,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
-  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza } from "./regole.js";
+  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -94,7 +94,7 @@ export async function vistaClienti(el) {
 }
 
 // ======================= SCHEDA =======================
-const SCHEDE = [["persone", "Persone"], ["dati", "Dati società"], ["mandati", "Mandati"], ["servizi", "Servizi e scadenze"], ["compiti", "Compiti"], ["ore", "Ore e diario"], ["note", "Note"]];
+const SCHEDE = [["persone", "Persone"], ["dati", "Dati società"], ["mandati", "Mandati"], ["servizi", "Servizi e scadenze"], ["compiti", "Compiti"], ["pratiche", "Pratiche"], ["ore", "Ore e diario"], ["note", "Note"]];
 
 export async function vistaScheda(el, id) {
   const scheda = location.hash.split("/")[3] || "persone";
@@ -146,6 +146,7 @@ export async function vistaScheda(el, id) {
   if (scheda === "mandati") return schedaMandati(p, c, ricarica);
   if (scheda === "servizi") return await schedaServizi(p, c, ricarica);
   if (scheda === "compiti") return schedaCompiti(p, c);
+  if (scheda === "pratiche") return await schedaPratiche(p, c);
   if (scheda === "ore") return schedaOre(p, c);
   if (scheda === "note") return schedaNote(p, c, ricarica);
 }
@@ -334,6 +335,18 @@ async function schedaCompiti(p, c) {
       <td>${k.completatoIl || k.stato === "Fatto" ? stato("ok", "Fatto") : `${stato("neutro", k.stato || "Aperto")} ${k.scadenza ? statoData(k.scadenza, "Entro", 5) : ""}`}</td></tr>`).join("")}</tbody></table>`
       : `<div class="vuoto">Nessun compito.</div>`}
     <div class="azioni"><a class="btn" href="#/compiti/${encodeURIComponent(c.id)}">Apri e gestisci nei Compiti</a></div></div>`;
+}
+
+// ---------- Pratiche ----------
+async function schedaPratiche(p, c) {
+  const l = (await D.listaPratiche(c.id)).sort((a, b) => (praticaAperta(b) ? 1 : 0) - (praticaAperta(a) ? 1 : 0) || String(b.apertaIl || "").localeCompare(String(a.apertaIl || "")));
+  const eti = { sollecitare: ["scaduto", "Da sollecitare"], oggi: ["urgente", "Controllo a breve"], ritardo: ["urgente", "Oltre la data prevista"] };
+  p.innerHTML = `<div class="pannello"><h3 style="font-size:14px;margin-bottom:10px">Pratiche amministrative (fuori mandato)</h3>
+    ${l.length ? `<table class="tabella"><thead><tr><th>Pratica</th><th>Ente</th><th>Fase</th><th>Prossimo controllo</th><th>Responsabile</th></tr></thead><tbody>${l.map(x => { const g = urgenzaPratica(x); return `<tr>
+      <td>${e(x.titolo || x.tipo)}</td><td>${e(x.ente || "")}</td><td>${x.fase === "Conclusa" ? stato("ok", "Conclusa") : stato("neutro", x.fase)} ${g ? stato(eti[g][0], eti[g][1]) : ""}</td>
+      <td>${e(fmtData(x.prossimoControllo))}</td><td>${e(x.responsabileNome || "")}</td></tr>`; }).join("")}</tbody></table>`
+      : `<div class="vuoto">Nessuna pratica.</div>`}
+    <div class="azioni"><a class="btn" href="#/pratiche/${encodeURIComponent(c.id)}">Apri e gestisci nelle Pratiche</a></div></div>`;
 }
 
 // ---------- Ore e diario ----------

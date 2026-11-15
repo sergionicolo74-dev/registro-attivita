@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
-  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, PERIODI, INIZIO_SCADENZIARIO } from "./regole.js";
+  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, PERIODI, INIZIO_SCADENZIARIO, urgenzaPratica } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
@@ -71,13 +71,13 @@ export async function vistaDashboard(el) {
   const perCliente = {};
   for (const r of lavoro) {
     const c = cliPer[r.clienteId], mm = mandatiDi(c || {});
-    const k = c && c.codice !== "C000" ? mandatoDiRegistrazione(r, mm) : "nonAttribuito";
+    const k = r.praticaId ? "pratica" : c && c.codice !== "C000" ? mandatoDiRegistrazione(r, mm) : "nonAttribuito";
     const g = perMandato[k] = perMandato[k] || { fat: 0, non: 0 };
     g[r.fatturabile ? "fat" : "non"] += r.minuti;
     const pc = perCliente[r.clienteId || "-"] = perCliente[r.clienteId || "-"] || { fat: 0, non: 0, c };
     pc[r.fatturabile ? "fat" : "non"] += r.minuti;
   }
-  const righeMandato = [...TIPI_MANDATO, ["nonAttribuito", "Non attribuite / occasionali"]].map(([k, n]) => ({ k, n, ...(perMandato[k] || { fat: 0, non: 0 }) })).filter(x => x.fat + x.non);
+  const righeMandato = [...TIPI_MANDATO, ["pratica", "Pratiche amministrative (fuori mandato)"], ["nonAttribuito", "Non attribuite / occasionali"]].map(([k, n]) => ({ k, n, ...(perMandato[k] || { fat: 0, non: 0 }) })).filter(x => x.fat + x.non);
   const righeClienti = Object.values(perCliente).sort((p, q) => (q.fat + q.non) - (p.fat + p.non));
 
   const nomeChi = chi === "tutti" ? "Tutto lo studio" : (utenti.find(x => x.id === chi)?.nome || u.nome);
@@ -199,7 +199,7 @@ function sezioneGiorni(p) {
 
 async function caricaSemafori() {
   const anno = new Date().getFullYear();
-  const [sc, compiti, vacanze, clienti] = await Promise.all([caricaScadenze([anno - 1, anno, anno + 1]).catch(() => ({ tutte: [] })), D.listaCompiti().catch(() => []), D.listaVacanze().catch(() => []), D.listaClienti()]);
+  const [sc, compiti, vacanze, clienti, pratiche] = await Promise.all([caricaScadenze([anno - 1, anno, anno + 1]).catch(() => ({ tutte: [] })), D.listaCompiti().catch(() => []), D.listaVacanze().catch(() => []), D.listaClienti(), D.listaPratiche().catch(() => [])]);
   const oggi = oggiISO();
   const sca = sc.tutte.filter(o => o.data >= INIZIO_SCADENZIARIO || o.salvato);
   return {
@@ -209,6 +209,8 @@ async function caricaSemafori() {
     compitiFermi: compiti.filter(k => aperto(k) && urgenzaCompito(k) === "fermo").length,
     mandati: clienti.filter(c => c.codice !== "C000" && (!c.stato || c.stato === "Attivo") && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]))).length,
     richieste: vacanze.filter(v => v.stato === "Richiesta").length,
+    praticheSoll: pratiche.filter(p => urgenzaPratica(p) === "sollecitare").length,
+    praticheFatt: pratiche.filter(p => p.fase === "Conclusa" && p.fatturazione?.modo !== "Non fatturare" && p.fatturazione?.stato !== "Fatturata").length,
     assenti: vacanze.filter(v => v.stato === "Approvata" && oggi >= v.dal && oggi <= (v.mezza ? v.dal : v.al)).map(v => v.nome)
   };
 }
@@ -217,6 +219,7 @@ function semafori(s) {
   return `<div class="semafori" role="group" aria-label="Situazione dello studio">
     ${voce(s.scadute, "scaduto", "Scadenze scadute", "#/scadenziario")}${voce(s.entro5, "urgente", "Scadenze entro 5 giorni", "#/scadenziario")}
     ${voce(s.compitiScaduti, "scaduto", "Compiti scaduti", "#/compiti")}${voce(s.compitiFermi, "urgente", "Compiti fermi", "#/compiti")}
+    ${voce(s.praticheSoll, "scaduto", "Pratiche da sollecitare", "#/pratiche")}${voce(s.praticheFatt, "urgente", "Pratiche da fatturare", "#/pratiche")}
     ${voce(s.mandati, "urgente", "Clienti con mandati da aggiornare", "#/mandati")}${voce(s.richieste, "urgente", "Vacanze da approvare", "#/vacanze")}
     <a class="sem" href="#/vacanze">${s.assenti.length ? stato("info", String(s.assenti.length)) : stato("ok", "0")}<span>${s.assenti.length ? "Assenti oggi: " + s.assenti.map(e).join(", ") : "Assenti oggi"}</span></a></div>`;
 }

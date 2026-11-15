@@ -61,6 +61,12 @@ service cloud.firestore {
       allow delete: if admin() || (attivo() && mio("uid"));
     }
 
+    // Pratiche amministrative fuori mandato: tutti gli utenti attivi le seguono; solo l'amministratore elimina
+    match /pratiche/{id} {
+      allow read, create, update: if attivo();
+      allow delete: if admin();
+    }
+
     // Vacanze: tutti vedono il piano; ognuno chiede le proprie, solo l'amministratore approva
     match /vacanze/{id} {
       allow read: if attivo();

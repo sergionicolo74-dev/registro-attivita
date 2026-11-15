@@ -11,6 +11,7 @@ import { vistaPresenze } from "./presenze.js";
 import { vistaUtenti } from "./utenti.js";
 import { vistaVacanze } from "./vacanze.js";
 import { vistaDashboard } from "./dashboard.js";
+import { vistaPratiche } from "./pratiche.js";
 
 const env = ambienteCorrente();
 
@@ -22,6 +23,7 @@ const MODULI = [
   { id: "registro", nome: "Registro ore", pronto: true },
   { id: "scadenziario", nome: "Scadenziario", pronto: true },
   { id: "compiti", nome: "Compiti", pronto: true },
+  { id: "pratiche", nome: "Pratiche", pronto: true },
   { id: "presenze", nome: "Presenze", pronto: true },
   { id: "vacanze", nome: "Vacanze", pronto: true },
   { id: "utenti", nome: "Utenti", pronto: true, admin: true },
@@ -88,6 +90,7 @@ async function instrada() {
     else if (mod === "mandati") await vistaMandati(vista);
     else if (mod === "scadenziario") await vistaScadenziario(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "presenze") await vistaPresenze(vista);
+    else if (mod === "pratiche") await vistaPratiche(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "compiti") await vistaCompiti(vista, id ? decodeURIComponent(id) : null);
     else if (mod === "vacanze") await vistaVacanze(vista);
     else if (mod === "utenti" && D.isAdmin()) await vistaUtenti(vista);

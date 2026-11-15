@@ -342,3 +342,18 @@ details.sez-d summary { cursor: pointer; }
 .scegli-col { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 4px; }
 .scegli-col input { width: auto; margin: 0; }
 .scegli-col label { color: var(--inchiostro); font-weight: 400; font-size: 13px; cursor: pointer; }
+
+/* Pratiche */
+.pratica { background: #fff; border: 1px solid var(--linea); border-left: 4px solid var(--linea); border-radius: var(--r); padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; }
+.pratica:hover { border-color: #B9B6AC; }
+.pratica.sollecitare { border-left-color: var(--rosso); }
+.pratica.oggi, .pratica.ritardo { border-left-color: var(--ambra); }
+.pratica .testa { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pratica .piede { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--tenue); align-items: center; }
+.fasi-pr { display: flex; list-style: none; margin: 2px 0; padding: 0; gap: 4px; font-size: 12px; }
+.fasi-pr li { flex: 1; padding: 4px 8px; background: var(--grigio-tinta); color: var(--tenue); border-radius: 4px; position: relative; }
+.fasi-pr li.fatto { background: var(--verde-tinta); color: var(--verde); }
+.fasi-pr li.fatto::before { content: "✓ "; font-weight: 700; }
+.fasi-pr li.ora { background: var(--inchiostro); color: #fff; font-weight: 600; }
+.fasi-pr li.ora::before { content: "▶ "; }
+.azioni-rapide { display: flex; flex-wrap: wrap; gap: 8px; }

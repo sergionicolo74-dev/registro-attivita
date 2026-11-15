@@ -17,6 +17,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Presenze: registrazione semplificata art. 73b OLL 1 (entrata, uscita e pausa), festivi ticinesi, saldi mese/anno, vacanze, panoramica dello studio, esportazione CSV annuale; il Registro ore usa la presenza del giorno
 - Vacanze: piano mensile visibile a tutti, richieste e approvazione, saldo giorni, avviso se una scadenza del responsabile cade durante l'assenza
 - Dashboard: filtri per periodo (settimana, mese, trimestre, anno) e persona; ore sui mandati, presenza e copertura per collaboratore, andamento, ore per mandato e per cliente, semafori dello studio
+- Pratiche: pratiche amministrative fuori mandato con fasi, date di controllo e solleciti, ore registrate e fatturazione (forfait o a ore, esportazione CSV)
 - Utenti: creazione dei collaboratori con email per scegliere la password
 
 ## Ambienti

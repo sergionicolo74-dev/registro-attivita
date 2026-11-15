@@ -13,6 +13,7 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 | `compiti/{id}` | autore, assegnatario, admin | autore, assegnatario, admin | promemoria, deleghe, pratiche |
 | `scadenze/{cliente_servizio_periodo}` | utenti attivi | utenti attivi (elimina: admin) | solo lo stato delle scadenze calcolate |
 | `presenze/{uid_data}` | proprietario, admin | proprietario, admin | entrata, uscita, pausa e ore lavorate al giorno |
+| `pratiche/{id}` | utenti attivi | utenti attivi (elimina: admin) | pratiche amministrative fuori mandato |
 | `vacanze/{id}` | utenti attivi | richiedente (solo se in attesa), admin | piano vacanze e assenze, approvazione |
 
 ## clienti
@@ -70,3 +71,10 @@ Nessun motivo. I giorni si contano lavorativi (festivi ticinesi esclusi). Le app
 
 Nessun dato proprio: legge registrazioni, presenze, vacanze, clienti, compiti e scadenze. Copertura = ore sui mandati / ore di presenza fino a ieri
 (≥ 95% completo, ≥ 80% quasi, sotto mancano ore). Valore alle tariffe del mandato contabilità o CHF 150/h.
+
+## pratiche
+
+`clienteId`, `titolo`, `tipo` (Assegni familiari, Rateizzazione imposte, …), `ente`, `fase` (In preparazione / In attesa dell'ente / Documenti richiesti / Conclusa / Annullata),
+`apertaIl`, `inviataIl`, `conclusaIl`, `prossimoControllo`, `concludereEntro`, `attesa` (giorni), `solleciti`, `ultimoSollecito`, `responsabileUid`, `responsabileNome`,
+`passi` [{`quando`, `nome`, `fase`, `testo`}], `fatturazione` {`modo` (Forfait / A ore / Non fatturare), `importo`, `tariffa`, `stato` (Da fatturare / Fatturata), `fatturataIl`, `importoFatturato`}.
+Le ore si registrano nel Registro con `praticaId` (e `mandato` = "pratica"): non entrano nei budget dei mandati.

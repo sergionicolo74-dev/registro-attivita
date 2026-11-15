@@ -190,3 +190,18 @@ console.log("Test compiti superati");
   const ok = (a, b, n) => { if (JSON.stringify(a) !== JSON.stringify(b)) { console.error("FALLITO", n, a, b); process.exitCode = 1; } else console.log("ok", n); };
   ok([c.c, c.a, c.b], ["#2a78d6", "#eb6834", "#1baf7a"], "colori: scelto e poi ordine di creazione");
 }
+
+// ---------- Pratiche ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  const oggi = new Date(2026, 10, 15);
+  const u = (p) => R.urgenzaPratica({ fase: "In attesa dell'ente", ...p }, oggi);
+  ok(u({ prossimoControllo: "2026-11-14" }), "sollecitare", "controllo passato: sollecitare");
+  ok(u({ prossimoControllo: "2026-11-17" }), "oggi", "controllo entro 2 giorni");
+  ok(u({ prossimoControllo: "2026-12-01", concludereEntro: "2026-11-10" }), "ritardo", "oltre la conclusione prevista");
+  ok(u({ prossimoControllo: "2026-12-01" }), null, "nei tempi");
+  ok(R.urgenzaPratica({ fase: "Conclusa", prossimoControllo: "2026-01-01" }, oggi), null, "conclusa");
+  ok([R.importoPratica({ fatturazione: { modo: "Forfait", importo: 250 } }, 600), R.importoPratica({ fatturazione: { modo: "A ore" } }, 90), R.importoPratica({ fatturazione: { modo: "A ore", tariffa: 120 } }, 45), R.importoPratica({ fatturazione: { modo: "Non fatturare" } }, 60)],
+    [250, 225, 90, 0], "importi: forfait, 1h30 a 150, 45 min a 120, non fatturare");
+}

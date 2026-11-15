@@ -8,6 +8,7 @@ let filtro = "";
 
 /** Tipo di mandato di una registrazione: quello scelto; per le vecchie, l'unico mandato attivo o la contabilità. */
 export function mandatoDiRegistrazione(r, mm) {
+  if (r.praticaId || r.mandato === "pratica") return "pratica"; // pratiche amministrative: fuori dai mandati
   if (r.mandato) return r.mandato;
   const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo).map(([k]) => k);
   if (att.length === 1) return att[0];
@@ -24,7 +25,7 @@ export async function vistaMandati(el) {
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
 
   // Totali per tipo
-  const tot = Object.fromEntries([...TIPI_MANDATO.map(([k]) => [k, { attivi: 0, daAgg: 0, budget: 0, minuti: 0, valore: 0 }]), ["nonAttribuito", { minuti: 0, valore: 0 }]]);
+  const tot = Object.fromEntries([...TIPI_MANDATO.map(([k]) => [k, { attivi: 0, daAgg: 0, budget: 0, minuti: 0, valore: 0 }]), ["nonAttribuito", { minuti: 0, valore: 0 }], ["pratica", { minuti: 0, valore: 0 }]]);
   for (const c of veri) for (const [k] of TIPI_MANDATO) {
     const m = mmDi[c.id][k]; if (!m.attivo) continue;
     tot[k].attivi++; if (daAggiornare(m)) tot[k].daAgg++; tot[k].budget += Number(m.budget) || 0;
@@ -61,6 +62,7 @@ export async function vistaMandati(el) {
         ${t.budget ? `<div class="tenue" style="font-size:12px;margin-left:110px">${sforo ? stato("scaduto", `Oltre il budget di CHF ${fmtNum(t.valore - t.budget, 0)}`) : `Usato ${Math.round(t.valore / t.budget * 100)}% del budget`}</div>` : ""}</div>`;
     }).join("")}
     </div>
+    ${tot.pratica.minuti ? `<p class="tenue" style="font-size:13px">${fmtOre(tot.pratica.minuti)} ore registrate su pratiche amministrative (fuori mandato, si fatturano a parte): <a href="#/pratiche">vedi Pratiche</a>.</p>` : ""}
     ${tot.nonAttribuito.minuti ? `<p class="tenue" style="font-size:13px">${fmtOre(tot.nonAttribuito.minuti)} ore registrate su clienti senza mandati attivi non sono attribuite.</p>` : ""}
   </section>` : ""}
 

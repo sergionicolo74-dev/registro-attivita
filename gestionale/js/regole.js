@@ -466,3 +466,37 @@ export function coloriUtenti(utenti) {
     .forEach((u, i) => { out[u.id] = COLORI_PERSONA[liberi.length ? liberi[i % liberi.length] : i % 8]; });
   return out;
 }
+
+// ---------- Pratiche amministrative (fuori mandato) ----------
+// Ogni tipo ha un ente abituale e un'attesa standard in giorni prima di controllare/sollecitare (modificabile per pratica).
+export const TIPI_PRATICA = [
+  ["Assegni familiari", "Cassa assegni familiari", 30], ["Estratto conto individuale AVS", "Cassa AVS", 30],
+  ["Affiliazione AVS", "Cassa AVS", 30], ["Rateizzazione imposte", "Ufficio esazione e condoni", 20],
+  ["Richiesta di proroga", "Ufficio di tassazione", 20], ["Reclamo / ricorso", "Ufficio di tassazione", 60],
+  ["Permesso di lavoro / dimora", "Ufficio della migrazione", 45], ["Iscrizione / modifica a Registro di commercio", "Registro di commercio", 15],
+  ["Rimborso imposta preventiva", "AFC", 45], ["Certificato / estratto", "", 15], ["Altro", "", 21]
+];
+export const ATTESA_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, , g]) => [t, g]));
+export const ENTE_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, en]) => [t, en]));
+export const FASI_PRATICA = ["In preparazione", "In attesa dell'ente", "Documenti richiesti", "Conclusa", "Annullata"];
+export const GIORNI_SOLLECITO = 10;     // dopo un sollecito si ricontrolla dopo 10 giorni
+export const GIORNI_DOCUMENTI = 5;      // documenti richiesti: da inviare entro 5 giorni
+export const praticaAperta = (p) => p.fase !== "Conclusa" && p.fase !== "Annullata";
+
+/** Urgenza: sollecitare (controllo scaduto) | oggi (controllo entro 2 giorni) | ritardo (oltre la data di conclusione prevista) | null */
+export function urgenzaPratica(p, oggi = new Date()) {
+  if (!praticaAperta(p)) return null;
+  const c = giorniA(p.prossimoControllo, oggi);
+  if (c != null && c < 0) return "sollecitare";
+  if (c != null && c <= 2) return "oggi";
+  const f = giorniA(p.concludereEntro, oggi);
+  if (f != null && f < 0) return "ritardo";
+  return null;
+}
+/** Importo da fatturare: forfait, oppure ore registrate sulla pratica × tariffa. */
+export function importoPratica(p, minutiRegistrati = 0, tariffaDefault = 150) {
+  const f = p.fatturazione || {};
+  if (f.modo === "Non fatturare") return 0;
+  if (f.modo === "Forfait") return Number(f.importo) || 0;
+  return Math.round(minutiRegistrati / 60 * (Number(f.tariffa) || tariffaDefault) * 100) / 100;
+}

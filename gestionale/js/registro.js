@@ -1,7 +1,7 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
-import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti } from "./regole.js";
+import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
 const TIPI = [["lavoro", "Lavoro svolto"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
@@ -13,8 +13,8 @@ let modifica = null; // registrazione in modifica
 export async function vistaRegistro(el) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
   const lun = lunedi(giorno), dom = aggiungiGiorni(lun, 6);
-  const [clienti, reg, profilo, presOggi] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
-    D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => [])]);
+  const [clienti, reg, profilo, presOggi, pratiche] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
+    D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => []), D.listaPratiche().catch(() => [])]);
   const nomeCli = Object.fromEntries(clienti.map(c => [c.id, `${c.codice} · ${c.ragioneSociale}`]));
   const settimana = reg.filter(r => !admin || !soloMie || r.autoreUid === u.uid);
   const delGiorno = settimana.filter(r => r.data === giorno).sort((a, b) => String(b.creato || b.aggiornato || "").localeCompare(String(a.creato || a.aggiornato || "")));
@@ -53,7 +53,7 @@ export async function vistaRegistro(el) {
       <div class="largo"><label for="f_cliente">Cliente</label>
         <input id="f_cliente" list="lista-clienti" autocomplete="off" placeholder="Scrivi nome o codice" value="${e(m.clienteId ? nomeCli[m.clienteId] || "" : "")}">
         <datalist id="lista-clienti">${clientiOrd.map(c => `<option value="${e(nomeCli[c.id])}"></option>`).join("")}</datalist></div>
-      <div class="solo-lavoro"><label for="f_mandato">Mandato</label><select id="f_mandato" name="mandato"></select></div>
+      <div class="solo-lavoro"><label for="f_mandato">Mandato o pratica</label><select id="f_mandato" name="mandato"></select></div>
       <div class="largo"><label for="f_descrizione" id="lbl-desc">Descrizione</label>
         <div style="display:flex;gap:8px;align-items:flex-start"><textarea id="f_descrizione" name="descrizione" rows="3" style="flex:1">${e(m.descrizione || "")}</textarea>
         <button type="button" class="btn" id="detta" title="Detta a voce" aria-label="Detta a voce">🎤</button></div></div>
@@ -117,9 +117,12 @@ export async function vistaRegistro(el) {
     const mm = cli ? mandatiDi(cli) : null;
     const att = mm ? TIPI_MANDATO.filter(([k]) => mm[k].attivo) : [];
     const opz = att.length ? att : TIPI_MANDATO;
-    form.mandato.innerHTML = opz.map(([k, n]) => `<option value="${k}"${k === scelto ? " selected" : ""}>${e(n)}</option>`).join("");
+    // Pratiche amministrative aperte del cliente (fuori mandato); in modifica anche quella già scelta
+    const prat = cli ? pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto)) : [];
+    form.mandato.innerHTML = opz.map(([k, n]) => `<option value="${k}"${k === scelto ? " selected" : ""}>${e(n)}</option>`).join("")
+      + (prat.length ? `<optgroup label="Pratiche (fuori mandato)">${prat.map(p => `<option value="pratica:${e(p.id)}"${"pratica:" + p.id === scelto ? " selected" : ""}>${e(p.titolo || p.tipo)}</option>`).join("")}</optgroup>` : "");
   };
-  aggiornaMandati(m.mandato);
+  aggiornaMandati(m.praticaId ? "pratica:" + m.praticaId : m.mandato);
   el.querySelector("#f_cliente").addEventListener("change", () => aggiornaMandati());
   el.querySelector("#f_cliente").addEventListener("input", () => aggiornaMandati());
 
@@ -161,7 +164,8 @@ export async function vistaRegistro(el) {
     if (t === "lavoro" && !minuti) { form.minuti.focus(); avviso("Indica la durata"); return; }
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
       clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatturabile.checked : false, tipo: t, descrizione,
-      mandato: t === "lavoro" ? form.mandato.value || null : null };
+      mandato: t === "lavoro" ? (form.mandato.value.startsWith("pratica:") ? "pratica" : form.mandato.value || null) : null,
+      praticaId: t === "lavoro" && form.mandato.value.startsWith("pratica:") ? form.mandato.value.slice(8) : null };
     const id = await D.salvaRegistrazione(dati);
     if (t === "lavoro" && !modifica && form.riscontro.checked) {
       await D.salvaCompito({ clienteId: cli.id, titolo: descrizione, tipo: "Attesa riscontro", stato: "In attesa riscontro",

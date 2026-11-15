@@ -1,0 +1,168 @@
+// Livello dati: l'UNICO file che parla con il database.
+// Per spostare il gestionale su un altro sistema (es. server proprio) si riscrive solo questo file,
+// mantenendo gli stessi nomi di funzione. Il modello dati è descritto in docs/modello-dati.md.
+
+import { AMBIENTI } from "./config.js";
+
+const V = "10.12.2";
+let fb = null;          // moduli Firebase caricati
+let db = null, auth = null;
+let demo = null;        // archivio in memoria per l'ambiente demo
+let utente = null;      // { uid, email, nome, ruolo }
+let authListeners = [];
+
+const ADMIN = () => utente && utente.ruolo === "admin";
+
+export async function init(env) {
+  if (!AMBIENTI[env].firebase) { demo = creaDemo(); return; }
+  const [app, a, f] = await Promise.all([
+    import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
+    import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
+    import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
+  ]);
+  fb = { ...a, ...f };
+  const fapp = app.initializeApp(AMBIENTI[env].firebase);
+  auth = a.getAuth(fapp);
+  db = f.getFirestore(fapp);
+  a.onAuthStateChanged(auth, async (u) => {
+    if (!u) { utente = null; authListeners.forEach(cb => cb(null)); return; }
+    let prof = null;
+    try { prof = (await f.getDoc(f.doc(db, "utenti", u.uid))).data() || null; } catch (e) { prof = null; }
+    utente = { uid: u.uid, email: u.email, nome: prof?.nome || u.email, ruolo: prof?.ruolo || null, attivo: prof?.attivo !== false };
+    authListeners.forEach(cb => cb(utente));
+  });
+}
+
+export function onAuth(cb) {
+  authListeners.push(cb);
+  if (demo) setTimeout(() => cb(utente), 0);
+}
+
+export async function login(email, password) {
+  if (demo) { utente = { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
+  await fb.signInWithEmailAndPassword(auth, email, password);
+}
+export async function logout() {
+  if (demo) { utente = null; authListeners.forEach(cb => cb(null)); return; }
+  await fb.signOut(auth);
+}
+export async function recuperaPassword(email) {
+  if (demo) return;
+  await fb.sendPasswordResetEmail(auth, email);
+}
+export const utenteCorrente = () => utente;
+export const isAdmin = ADMIN;
+
+// ---------- primitive comuni ----------
+function nuovoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+const ora = () => new Date().toISOString();
+
+async function lista(col, filtri = []) {
+  if (demo) return Object.values(demo[col] || {}).filter(d => filtri.every(([k, , v]) => d[k] === v)).map(x => ({ ...x }));
+  const q = fb.query(fb.collection(db, col), ...filtri.map(([k, op, v]) => fb.where(k, op, v)));
+  const s = await fb.getDocs(q);
+  return s.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function leggi(col, id) {
+  if (demo) return demo[col]?.[id] ? { ...demo[col][id] } : null;
+  const s = await fb.getDoc(fb.doc(db, col, id));
+  return s.exists() ? { id: s.id, ...s.data() } : null;
+}
+async function scrivi(col, obj) {
+  const id = obj.id || nuovoId();
+  const { id: _, ...dati } = obj;
+  dati.aggiornato = ora();
+  dati.aggiornatoDa = utente?.uid || null;
+  if (demo) { demo[col] = demo[col] || {}; demo[col][id] = { ...(demo[col][id] || {}), ...dati, id }; return id; }
+  await fb.setDoc(fb.doc(db, col, id), dati, { merge: true });
+  return id;
+}
+async function elimina(col, id) {
+  if (demo) { delete demo[col]?.[id]; return; }
+  await fb.deleteDoc(fb.doc(db, col, id));
+}
+/** Scrittura a blocchi (max 400 per lotto) per gli import. docs: [{col, id?, ...dati}] */
+export async function scriviMolti(docs, avanzamento = () => {}) {
+  let fatti = 0;
+  for (let i = 0; i < docs.length; i += 400) {
+    const parte = docs.slice(i, i + 400);
+    if (demo) { for (const d of parte) { const { col, ...r } = d; await scrivi(col, r); } }
+    else {
+      const b = fb.writeBatch(db);
+      for (const d of parte) {
+        const { col, id, ...r } = d;
+        b.set(fb.doc(db, col, id || nuovoId()), { ...r, aggiornato: ora(), aggiornatoDa: utente.uid }, { merge: true });
+      }
+      await b.commit();
+    }
+    fatti += parte.length; avanzamento(fatti, docs.length);
+  }
+}
+
+// ---------- utenti ----------
+export const listaUtenti = () => lista("utenti");
+
+// ---------- clienti ----------
+export const listaClienti = () => lista("clienti");
+export const leggiCliente = (id) => leggi("clienti", id);
+export const salvaCliente = (c) => scrivi("clienti", c);
+export const leggiKycCliente = (id) => ADMIN() ? leggi("clienti_kyc", id) : Promise.resolve(null);
+export const salvaKycCliente = (id, k) => scrivi("clienti_kyc", { ...k, id });
+
+// ---------- persone ----------
+export const listaPersone = (clienteId) => lista("persone", [["clienteId", "==", clienteId]]);
+export const salvaPersona = (p) => scrivi("persone", p);
+export async function eliminaPersona(id) { await elimina("persone", id); if (ADMIN()) await elimina("persone_kyc", id); }
+export const listaKycPersone = (clienteId) => ADMIN() ? lista("persone_kyc", [["clienteId", "==", clienteId]]) : Promise.resolve([]);
+export const listaTuttiKycPersone = () => ADMIN() ? lista("persone_kyc") : Promise.resolve([]);
+export const salvaKycPersona = (id, k) => scrivi("persone_kyc", { ...k, id });
+
+// ---------- registrazioni (ore e diario) ----------
+// Un utente normale vede solo le proprie: il filtro è obbligatorio anche per le regole di Firestore.
+export function listaRegistrazioni(clienteId) {
+  const f = [];
+  if (clienteId) f.push(["clienteId", "==", clienteId]);
+  if (!ADMIN()) f.push(["autoreUid", "==", utente.uid]);
+  return lista("registrazioni", f);
+}
+export const salvaRegistrazione = (r) => scrivi("registrazioni", { autoreUid: utente.uid, autoreNome: utente.nome, ...r });
+
+// ---------- compiti ----------
+export async function listaCompiti(clienteId) {
+  const base = clienteId ? [["clienteId", "==", clienteId]] : [];
+  if (ADMIN()) return lista("compiti", base);
+  const [a, b] = await Promise.all([
+    lista("compiti", [...base, ["assegnatoUid", "==", utente.uid]]),
+    lista("compiti", [...base, ["autoreUid", "==", utente.uid]])
+  ]);
+  const m = new Map([...a, ...b].map(x => [x.id, x]));
+  return [...m.values()];
+}
+export const salvaCompito = (c) => scrivi("compiti", { autoreUid: utente.uid, ...c });
+
+// ---------- dati demo (inventati) ----------
+function creaDemo() {
+  const c = (id, codice, rs, forma, extra = {}) => [id, { id, codice, ragioneSociale: rs, forma, stato: "Attivo", responsabile: "Utente demo",
+    servizi: { contabilita: true, iva: true, dichiarazione: true }, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
+  const clienti = Object.fromEntries([
+    c("d1", "C001", "Alfa Servizi SA", "SA", { localita: "Lugano", cantone: "TI", funzione: { tipo: "Amministratore", persona: "Utente demo", firma: "Collettiva a due" } }),
+    c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { localita: "Bellinzona", cantone: "TI", mandato: { tipo: "Completo", stato: "Firmato aggiornato", dataFirma: "2026-03-01", aggiornareEntro: "2027-12-31" } }),
+    c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true }),
+    ["d0", { id: "d0", codice: "C000", ragioneSociale: "Clienti occasionali", forma: "Altro", stato: "Attivo", servizi: {}, mandato: {} }]
+  ]);
+  return {
+    clienti,
+    clienti_kyc: { d1: { id: "d1", stato: "Da aggiornare", rischio: "Medio", prossimaRevisione: "2026-12-15" } },
+    persone: {
+      p1: { id: "p1", clienteId: "d1", cognome: "Esempio", nome: "Mario", ruolo: "Socio e amministratore", principale: true, email: "mario@example.com", telefono: "+41 79 000 00 00", canale: "Email", lingua: "Italiano" },
+      p2: { id: "p2", clienteId: "d1", cognome: "Prova", nome: "Lucia", ruolo: "Contatto contabilità", principale: false, email: "lucia@example.com", canale: "WhatsApp", lingua: "Italiano" }
+    },
+    persone_kyc: { p1: { id: "p1", clienteId: "d1", nazionalita: "Italia", domicilio: "Italia", tipoDocumento: "Passaporto", scadenzaDocumento: "2026-12-20", copiaArchivio: true } },
+    registrazioni: {
+      r1: { id: "r1", clienteId: "d1", data: "2026-11-10", minuti: 45, fatturabile: true, tipo: "lavoro", descrizione: "Contabilità ottobre", autoreUid: "demo", autoreNome: "Utente demo" },
+      r2: { id: "r2", clienteId: "d1", data: "2026-11-12", minuti: 0, fatturabile: false, tipo: "nota", descrizione: "Deciso di passare alla contabilità mensile", autoreUid: "demo", autoreNome: "Utente demo" }
+    },
+    compiti: { k1: { id: "k1", clienteId: "d1", titolo: "Aggiornare mandato", stato: "Da fare", scadenza: "2026-12-31", visibilita: "studio", autoreUid: "demo" } },
+    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin" } }
+  };
+}

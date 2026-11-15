@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gestionale studio</title>
+<meta name="theme-color" content="#C81E1E">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="banner-env" hidden></div>
+
+  <!-- Accesso -->
+  <section id="login" hidden>
+    <form class="login-card" id="login-form" autocomplete="on">
+      <h1>Gestionale <span>studio</span></h1>
+      <p class="sub" id="login-env"></p>
+      <label for="email">Email</label>
+      <input id="email" type="email" required autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" type="password" required autocomplete="current-password">
+      <button type="submit" class="btn primario">Accedi</button>
+      <button type="button" class="link" id="pw-dimenticata">Password dimenticata?</button>
+      <p class="errore" id="login-errore" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app" hidden>
+    <aside class="menu" aria-label="Moduli">
+      <div class="marchio">Gestionale <span>studio</span></div>
+      <nav id="nav"></nav>
+      <div class="utente">
+        <div id="utente-nome"></div>
+        <div id="utente-ruolo" class="tenue"></div>
+        <button class="link" id="esci">Esci</button>
+      </div>
+    </aside>
+    <main id="vista" tabindex="-1"></main>
+  </div>
+
+  <div id="avviso" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

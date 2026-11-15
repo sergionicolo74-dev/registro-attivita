@@ -1,0 +1,57 @@
+rules_version = '2';
+// Regole di accesso del gestionale.
+// Ruoli nel documento utenti/{uid}: ruolo = "admin" (vede e modifica tutto) oppure "utente" (vede solo i propri dati).
+// Il primo amministratore si crea a mano dalla console (vedi README).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function loggato() { return request.auth != null; }
+    function profilo() { return get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data; }
+    function attivo() { return loggato() && exists(/databases/$(database)/documents/utenti/$(request.auth.uid)) && profilo().attivo != false; }
+    function admin() { return attivo() && profilo().ruolo == "admin"; }
+    function mio(campo) { return resource.data[campo] == request.auth.uid; }
+
+    // Profili utente: ognuno legge il proprio, l'amministratore gestisce tutti
+    match /utenti/{uid} {
+      allow read: if loggato() && (request.auth.uid == uid || admin());
+      allow write: if admin();
+    }
+
+    // Anagrafica: tutti gli utenti attivi leggono, solo gli amministratori modificano
+    match /clienti/{id} {
+      allow read: if attivo();
+      allow write: if admin();
+    }
+    // Persone e contatti: tutti leggono e aggiornano i contatti, solo gli amministratori eliminano
+    match /persone/{id} {
+      allow read, create, update: if attivo();
+      allow delete: if admin();
+    }
+    // Dati KYC (clienti e persone): solo amministratori
+    match /clienti_kyc/{id} { allow read, write: if admin(); }
+    match /persone_kyc/{id} { allow read, write: if admin(); }
+
+    // Ore e diario: ognuno vede e scrive le proprie, l'amministratore tutte
+    match /registrazioni/{id} {
+      allow read: if admin() || (attivo() && mio("autoreUid"));
+      allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
+      allow update: if admin() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid);
+      allow delete: if admin() || (attivo() && mio("autoreUid"));
+    }
+
+    // Compiti: ognuno vede quelli creati da sé o assegnati a sé
+    match /compiti/{id} {
+      allow read: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
+      allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
+      allow update: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
+      allow delete: if admin() || (attivo() && mio("autoreUid"));
+    }
+
+    // SOLO NEL PROGETTO DI PROVA (attivita-88590): mantiene funzionante il vecchio registro.
+    // Nel progetto di produzione (Zurigo) questo blocco si può togliere.
+    match /registri/{doc} { allow read, write: if loggato(); }
+
+    // Tutto il resto è chiuso
+    match /{altro=**} { allow read, write: if false; }
+  }
+}

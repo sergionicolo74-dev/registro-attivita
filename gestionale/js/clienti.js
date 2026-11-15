@@ -1,7 +1,7 @@
 // Modulo Clienti: elenco e scheda cliente a schede.
 import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
-import { fmtData, fmtOre, normNome, statoScadenza, SERVIZI, RUOLI_PERSONA } from "./regole.js";
+import { fmtData, fmtOre, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA } from "./regole.js";
 
 const STATI_MANDATO = ["Firmato aggiornato", "Da aggiornare", "Mancante"];
 const TIPI_MANDATO = ["Contabilità e fiscale", "Amministrazione fiduciaria", "Domiciliazione", "Completo", "Altro"];
@@ -26,7 +26,12 @@ function segnaleMandato(c) {
 // ======================= ELENCO =======================
 export async function vistaClienti(el) {
   el.innerHTML = `<div class="vuoto">Caricamento…</div>`;
-  const [clienti, kycP] = await Promise.all([D.listaClienti(), D.listaTuttiKycPersone()]);
+  const admin = D.isAdmin();
+  const [clienti, kycP, persone, kycC] = await Promise.all([D.listaClienti(), D.listaTuttiKycPersone(), D.listaTuttePersone(), D.listaTuttiKycClienti()]);
+  const nPers = {}; persone.forEach(p => nPers[p.clienteId] = (nPers[p.clienteId] || 0) + 1);
+  const kycPer = Object.fromEntries(kycC.map(k => [k.id, k]));
+  const manca = Object.fromEntries(clienti.map(c => [c.id, campiMancanti(c, nPers[c.id] || 0, admin ? (kycPer[c.id] || {}) : null)]));
+  const incompleti = clienti.filter(c => manca[c.id].length).length;
   const docPerCliente = {};
   for (const k of kycP) {
     const s = statoScadenza(k.scadenzaDocumento, 60);
@@ -37,34 +42,38 @@ export async function vistaClienti(el) {
 
   el.innerHTML = `
     <div class="testata">
-      <div><h1>Clienti</h1><div class="tenue">${clienti.length} clienti · ${daAggiornare} mandati da aggiornare</div></div>
+      <div><h1>Clienti</h1><div class="tenue">${clienti.length} clienti · ${daAggiornare} mandati da aggiornare · ${incompleti} con dati da completare</div></div>
       <div class="barra">
         <input type="search" id="cerca" placeholder="Cerca per nome o codice" aria-label="Cerca cliente">
         <select id="filtro" aria-label="Filtro">
-          <option value="">Tutti</option><option value="mandato">Mandato da aggiornare</option>
+          <option value="">Tutti</option><option value="incompleti">Dati da completare</option><option value="mandato">Mandato da aggiornare</option>
           ${D.isAdmin() ? '<option value="doc">Documenti in scadenza</option>' : ""}
           <option value="funzione">Con funzione dello studio</option>
         </select>
         ${D.isAdmin() ? '<button class="btn primario" id="nuovo">Nuovo cliente</button>' : ""}
       </div>
     </div>
-    <table class="tabella"><thead><tr><th>Codice</th><th>Cliente</th><th>Responsabile</th><th>Servizi</th><th>Segnali</th></tr></thead><tbody id="righe"></tbody></table>`;
+    <table class="tabella"><thead><tr><th>Codice</th><th>Cliente</th><th>Responsabile</th><th>Servizi</th><th>Segnali</th><th id="col-manca" hidden>Da completare</th></tr></thead><tbody id="righe"></tbody></table>`;
 
   const disegna = () => {
     const q = normNome(el.querySelector("#cerca").value), f = el.querySelector("#filtro").value;
     const righe = clienti.filter(c => {
       if (q && !normNome(`${c.codice} ${c.ragioneSociale}`).includes(q)) return false;
+      if (f === "incompleti") return manca[c.id].length > 0;
       if (f === "mandato") return c.mandato?.stato !== "Firmato aggiornato" && c.codice !== "C000";
       if (f === "doc") return !!docPerCliente[c.id];
       if (f === "funzione") return !!c.funzione?.tipo;
       return true;
     });
+    const vediManca = f === "incompleti";
+    el.querySelector("#col-manca").hidden = !vediManca;
     el.querySelector("#righe").innerHTML = righe.length ? righe.map(c => {
       const nServ = Object.values(c.servizi || {}).filter(Boolean).length;
       const doc = docPerCliente[c.id] ? stato(docPerCliente[c.id] === 2 ? "scaduto" : "urgente", "Documento in scadenza") : "";
       return `<tr class="cliccabile" data-id="${e(c.id)}" tabindex="0"><td>${e(c.codice)}</td><td><strong>${e(c.ragioneSociale)}</strong><div class="tenue">${e([c.forma, c.localita].filter(Boolean).join(" · "))}</div></td>
-        <td>${e(c.responsabile || "")}</td><td class="num">${nServ || ""}</td><td><div class="segnali">${c.codice === "C000" ? "" : segnaleMandato(c)}${doc}${c.funzione?.tipo ? stato("info", c.funzione.tipo) : ""}</div></td></tr>`;
-    }).join("") : `<tr><td colspan="5" class="vuoto">Nessun cliente trovato.</td></tr>`;
+        <td>${e(c.responsabile || "")}</td><td class="num">${nServ || ""}</td><td><div class="segnali">${c.codice === "C000" ? "" : segnaleMandato(c)}${doc}${c.funzione?.tipo ? stato("info", c.funzione.tipo) : ""}${!vediManca && manca[c.id].length ? stato("neutro", `${manca[c.id].length} dati da completare`) : ""}</div></td>
+        ${vediManca ? `<td>${e(manca[c.id].join(", "))}</td>` : ""}</tr>`;
+    }).join("") : `<tr><td colspan="6" class="vuoto">Nessun cliente trovato.</td></tr>`;
   };
   disegna();
   el.querySelector("#cerca").addEventListener("input", disegna);
@@ -89,6 +98,7 @@ export async function vistaScheda(el, id) {
   const kycPer = Object.fromEntries(kycP.map(k => [k.id, k]));
   const docScad = kycP.map(k => ({ k, s: statoScadenza(k.scadenzaDocumento, 60) })).filter(x => x.s === "scaduto" || x.s === "urgente");
   const principale = persone.find(p => p.principale) || persone[0];
+  const mancanti = campiMancanti(c, persone.length, D.isAdmin() ? (kyc || {}) : null);
 
   el.innerHTML = `
     <a href="#/clienti" class="tenue">← Clienti</a>
@@ -108,6 +118,7 @@ export async function vistaScheda(el, id) {
         <div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>
         <div><span>Mandato da aggiornare entro</span>${e(fmtData(c.mandato?.aggiornareEntro) || "–")}</div>
       </div>
+      ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
     <div class="schede" role="tablist">${SCHEDE.map(([k, n]) => `<button role="tab" aria-selected="${k === scheda}" data-k="${k}">${e(n)}${k === "persone" ? ` (${persone.length})` : ""}</button>`).join("")}</div>
     <div id="pannello"></div>`;
@@ -255,7 +266,7 @@ async function schedaCompiti(p, c) {
   p.innerHTML = `<div class="pannello"><h3 style="font-size:14px;margin-bottom:10px">Compiti del cliente</h3>
     ${comp.length ? `<table class="tabella"><thead><tr><th>Compito</th><th>Assegnato</th><th>Scadenza</th><th>Stato</th></tr></thead><tbody>${comp.map(k => `<tr>
       <td>${e(k.titolo)}</td><td>${e(k.assegnatoNome || "")}</td><td>${e(fmtData(k.scadenza))}</td>
-      <td>${k.completatoIl ? stato("ok", "Fatto") : k.scadenza ? statoData(k.scadenza, "Entro", 5) : stato("neutro", k.stato || "Aperto")}</td></tr>`).join("")}</tbody></table>`
+      <td>${k.completatoIl || k.stato === "Fatto" ? stato("ok", "Fatto") : `${stato("neutro", k.stato || "Aperto")} ${k.scadenza ? statoData(k.scadenza, "Entro", 5) : ""}`}</td></tr>`).join("")}</tbody></table>`
       : `<div class="vuoto">Nessun compito.</div>`}
     <p class="tenue" style="margin-top:12px">Creazione e gestione dei compiti arrivano con il modulo Compiti (fase 2).</p></div>`;
 }

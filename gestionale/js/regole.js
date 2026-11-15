@@ -73,3 +73,46 @@ export const SERVIZI = [
 
 export const RUOLI_PERSONA = ["Socio", "Amministratore", "Socio e amministratore", "Gerente", "Socio e gerente",
   "Membro CdA", "Direttore", "Avente diritto economico", "Procuratore", "Contatto contabilità", "Contatto salari", "Altro"];
+
+/** Dati mancanti di un cliente, per la tabella "Da completare". kyc = null se l'utente non è amministratore. */
+export function campiMancanti(c, nPersone, kyc) {
+  if (c.codice === "C000") return [];
+  const m = [];
+  const vuoto = v => v == null || String(v).trim() === "";
+  const pf = c.forma === "Persona fisica";
+  if (vuoto(c.forma)) m.push("Forma giuridica");
+  if (!pf && vuoto(c.idi)) m.push("IDI");
+  if (vuoto(c.responsabile)) m.push("Responsabile");
+  if (vuoto(c.indirizzo) || vuoto(c.npa) || vuoto(c.localita)) m.push("Indirizzo");
+  if (!pf && vuoto(c.chiusuraEsercizio)) m.push("Chiusura esercizio");
+  if (vuoto(c.mandato?.tipo)) m.push("Tipo mandato");
+  if (vuoto(c.mandato?.stato)) m.push("Stato mandato");
+  if (!Object.values(c.servizi || {}).some(Boolean)) m.push("Servizi");
+  if (c.servizi?.iva && vuoto(c.iva?.periodicita)) m.push("Periodicità IVA");
+  if (!nPersone) m.push("Persone di contatto");
+  if (kyc !== null && (vuoto(kyc?.stato) || vuoto(kyc?.rischio))) m.push("KYC e rischio");
+  return m;
+}
+
+/** Data di oggi in ISO, ora locale. */
+export function oggiISO(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Aggiunge giorni a una data ISO. */
+export function aggiungiGiorni(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
+/** Lunedì della settimana di una data ISO. */
+export function lunedi(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const g = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = domenica
+  return aggiungiGiorni(iso, g === 0 ? -6 : 1 - g);
+}
+/** 90 -> "1h 30", 45 -> "0h 45" */
+export function fmtDurata(min) {
+  min = Math.round(min || 0);
+  return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}`;
+}
+export const GIORNI = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];

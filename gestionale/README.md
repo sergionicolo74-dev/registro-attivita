@@ -9,7 +9,9 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Clienti: elenco con ricerca e filtri, scheda a schede (Persone, Dati e mandato, Servizi e scadenze, Compiti, Ore e diario, Note)
 - Dati KYC (clienti e persone) separati e visibili solo agli amministratori
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
-- Moduli Registro ore, Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
+- Completezza: per ogni cliente l'elenco dei dati mancanti (filtro "Dati da completare")
+- Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
+- Moduli Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
 
 ## Ambienti
 

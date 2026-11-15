@@ -108,11 +108,13 @@ export const leggiCliente = (id) => leggi("clienti", id);
 export const salvaCliente = (c) => scrivi("clienti", c);
 export const leggiKycCliente = (id) => ADMIN() ? leggi("clienti_kyc", id) : Promise.resolve(null);
 export const salvaKycCliente = (id, k) => scrivi("clienti_kyc", { ...k, id });
+export const listaTuttiKycClienti = () => ADMIN() ? lista("clienti_kyc") : Promise.resolve([]);
 
 // ---------- persone ----------
 export const listaPersone = (clienteId) => lista("persone", [["clienteId", "==", clienteId]]);
 export const salvaPersona = (p) => scrivi("persone", p);
 export async function eliminaPersona(id) { await elimina("persone", id); if (ADMIN()) await elimina("persone_kyc", id); }
+export const listaTuttePersone = () => lista("persone");
 export const listaKycPersone = (clienteId) => ADMIN() ? lista("persone_kyc", [["clienteId", "==", clienteId]]) : Promise.resolve([]);
 export const listaTuttiKycPersone = () => ADMIN() ? lista("persone_kyc") : Promise.resolve([]);
 export const salvaKycPersona = (id, k) => scrivi("persone_kyc", { ...k, id });
@@ -125,6 +127,16 @@ export function listaRegistrazioni(clienteId) {
   if (!ADMIN()) f.push(["autoreUid", "==", utente.uid]);
   return lista("registrazioni", f);
 }
+/** Registrazioni tra due date (ISO, incluse). Utente normale: solo le proprie (filtro data lato app, nessun indice composto). */
+export async function listaRegistrazioniPeriodo(da, a) {
+  if (ADMIN()) {
+    if (demo) return (await lista("registrazioni")).filter(r => r.data >= da && r.data <= a);
+    const q = fb.query(fb.collection(db, "registrazioni"), fb.where("data", ">=", da), fb.where("data", "<=", a));
+    return (await fb.getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+  return (await lista("registrazioni", [["autoreUid", "==", utente.uid]])).filter(r => r.data >= da && r.data <= a);
+}
+export const eliminaRegistrazione = (id) => elimina("registrazioni", id);
 export const salvaRegistrazione = (r) => scrivi("registrazioni", { autoreUid: utente.uid, autoreNome: utente.nome, ...r });
 
 // ---------- compiti ----------
@@ -142,6 +154,7 @@ export const salvaCompito = (c) => scrivi("compiti", { autoreUid: utente.uid, ..
 
 // ---------- dati demo (inventati) ----------
 function creaDemo() {
+  const t = new Date(), oggi = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
   const c = (id, codice, rs, forma, extra = {}) => [id, { id, codice, ragioneSociale: rs, forma, stato: "Attivo", responsabile: "Utente demo",
     servizi: { contabilita: true, iva: true, dichiarazione: true }, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
   const clienti = Object.fromEntries([
@@ -160,6 +173,8 @@ function creaDemo() {
     persone_kyc: { p1: { id: "p1", clienteId: "d1", nazionalita: "Italia", domicilio: "Italia", tipoDocumento: "Passaporto", scadenzaDocumento: "2026-12-20", copiaArchivio: true } },
     registrazioni: {
       r1: { id: "r1", clienteId: "d1", data: "2026-11-10", minuti: 45, fatturabile: true, tipo: "lavoro", descrizione: "Contabilità ottobre", autoreUid: "demo", autoreNome: "Utente demo" },
+      r3: { id: "r3", clienteId: "d2", data: oggi, minuti: 90, fatturabile: true, tipo: "lavoro", descrizione: "Rendiconto IVA Q3", autoreUid: "demo", autoreNome: "Utente demo", creato: "1" },
+      r4: { id: "r4", clienteId: "d3", data: oggi, minuti: 30, fatturabile: false, tipo: "lavoro", descrizione: "Telefonata di cortesia", autoreUid: "demo", autoreNome: "Utente demo", creato: "2" },
       r2: { id: "r2", clienteId: "d1", data: "2026-11-12", minuti: 0, fatturabile: false, tipo: "nota", descrizione: "Deciso di passare alla contabilità mensile", autoreUid: "demo", autoreNome: "Utente demo" }
     },
     compiti: { k1: { id: "k1", clienteId: "d1", titolo: "Aggiornare mandato", stato: "Da fare", scadenza: "2026-12-31", visibilita: "studio", autoreUid: "demo" } },

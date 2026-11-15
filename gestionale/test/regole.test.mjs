@@ -205,3 +205,16 @@ console.log("Test compiti superati");
   ok([R.importoPratica({ fatturazione: { modo: "Forfait", importo: 250 } }, 600), R.importoPratica({ fatturazione: { modo: "A ore" } }, 90), R.importoPratica({ fatturazione: { modo: "A ore", tariffa: 120 } }, 45), R.importoPratica({ fatturazione: { modo: "Non fatturare" } }, 60)],
     [250, 225, 90, 0], "importi: forfait, 1h30 a 150, 45 min a 120, non fatturare");
 }
+
+// ---------- Persone fisiche ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  const pf = { id: "p", codice: "C010", forma: "Persona fisica", stato: "Attivo", servizi: { dichiarazione: true }, df: { documenti: { salario: true, conti: true } } };
+  const d = R.scadenzeCliente(pf, 2026).find(o => o.servizio === "dichiarazione" && o.periodo === "2025");
+  ok([d.scadenza, d.proroghe, d.annuale], ["2026-04-30", ["2026-09-30", "2026-12-31"], true], "DF persona fisica 2025: 30.04.2026, proroghe 30.09 e 31.12");
+  ok(R.scadenzeCliente({ ...pf, forma: "SA" }, 2026).find(o => o.servizio === "dichiarazione").scadenza, "2026-06-30", "DF società resta al 30.06");
+  ok(R.campiMancanti(pf, 0, null), ["Responsabile", "Indirizzo", "Stato mandato Contabilità e Tax", "Data di nascita", "Stato civile", "Comune di domicilio fiscale"], "dati mancanti persona fisica");
+  ok(R.campiMancanti({ ...pf, df: {} }, 0, null).includes("Documenti per la dichiarazione"), true, "documenti DF da scegliere");
+  ok(R.urgenzaScadenza({ data: "2026-04-30", annuale: true, stato: "Da fare" }, new Date(2026, 3, 1)), "preavviso", "preavviso dal 31.03");
+}

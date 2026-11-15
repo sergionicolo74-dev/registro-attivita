@@ -3,7 +3,14 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, giorniA, normNome, oggiISO, aggiungiGiorni, scadenzeCliente, conStato, urgenzaScadenza, chiusa,
-  SERVIZI_SCADENZE, NOME_SCADENZA, STATI_SCADENZA, INIZIO_SCADENZIARIO } from "./regole.js";
+  SERVIZI_SCADENZE, NOME_SCADENZA, STATI_SCADENZA, INIZIO_SCADENZIARIO, DOCUMENTI_DF, documentiDF } from "./regole.js";
+
+/** Documenti DF da raccogliere per questa scadenza: [ricevuti, totali] oppure null. */
+function contaDoc(o) {
+  if (o.servizio !== "dichiarazione" || o.cliente?.forma !== "Persona fisica") return null;
+  const l = documentiDF(o.cliente);
+  return l.length ? [l.filter(k => o.documenti?.[k]).length, l.length] : null;
+}
 
 let vista = "elenco";     // elenco | griglia
 let filtroChi = null;     // null = predefinito (admin: tutti, utente: me) | me | tutti | <uid>
@@ -102,7 +109,7 @@ export async function vistaScadenziario(el, clienteFiltro) {
       const quando = chiusa(o) ? "" : gg < 0 ? `${-gg} ${-gg === 1 ? "giorno" : "giorni"} fa` : gg === 0 ? "oggi" : `tra ${gg} ${gg === 1 ? "giorno" : "giorni"}`;
       return `<tr class="cliccabile" data-id="${e(o.id)}" tabindex="0">
         <td style="white-space:nowrap"><strong>${e(fmtData(o.data))}</strong><div class="tenue">${e(quando)}</div></td>
-        <td>${e(o.etichetta)}${o.stato === "Prorogato" ? `<div class="tenue">Prorogata (prevista ${e(fmtData(o.scadenza))})</div>` : ""}</td>
+        <td>${e(o.etichetta)}${contaDoc(o) ? ` <span class="doc-c${contaDoc(o)[0] === contaDoc(o)[1] ? " tutti" : ""}">Documenti ${contaDoc(o)[0]}/${contaDoc(o)[1]}</span>` : ""}${o.stato === "Prorogato" ? `<div class="tenue">Prorogata (prevista ${e(fmtData(o.scadenza))})</div>` : ""}</td>
         <td><a href="#/clienti/${encodeURIComponent(o.clienteId)}" class="link-cli">${e(nomeCli(o.cliente))}</a></td>
         <td>${e(o.respNome)}</td>
         <td>${chiusa(o) ? stato("ok", o.stato) : `${g ? stato(g === "preavviso" ? "info" : g, ETICHETTA_URG[g]) + " " : ""}${o.stato !== "Da fare" ? stato("neutro", o.stato) : ""}`}</td>
@@ -164,7 +171,7 @@ export async function vistaScadenziario(el, clienteFiltro) {
 function datiDaSalvare(o, cambi) {
   return { id: o.id, clienteId: o.clienteId, servizio: o.servizio, periodo: o.periodo, anno: +o.scadenza.slice(0, 4), scadenzaPrevista: o.scadenza,
     stato: o.stato, nuovaData: o.nuovaData, responsabileUid: o.responsabileUid, responsabileNome: o.responsabileNome,
-    cronologia: o.cronologia, fattoIl: o.fattoIl, fattoDa: o.fattoDa, ...cambi };
+    cronologia: o.cronologia, fattoIl: o.fattoIl, fattoDa: o.fattoDa, documenti: o.documenti || {}, ...cambi };
 }
 
 async function segnaFatto(o) {
@@ -190,6 +197,10 @@ function cassettoScadenza(o, persone, ricarica) {
         ${persone.map(p => `<option value="${e(p.uid)}"${p.uid === o.responsabileUid ? " selected" : ""}>${e(p.nome)}</option>`).join("")}</select></div>
       <div class="largo" id="box-proroga"${o.stato === "Prorogato" ? "" : " hidden"}>${campo("nuovaData", "Nuova data (dalla lettera di proroga) — obbligatoria", o.nuovaData, "date")}</div>
     </div>
+    ${o.proroghe?.length && !chiusa(o) ? `<div class="azioni-rapide" style="margin-top:10px">${o.proroghe.map(d => `<button type="button" class="btn" data-proroga="${d}"${o.stato === "Prorogato" && o.nuovaData === d ? " disabled" : ""}>Proroga al ${e(fmtData(d))}</button>`).join("")}</div>` : ""}
+    ${contaDoc(o) ? `<div class="sezione"><h3>Documenti ricevuti dal cliente <span class="tenue">${contaDoc(o)[0]}/${contaDoc(o)[1]}</span></h3>
+      <div class="servizi">${documentiDF(o.cliente).map(k => `<label><input type="checkbox" name="doc.${k}"${o.documenti?.[k] ? " checked" : ""}> ${e(Object.fromEntries(DOCUMENTI_DF)[k])}</label>`).join("")}</div></div>`
+      : o.servizio === "dichiarazione" && o.cliente?.forma === "Persona fisica" ? `<p class="tenue" style="font-size:13px;margin-top:10px">Per avere l'elenco dei documenti da raccogliere, sceglili nella scheda del cliente (Dati personali e DF).</p>` : ""}
     <div class="sezione"><h3>Aggiornamenti</h3>
       ${campo("nuovaNota", "Aggiungi un aggiornamento (es. chiesti documenti, inviata al cliente…)", "", "textarea", [], true)}
       ${cron.length ? `<ul class="cronologia">${cron.map(x => `<li><span class="tenue">${e(fmtData(String(x.quando).slice(0, 10)))} · ${e(x.nome || "")}</span><div>${e(x.testo)}</div></li>`).join("")}</ul>` : '<p class="tenue" style="font-size:13px">Nessun aggiornamento.</p>'}
@@ -213,11 +224,18 @@ function cassettoScadenza(o, persone, ricarica) {
     else if (d.stato === "Prorogato" && d.nuovaData !== o.nuovaData) cronologia.push({ quando: ora, nome: u.nome, testo: `Nuova proroga al ${fmtData(d.nuovaData)}` });
     if ((d.responsabileUid || null) !== (o.responsabileUid || null)) cronologia.push({ quando: ora, nome: u.nome, testo: `Responsabile: ${resp?.nome || "come il cliente"}` });
     if (d.nuovaNota) cronologia.push({ quando: ora, nome: u.nome, testo: d.nuovaNota });
-    await D.salvaScadenza(datiDaSalvare(o, { stato: d.stato, nuovaData: d.stato === "Prorogato" ? d.nuovaData : o.nuovaData,
+    const documenti = d.doc ? { ...o.documenti, ...d.doc } : o.documenti;
+    const nuoviDoc = d.doc ? Object.entries(d.doc).filter(([k, v]) => v && !o.documenti?.[k]).map(([k]) => Object.fromEntries(DOCUMENTI_DF)[k]) : [];
+    if (nuoviDoc.length) cronologia.push({ quando: ora, nome: u.nome, testo: `Ricevuti: ${nuoviDoc.join(", ")}` });
+    await D.salvaScadenza(datiDaSalvare(o, { documenti, stato: d.stato, nuovaData: d.stato === "Prorogato" ? d.nuovaData : o.nuovaData,
       responsabileUid: d.responsabileUid || null, responsabileNome: resp?.nome || "", cronologia,
       fattoIl: d.stato === "Fatto" ? (o.fattoIl || ora) : null, fattoDa: d.stato === "Fatto" ? (o.fattoDa || u.nome) : "" }));
     chiudi(); avviso("Scadenza aggiornata"); ricarica();
   });
+  box.querySelectorAll("[data-proroga]").forEach(b => b.addEventListener("click", () => {
+    form.stato.value = "Prorogato"; box.querySelector("#box-proroga").hidden = false; form.nuovaData.value = fmtData(b.dataset.proroga);
+    form.requestSubmit();
+  }));
   box.querySelector("#fatto-s")?.addEventListener("click", async () => { await segnaFatto(o); chiudi(); avviso("Segnata come fatta"); ricarica(); });
   form.stato.focus();
 }

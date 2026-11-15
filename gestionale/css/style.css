@@ -357,3 +357,6 @@ details.sez-d summary { cursor: pointer; }
 .fasi-pr li.ora { background: var(--inchiostro); color: #fff; font-weight: 600; }
 .fasi-pr li.ora::before { content: "▶ "; }
 .azioni-rapide { display: flex; flex-wrap: wrap; gap: 8px; }
+.doc-c { display: inline-block; margin-left: 6px; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--grigio-tinta); color: var(--tenue); }
+.doc-c.tutti { background: var(--verde-tinta); color: var(--verde); }
+.doc-c.tutti::before { content: "✓ "; }

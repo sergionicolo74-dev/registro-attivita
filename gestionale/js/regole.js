@@ -94,7 +94,13 @@ export function campiMancanti(c, nPersone, kyc) {
   if (!Object.values(c.servizi || {}).some(Boolean)) m.push("Servizi");
   if (c.servizi?.iva && vuoto(c.iva?.periodicita)) m.push("Periodicità IVA");
   if (c.servizi?.stipendi && vuoto(c.giornoPaga)) m.push("Giorno di paga");
-  if (!nPersone) m.push("Persone di contatto");
+  if (pf) {
+    if (vuoto(c.df?.nascita)) m.push("Data di nascita");
+    if (vuoto(c.df?.statoCivile)) m.push("Stato civile");
+    if (vuoto(c.df?.comune)) m.push("Comune di domicilio fiscale");
+    if (c.servizi?.dichiarazione && !documentiDF(c).length) m.push("Documenti per la dichiarazione");
+  }
+  if (!nPersone && !pf) m.push("Persone di contatto");
   if (kyc !== null && (vuoto(kyc?.stato) || vuoto(kyc?.rischio))) m.push("KYC e rischio");
   return m;
 }
@@ -263,7 +269,9 @@ export function scadenzeCliente(c, anno, kyc = null) {
     if (s.ifAnnuale || s.ifTrimestrale) add("ifAnnuale", `${y}`, `IF conguaglio ${y}${s.ifTrimestrale ? " (con IV trimestre)" : ""}`, dataISO(y + 1, 1, 31));
     if (s.avsLainfIpg) add("avsLainfIpg", `${y}`, `AVS / LAINF / IPG salari ${y}`, dataISO(y + 1, 1, 30));
     if (s.lpp) add("lpp", `${y + 1}`, `LPP annuncio salari ${y + 1}`, dataISO(y, 12, 31));
-    if (s.dichiarazione) add("dichiarazione", `${y}`, `Dichiarazione fiscale ${y}`, dataISO(y + 1, 6, 30));
+    // Persone fisiche: 30.04, prorogabile al 30.09 o al 31.12; società: 30.06
+    if (s.dichiarazione) add("dichiarazione", `${y}`, pf ? `Dichiarazione fiscale ${y} (persona fisica)` : `Dichiarazione fiscale ${y}`,
+      dataISO(y + 1, pf ? 4 : 6, pf ? 30 : 30), pf ? { proroghe: [dataISO(y + 1, 9, 30), dataISO(y + 1, 12, 31)] } : {});
     if (mm.funzione.attivo && !pf) add("assemblea", `${y}`, `Assemblea ordinaria esercizio ${y}`, dopoChiusura(ch, y, 6));
     if (s.revisione && !pf) add("revisione", `${y}`, `Revisione esercizio ${y}`, dopoChiusura(ch, y, 6), { avvisoDal: dopoChiusura(ch, y, 3) });
   }
@@ -276,7 +284,7 @@ export function conStato(o, salvato) {
   const s = salvato || {};
   return { ...o, stato: s.stato || "Da fare", nuovaData: s.nuovaData || null, responsabileUid: s.responsabileUid || null, responsabileNome: s.responsabileNome || "",
     note: s.note || "", cronologia: s.cronologia || [], fattoIl: s.fattoIl || null, fattoDa: s.fattoDa || "", salvato: !!salvato,
-    data: (s.stato === "Prorogato" && s.nuovaData) ? s.nuovaData : o.scadenza };
+    documenti: s.documenti || {}, data: (s.stato === "Prorogato" && s.nuovaData) ? s.nuovaData : o.scadenza };
 }
 export const chiusa = o => o.stato === "Fatto" || o.stato === "Non dovuto";
 
@@ -500,3 +508,19 @@ export function importoPratica(p, minutiRegistrati = 0, tariffaDefault = 150) {
   if (f.modo === "Forfait") return Number(f.importo) || 0;
   return Math.round(minutiRegistrati / 60 * (Number(f.tariffa) || tariffaDefault) * 100) / 100;
 }
+
+
+// ---------- Persone fisiche: dati per la dichiarazione fiscale ----------
+export const STATI_CIVILI = ["Celibe / nubile", "Coniugato/a", "Unione domestica registrata", "Separato/a", "Divorziato/a", "Vedovo/a"];
+export const TASSAZIONE_PF = ["Ordinaria", "Alla fonte con tassazione ordinaria ulteriore", "Alla fonte – richiesta di rettifica", "Frontaliere / quasi residente"];
+export const ATTIVITA_PF = ["Dipendente", "Indipendente", "Pensionato/a", "Senza attività lucrativa", "In formazione"];
+/** Documenti che il cliente deve consegnare ogni anno: si scelgono una volta nell'anagrafica e si spuntano per ogni dichiarazione. */
+export const DOCUMENTI_DF = [
+  ["salario", "Certificati di salario"], ["rendite", "Attestati rendite AVS / AI / LPP"], ["indennita", "Indennità (disoccupazione, IPG, assicurazioni)"],
+  ["indipendente", "Conti dell'attività indipendente"], ["conti", "Estratti conti e titoli al 31.12, con interessi"], ["immobili", "Immobili: valore di stima, affitti, spese"],
+  ["ipoteche", "Debiti e ipoteche: saldo e interessi"], ["pilastro3a", "Attestato 3° pilastro A"], ["riscattiLpp", "Riscatti LPP"],
+  ["cassaMalati", "Premi cassa malati e spese mediche non rimborsate"], ["figli", "Spese di custodia e formazione dei figli"], ["alimenti", "Alimenti versati o ricevuti"],
+  ["donazioni", "Donazioni"], ["veicoli", "Veicoli (anno e valore)"], ["estero", "Redditi e sostanza all'estero"]
+];
+/** Chiavi dei documenti scelti nell'anagrafica del cliente. */
+export const documentiDF = (c) => DOCUMENTI_DF.map(([k]) => k).filter(k => c.df?.documenti?.[k]);

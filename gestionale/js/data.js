@@ -233,6 +233,10 @@ function creaDemo() {
     c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true, mandati: {
       contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 1800 },
       domiciliazione: { attivo: true, stato: "Firmato aggiornato", budget: 900, tipo: "Domicilio con ufficio proprio" } } }),
+    ["d4", { id: "d4", codice: "C004", ragioneSociale: "Rossi Laura", forma: "Persona fisica", stato: "Attivo", responsabile: "Anna", localita: "Lugano", cantone: "TI",
+      servizi: { dichiarazione: true }, mandati: { contabilita: { attivo: true, stato: "Firmato aggiornato", budget: 450 } },
+      df: { nascita: "1978-04-12", statoCivile: "Coniugato/a", comune: "Lugano", tassazione: "Ordinaria", attivita: "Dipendente", coniuge: { nome: "Rossi Marco", attivita: "Indipendente" },
+        figli: [{ nome: "Giulia", nascita: "2012-09-01", situazione: "A carico, a scuola" }], documenti: { salario: true, conti: true, immobili: true, pilastro3a: true, cassaMalati: true } } }],
     ["d0", { id: "d0", codice: "C000", ragioneSociale: "Clienti occasionali", forma: "Altro", stato: "Attivo", servizi: {}, mandato: {} }]
   ]);
   return {

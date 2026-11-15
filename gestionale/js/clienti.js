@@ -2,7 +2,8 @@
 import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
-  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica } from "./regole.js";
+  TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -54,8 +55,9 @@ export async function vistaClienti(el) {
           <option value="">Tutti</option><option value="incompleti">Dati da completare</option><option value="mandato">Mandato da aggiornare</option>
           ${D.isAdmin() ? '<option value="doc">Documenti in scadenza</option>' : ""}
           <option value="funzione">Con funzione societaria</option><option value="domiciliazione">Con domiciliazione</option>
+          <option value="pf">Persone fisiche</option><option value="soc">Società</option>
         </select>
-        ${D.isAdmin() ? '<button class="btn primario" id="nuovo">Nuovo cliente</button>' : ""}
+        ${D.isAdmin() ? '<button class="btn" id="nuovo-pf">Nuova persona fisica</button><button class="btn primario" id="nuovo">Nuova società</button>' : ""}
       </div>
     </div>
     <table class="tabella"><thead><tr><th>Codice</th><th>Cliente</th><th>Responsabile</th><th>Servizi</th><th>Segnali</th><th id="col-manca" hidden>Da completare</th></tr></thead><tbody id="righe"></tbody></table>`;
@@ -68,6 +70,8 @@ export async function vistaClienti(el) {
       if (f === "mandato") return haDaAggiornare(c);
       if (f === "doc") return !!docPerCliente[c.id];
       if (f === "funzione" || f === "domiciliazione") return mandatiDi(c)[f].attivo;
+      if (f === "pf") return c.forma === "Persona fisica";
+      if (f === "soc") return c.forma !== "Persona fisica" && c.codice !== "C000";
       return true;
     });
     const vediManca = f === "incompleti";
@@ -86,11 +90,14 @@ export async function vistaClienti(el) {
   const apri = (tr) => tr?.dataset.id && (location.hash = "#/clienti/" + encodeURIComponent(tr.dataset.id));
   el.querySelector("#righe").addEventListener("click", ev => apri(ev.target.closest("tr")));
   el.querySelector("#righe").addEventListener("keydown", ev => { if (ev.key === "Enter") apri(ev.target.closest("tr")); });
-  el.querySelector("#nuovo")?.addEventListener("click", async () => {
+  const nuovo = async (pf) => {
     const max = clienti.map(c => +String(c.codice || "").replace(/\D/g, "") || 0).reduce((a, b) => Math.max(a, b), 0);
-    const id = await D.salvaCliente({ codice: "C" + String(max + 1).padStart(3, "0"), ragioneSociale: "Nuovo cliente", stato: "Attivo", servizi: {}, mandati: {} });
+    const id = await D.salvaCliente({ codice: "C" + String(max + 1).padStart(3, "0"), ragioneSociale: pf ? "Cognome Nome" : "Nuovo cliente", stato: "Attivo",
+      ...(pf ? { forma: "Persona fisica", servizi: { dichiarazione: true }, mandati: { contabilita: { attivo: true, stato: "Mancante" } }, df: {} } : { servizi: {}, mandati: {} }) });
     location.hash = "#/clienti/" + id + "/dati";
-  });
+  };
+  el.querySelector("#nuovo")?.addEventListener("click", () => nuovo(false));
+  el.querySelector("#nuovo-pf")?.addEventListener("click", () => nuovo(true));
 }
 
 // ======================= SCHEDA =======================
@@ -117,15 +124,16 @@ export async function vistaScheda(el, id) {
           ${c.revisione || c.servizi?.revisione ? stato("info", "Revisione") : ""}</div>
       </div>
       <div class="fatti">
-        <div><span>Forma</span>${e(c.forma || "–")}</div>
+        <div><span>${c.forma === "Persona fisica" ? "Tipo" : "Forma"}</span>${e(c.forma || "–")}</div>
         <div><span>Responsabile</span>${e(c.responsabile || "–")}</div>
         <div><span>Contatto</span>${principale ? e(`${principale.nome || ""} ${principale.cognome || ""}`.trim()) : "–"}</div>
-        <div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>
+        ${c.forma === "Persona fisica" ? `<div><span>Nato/a il</span>${e(fmtData(c.df?.nascita) || "–")}</div><div><span>Stato civile</span>${e(c.df?.statoCivile || "–")}</div>`
+          : `<div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>`}
         ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Budget annuo</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
       </div>
       ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
-    <div class="schede" role="tablist">${SCHEDE.map(([k, n]) => `<button role="tab" aria-selected="${k === scheda}" data-k="${k}">${e(n)}${k === "persone" ? ` (${persone.length})` : ""}</button>`).join("")}</div>
+    <div class="schede" role="tablist">${SCHEDE.map(([k, n]) => `<button role="tab" aria-selected="${k === scheda}" data-k="${k}">${e(k === "dati" && c.forma === "Persona fisica" ? "Dati personali e DF" : n)}${k === "persone" ? ` (${persone.length})` : ""}</button>`).join("")}</div>
     <div id="pannello"></div>`;
   el.querySelectorAll(".schede button").forEach(b => b.addEventListener("click", () => { location.hash = `#/clienti/${encodeURIComponent(id)}/${b.dataset.k}`; }));
 
@@ -210,6 +218,7 @@ function cassettoPersona(x, k, ricarica) {
 
 // ---------- Dati e mandato ----------
 function schedaDati(p, c, kyc, ricarica) {
+  if (c.forma === "Persona fisica") return schedaDatiPF(p, c, kyc, ricarica);
   const admin = D.isAdmin();
   p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
     <h3 style="font-size:14px;margin-bottom:10px">Società</h3>
@@ -236,6 +245,60 @@ function schedaDati(p, c, kyc, ricarica) {
     if (bloccaDate(ev.target)) return;
     const { kyc: k, ...dati } = leggiForm(ev.target);
     await D.salvaCliente({ ...c, ...dati });
+    await D.salvaKycCliente(c.id, k);
+    avviso("Dati salvati"); ricarica();
+  });
+}
+
+// ---------- Persona fisica: dati personali e base per la dichiarazione ----------
+function rigaFiglio(i, f = {}) {
+  return `<div class="griglia riga-figlio" data-i="${i}">${campo(`df.figli.${i}.nome`, "Nome del figlio/a", f.nome)}${campo(`df.figli.${i}.nascita`, "Data di nascita", f.nascita, "date")}
+    ${campo(`df.figli.${i}.situazione`, "Situazione", f.situazione, "select", ["A carico, a scuola", "In formazione / apprendistato", "Agli studi", "Non più a carico"])}</div>`;
+}
+function schedaDatiPF(p, c, kyc, ricarica) {
+  const admin = D.isAdmin(), df = c.df || {}, figli = df.figli || [];
+  const coniugato = ["Coniugato/a", "Unione domestica registrata"].includes(df.statoCivile);
+  p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
+    <h3 style="font-size:14px;margin-bottom:10px">Persona</h3>
+    <div class="griglia">
+      ${campo("codice", "Codice cliente", c.codice)}${campo("ragioneSociale", "Cognome e nome", c.ragioneSociale)}
+      ${campo("forma", "Tipo", c.forma, "select", FORME)}${campo("df.nascita", "Data di nascita", df.nascita, "date")}
+      ${campo("df.statoCivile", "Stato civile", df.statoCivile, "select", STATI_CIVILI)}${campo("df.attivita", "Attività", df.attivita, "select", ATTIVITA_PF)}
+      ${campo("df.tassazione", "Tassazione", df.tassazione, "select", TASSAZIONE_PF)}${campo("df.comune", "Comune di domicilio fiscale", df.comune)}
+      ${campo("indirizzo", "Indirizzo", c.indirizzo)}${campo("npa", "NPA", c.npa)}${campo("localita", "Località", c.localita)}${campo("cantone", "Cantone", c.cantone)}
+      ${campo("emailGenerale", "Email", c.emailGenerale, "email")}${campo("lingua", "Lingua corrispondenza", c.lingua, "select", ["Italiano", "Tedesco", "Francese", "Inglese"])}
+      ${campo("responsabile", "Responsabile interno", c.responsabile)}${campo("stato", "Stato", c.stato, "select", ["Attivo", "Sospeso", "Cessato"])}
+    </div>
+    <div class="sezione" id="box-coniuge"${coniugato ? "" : " hidden"}><h3>Coniuge / partner</h3><div class="griglia">
+      ${campo("df.coniuge.nome", "Cognome e nome", df.coniuge?.nome)}${campo("df.coniuge.nascita", "Data di nascita", df.coniuge?.nascita, "date")}
+      ${campo("df.coniuge.attivita", "Attività", df.coniuge?.attivita, "select", ATTIVITA_PF)}
+    </div></div>
+    <div class="sezione"><h3>Figli</h3><div id="figli">${figli.map((f, i) => rigaFiglio(i, f)).join("")}</div>
+      ${admin ? '<button type="button" class="btn piccolo" id="add-figlio">+ Aggiungi figlio/a</button>' : ""}${!figli.length ? '<p class="tenue" style="font-size:13px">Nessun figlio inserito.</p>' : ""}</div>
+    <div class="sezione"><h3>Documenti da raccogliere ogni anno per la dichiarazione</h3>
+      <p class="tenue" style="font-size:13px;margin:0 0 8px">Spunta quelli che riguardano questo cliente: nello Scadenziario, per ogni dichiarazione, si segneranno man mano quelli ricevuti.</p>
+      <div class="servizi">${DOCUMENTI_DF.map(([k, n]) => `<label><input type="checkbox" name="df.documenti.${k}"${df.documenti?.[k] ? " checked" : ""}> ${e(n)}</label>`).join("")}</div></div>
+    <div class="sezione"><h3>Note per la dichiarazione</h3>${campo("df.note", "Particolarità (es. immobile in Italia, deduzioni ricorrenti, proroga abituale)", df.note, "textarea", [], true)}</div>
+    <div class="sezione"><h3>Archivio</h3><div class="griglia">${campo("cartella", "Cartella archivio (percorso)", c.cartella, "text", [], true)}</div></div>
+    </fieldset>
+    ${admin ? `<div class="sezione riservato"><h3>KYC e rischio</h3><div class="griglia">
+      ${campo("kyc.stato", "Stato KYC", kyc?.stato, "select", ["Completo", "Da completare", "Da aggiornare"])}${campo("kyc.rischio", "Rischio", kyc?.rischio, "select", ["Basso", "Medio", "Elevato"])}
+      ${campo("kyc.ultimaVerifica", "Ultima verifica", kyc?.ultimaVerifica, "date")}${campo("kyc.prossimaRevisione", "Prossima revisione", kyc?.prossimaRevisione, "date")}
+    </div></div><div class="azioni"><button class="btn primario">Salva</button></div>` : `<p class="tenue" style="margin-top:14px">Solo gli amministratori possono modificare questi dati.</p>`}
+  </form>`;
+  if (!admin) return;
+  const form = p.querySelector("form");
+  form["df.statoCivile"].addEventListener("change", ev => { p.querySelector("#box-coniuge").hidden = !["Coniugato/a", "Unione domestica registrata"].includes(ev.target.value); });
+  p.querySelector("#add-figlio").addEventListener("click", () => {
+    const box = p.querySelector("#figli"); box.insertAdjacentHTML("beforeend", rigaFiglio(box.children.length)); box.lastElementChild.querySelector("input").focus();
+  });
+  form.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    if (bloccaDate(form)) return;
+    const { kyc: k, df, ...dati } = leggiForm(form);
+    df.figli = Object.values(df.figli || {}).filter(f => f.nome);
+    if (!["Coniugato/a", "Unione domestica registrata"].includes(df.statoCivile)) df.coniuge = null;
+    await D.salvaCliente({ ...c, ...dati, df: { ...(c.df || {}), ...df } });
     await D.salvaKycCliente(c.id, k);
     avviso("Dati salvati"); ricarica();
   });

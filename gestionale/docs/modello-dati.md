@@ -30,6 +30,11 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 `servizi` {`contabilita`, `iva`, `stipendi`, `ifTrimestrale`, `ifAnnuale`, `dichiarazione`, `avsLainfIpg`, `lpp`, `domiciliazione`, `revisione`} (vero/falso), `revisione`,
 
 
+## clienti: persone fisiche
+
+`forma` = "Persona fisica"; `df` {`nascita`, `statoCivile`, `attivita`, `tassazione`, `comune`, `coniuge` {`nome`, `nascita`, `attivita`}, `figli` [{`nome`, `nascita`, `situazione`}], `documenti` {chiave: vero} (vedi DOCUMENTI_DF), `note`}.
+Dichiarazione: 30.04 dell'anno dopo, proroghe rapide al 30.09 e al 31.12; nello stato della scadenza `documenti` {chiave: vero} = ricevuti.
+
 ## persone
 
 `clienteId`, `cognome`, `nome`, `ruolo`, `principale` (vero/falso), `firma`, `email`, `telefono`, `canale`, `lingua`, `note`.

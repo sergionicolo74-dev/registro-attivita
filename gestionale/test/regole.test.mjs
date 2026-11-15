@@ -64,3 +64,11 @@ const u = mi.unisciCliente(ex, { codice: "C001", idi: "", localita: "Lugano", se
 assert.equal(u.idi, "CHE-1"); assert.equal(u.localita, "Lugano"); assert.equal(u.servizi.iva, true); assert.equal(u.servizi.lpp, true);
 assert.equal(u.mandati.funzione.attivo, true); assert.equal(u.iva.regime, "Effettivo"); assert.equal(u.iva.periodicita, "Trimestrale"); assert.equal(u.id, "a");
 console.log("Test unione import superati");
+const r4 = await import("../js/regole.js");
+const o4 = new Date(2026, 10, 15);
+assert.equal(r4.urgenzaCompito({ stato: "Da fare", scadenza: "2026-11-14" }, o4), "scaduto");
+assert.equal(r4.urgenzaCompito({ stato: "Da fare", scadenza: "2026-11-20" }, o4), "urgente");
+assert.equal(r4.urgenzaCompito({ stato: "Preso in carico", scadenza: "2026-12-20", aggiornato: "2026-11-09T10:00:00Z" }, o4), "fermo");
+assert.equal(r4.urgenzaCompito({ stato: "In attesa riscontro", scadenza: "2026-12-20", aggiornato: "2026-11-01T10:00:00Z" }, o4), null);
+assert.equal(r4.urgenzaCompito({ stato: "Fatto", scadenza: "2026-11-01" }, o4), null);
+console.log("Test compiti superati");

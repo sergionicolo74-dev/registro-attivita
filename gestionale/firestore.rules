@@ -11,9 +11,9 @@ service cloud.firestore {
     function admin() { return attivo() && profilo().ruolo == "admin"; }
     function mio(campo) { return resource.data[campo] == request.auth.uid; }
 
-    // Profili utente: ognuno legge il proprio, l'amministratore gestisce tutti
+    // Profili utente: gli utenti attivi vedono l'elenco dei colleghi (per assegnare i compiti); solo l'amministratore modifica
     match /utenti/{uid} {
-      allow read: if loggato() && (request.auth.uid == uid || admin());
+      allow read: if loggato() && (request.auth.uid == uid || attivo());
       allow write: if admin();
     }
 

@@ -11,6 +11,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch√
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
 - Completezza: per ogni cliente l'elenco dei dati mancanti (filtro "Dati da completare")
 - Mandati: fino a tre per cliente (Contabilit√† e Tax, Funzione societaria, Domiciliazione), ognuno con stato, date e budget; riepilogo con grafico budget/ore lavorate e griglia per cliente
+- Compiti: elenco per urgenza o a colonne, assegnazione, stati con motivo d'attesa, aggiornamenti, scaduti / entro 5 giorni / fermi da 5 giorni
 - Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
 - Moduli Scadenziario, Compiti, Presenze, Vacanze, Dashboard: fasi successive
 
@@ -36,6 +37,7 @@ gestionale/
   js/clienti.js         modulo Clienti
   js/mandati.js         riepilogo Mandati
   js/registro.js        modulo Registro ore
+  js/compiti.js         modulo Compiti
   js/importa.js         modulo Importa dati
   lib/                  SheetJS per leggere Excel (licenza Apache 2.0)
   firestore.rules       regole di accesso

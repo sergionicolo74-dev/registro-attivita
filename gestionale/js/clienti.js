@@ -314,7 +314,7 @@ async function schedaCompiti(p, c) {
       <td>${e(k.titolo)}</td><td>${e(k.assegnatoNome || "")}</td><td>${e(fmtData(k.scadenza))}</td>
       <td>${k.completatoIl || k.stato === "Fatto" ? stato("ok", "Fatto") : `${stato("neutro", k.stato || "Aperto")} ${k.scadenza ? statoData(k.scadenza, "Entro", 5) : ""}`}</td></tr>`).join("")}</tbody></table>`
       : `<div class="vuoto">Nessun compito.</div>`}
-    <p class="tenue" style="margin-top:12px">Creazione e gestione dei compiti arrivano con il modulo Compiti (fase 2).</p></div>`;
+    <div class="azioni"><a class="btn" href="#/compiti/${encodeURIComponent(c.id)}">Apri e gestisci nei Compiti</a></div></div>`;
 }
 
 // ---------- Ore e diario ----------

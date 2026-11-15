@@ -168,3 +168,27 @@ export function statoMandato(m, oggi = new Date()) {
 }
 export const daAggiornare = (m) => m.attivo && m.stato !== "Firmato aggiornato";
 export const budgetTotale = (mm) => TIPI_MANDATO.reduce((s, [k]) => s + (mm[k].attivo ? Number(mm[k].budget) || 0 : 0), 0);
+
+// ---------- Compiti ----------
+export const STATI_COMPITO = ["Da fare", "Preso in carico", "In attesa", "In attesa riscontro", "Fatto"];
+export const CATEGORIE_COMPITO = ["Promemoria", "Delega", "Reclamo fiscale", "Richiesta documenti", "Pratica amministrativa",
+  "Apertura conto", "Presentazione", "Attesa riscontro", "Richiesta interna", "Da fare", "Altro"];
+export const GIORNI_FERMO = 5;
+export const aperto = (k) => k.stato !== "Fatto" && !k.completatoIl;
+
+/** Giorni da un istante ISO (data e ora) a oggi. */
+export function giorniDa(istante, oggi = new Date()) {
+  if (!istante) return null;
+  return giorniA(String(istante).slice(0, 10), oggi) * -1;
+}
+
+/** Urgenza di un compito aperto: scaduto | urgente (<= 5 giorni) | fermo (nessun aggiornamento da 5 giorni) | null */
+export function urgenzaCompito(k, oggi = new Date()) {
+  if (!aperto(k)) return null;
+  const g = giorniA(k.scadenza, oggi);
+  if (g != null && g < 0) return "scaduto";
+  if (g != null && g <= 5) return "urgente";
+  const f = giorniDa(k.aggiornato || k.creato, oggi);
+  if (f != null && f >= GIORNI_FERMO && k.stato !== "In attesa riscontro") return "fermo";
+  return null;
+}

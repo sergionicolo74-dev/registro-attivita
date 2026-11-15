@@ -154,3 +154,26 @@ main:focus { outline: none; }
 .grafico .b.lavoro.sforo { background: var(--rosso); }
 .tabella tr.totale td { background: var(--grigio-tinta); }
 .testata select { width: auto; }
+
+/* Compiti */
+.allerta { padding: 12px 16px; }
+.gruppo-k { margin-bottom: 18px; }
+.gruppo-k h2, .colonna h2 { font-size: 14px; margin-bottom: 8px; }
+.elenco-k { display: grid; gap: 8px; }
+.compito { background: #fff; border: 1px solid var(--linea); border-left: 4px solid var(--linea); border-radius: 6px; padding: 10px 14px; cursor: pointer; display: grid; gap: 4px; }
+.compito:hover, .compito:focus { border-color: var(--inchiostro); outline: none; }
+.compito.scaduto { border-left-color: var(--rosso); }
+.compito.urgente { border-left-color: var(--ambra); }
+.compito.fermo { border-left-color: #8A877E; border-left-style: dashed; }
+.compito .testa { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.compito .piede { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.compito .motivo { font-size: 13px; background: var(--ambra-tinta); color: var(--ambra); padding: 4px 8px; border-radius: 4px; }
+.colonne-k { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+.colonna { border-radius: var(--r); padding: 10px; display: grid; gap: 8px; }
+.colonna.da-fare { background: #F1EFE9; }
+.colonna.in-carico { background: #E8EFF7; }
+.colonna.in-attesa { background: #EFEAF5; }
+.cronologia { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; font-size: 13px; }
+.cronologia li { border-left: 2px solid var(--linea); padding-left: 10px; }
+a.btn { text-decoration: none; display: inline-block; }
+@media (max-width: 820px) { .colonne-k { grid-template-columns: 1fr; } }

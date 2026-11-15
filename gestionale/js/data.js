@@ -150,10 +150,12 @@ export async function listaCompiti(clienteId) {
   const m = new Map([...a, ...b].map(x => [x.id, x]));
   return [...m.values()];
 }
+export const eliminaCompito = (id) => elimina("compiti", id);
 export const salvaCompito = (c) => scrivi("compiti", { autoreUid: utente.uid, ...c });
 
 // ---------- dati demo (inventati) ----------
 function creaDemo() {
+  const oggiPiu = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const t = new Date(), oggi = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
   const c = (id, codice, rs, forma, extra = {}) => [id, { id, codice, ragioneSociale: rs, forma, stato: "Attivo", responsabile: "Utente demo",
     servizi: { contabilita: true, iva: true, dichiarazione: true }, mandato: { tipo: "Contabilità e fiscale", stato: "Da aggiornare", aggiornareEntro: "2026-12-31" }, ...extra }];
@@ -183,7 +185,13 @@ function creaDemo() {
       r4: { id: "r4", clienteId: "d3", data: oggi, minuti: 30, fatturabile: false, tipo: "lavoro", descrizione: "Telefonata di cortesia", autoreUid: "demo", autoreNome: "Utente demo", creato: "2" },
       r2: { id: "r2", clienteId: "d1", data: "2026-11-12", minuti: 0, fatturabile: false, tipo: "nota", descrizione: "Deciso di passare alla contabilità mensile", autoreUid: "demo", autoreNome: "Utente demo" }
     },
-    compiti: { k1: { id: "k1", clienteId: "d1", titolo: "Aggiornare mandato", stato: "Da fare", scadenza: "2026-12-31", visibilita: "studio", autoreUid: "demo" } },
-    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin" } }
+    compiti: {
+      k1: { id: "k1", clienteId: "d1", titolo: "Aggiornare mandato", tipo: "Pratica amministrativa", stato: "Da fare", scadenza: "2026-12-31", visibilita: "studio", autoreUid: "demo", assegnatoUid: "demo", assegnatoNome: "Utente demo", aggiornato: new Date().toISOString() },
+      k2: { id: "k2", clienteId: "d2", titolo: "Reclamo tassazione 2024", tipo: "Reclamo fiscale", stato: "Preso in carico", scadenza: oggiPiu(3), visibilita: "studio", autoreUid: "demo", assegnatoUid: "u2", assegnatoNome: "Anna", aggiornato: new Date().toISOString() },
+      k3: { id: "k3", clienteId: "d3", titolo: "Estratto conto AVS richiesto", tipo: "Attesa riscontro", stato: "In attesa riscontro", scadenza: oggiPiu(-2), visibilita: "studio", autoreUid: "demo", assegnatoUid: "demo", assegnatoNome: "Utente demo", aggiornato: "2026-10-20T09:00:00Z" },
+      k4: { id: "k4", clienteId: null, titolo: "Rinnovo licenza software", tipo: "Richiesta interna", stato: "In attesa", motivoAttesa: "Attendo preventivo fornitore", scadenza: oggiPiu(20), visibilita: "studio", autoreUid: "demo", assegnatoUid: "demo", assegnatoNome: "Utente demo", aggiornato: "2026-11-01T09:00:00Z",
+        cronologia: [{ quando: "2026-11-01T09:00:00Z", nome: "Utente demo", testo: "Chiesto preventivo" }] }
+    },
+    utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin" }, u2: { id: "u2", nome: "Anna", ruolo: "utente" }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
   };
 }

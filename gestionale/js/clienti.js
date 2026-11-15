@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
   TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
-  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF } from "./regole.js";
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -23,7 +23,8 @@ function segnaliMandati(c, breve = false) {
   return att.map(([k, n]) => {
     const st = statoMandato(mm[k]);
     const nome = breve ? n.split(" ")[0] : n;
-    const extra = k === "funzione" && !breve && mm.funzione.funzioni[0]?.ruolo ? ` · ${mm.funzione.funzioni.map(f => f.ruolo).join(", ")}` : "";
+    const extra = k === "funzione" && !breve && mm.funzione.funzioni[0]?.ruolo ? ` · ${mm.funzione.funzioni.map(f => f.ruolo).join(", ")}`
+      : k === "intestazione" && !breve && mm.intestazione.numero ? ` · ${fmtNum(mm.intestazione.numero, 0)} ${(mm.intestazione.tipoTitoli || "titoli").toLowerCase()}${mm.intestazione.percentuale ? ` (${mm.intestazione.percentuale}%)` : ""}` : "";
     return stato(st, st === "ok" ? nome + extra : `${nome}${extra}: ${mm[k].stato === "Mancante" ? "mancante" : "da aggiornare"}`);
   }).join("");
 }
@@ -54,7 +55,7 @@ export async function vistaClienti(el) {
         <select id="filtro" aria-label="Filtro">
           <option value="">Tutti</option><option value="incompleti">Dati da completare</option><option value="mandato">Mandato da aggiornare</option>
           ${D.isAdmin() ? '<option value="doc">Documenti in scadenza</option>' : ""}
-          <option value="funzione">Con funzione societaria</option><option value="domiciliazione">Con domiciliazione</option>
+          <option value="funzione">Con funzione societaria</option><option value="domiciliazione">Con domiciliazione</option><option value="intestazione">Con intestazione fiduciaria</option>
           <option value="pf">Persone fisiche</option><option value="soc">Società</option>
         </select>
         ${D.isAdmin() ? '<button class="btn" id="nuovo-pf">Nuova persona fisica</button><button class="btn primario" id="nuovo">Nuova società</button>' : ""}
@@ -69,7 +70,7 @@ export async function vistaClienti(el) {
       if (f === "incompleti") return manca[c.id].length > 0;
       if (f === "mandato") return haDaAggiornare(c);
       if (f === "doc") return !!docPerCliente[c.id];
-      if (f === "funzione" || f === "domiciliazione") return mandatiDi(c)[f].attivo;
+      if (f === "funzione" || f === "domiciliazione" || f === "intestazione") return mandatiDi(c)[f].attivo;
       if (f === "pf") return c.forma === "Persona fisica";
       if (f === "soc") return c.forma !== "Persona fisica" && c.codice !== "C000";
       return true;
@@ -151,7 +152,7 @@ export async function vistaScheda(el, id) {
   });
   if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica);
   if (scheda === "dati") return schedaDati(p, c, kyc, ricarica);
-  if (scheda === "mandati") return schedaMandati(p, c, ricarica);
+  if (scheda === "mandati") return schedaMandati(p, c, ricarica, kyc);
   if (scheda === "servizi") return await schedaServizi(p, c, ricarica);
   if (scheda === "compiti") return schedaCompiti(p, c);
   if (scheda === "pratiche") return await schedaPratiche(p, c);
@@ -313,18 +314,28 @@ function rigaFunzione(i, f = {}) {
     ${campo(`mandati.funzione.funzioni.${i}.inizio`, "Dal", f.inizio, "date")}</div>`;
 }
 
-function schedaMandati(p, c, ricarica) {
+function schedaMandati(p, c, ricarica, kyc) {
   const admin = D.isAdmin(), mm = mandatiDi(c);
   const comuni = (k) => `
       ${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
       ${campo(`mandati.${k}.dataFirma`, "Data firma", mm[k].dataFirma, "date")}
       ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}
-      ${admin ? campo(`mandati.${k}.budget`, "Budget annuo CHF", mm[k].budget, "number") : ""}`;
+      ${admin ? campo(`mandati.${k}.budget`, "Budget annuo CHF (forfait)", mm[k].budget, "number") : ""}
+      ${k !== "contabilita" ? campo(`mandati.${k}.fatturazione`, "Fatturazione", mm[k].fatturazione || "Annuale", "select", FREQ_FATTURAZIONE) : ""}`;
   const specifici = {
     contabilita: `${admin ? campo("mandati.contabilita.budgetOre", "Budget ore annue", mm.contabilita.budgetOre, "number") + campo("mandati.contabilita.tariffa", "Tariffa oraria CHF (vuoto = 150)", mm.contabilita.tariffa, "number") : ""}
-      ${campo("mandati.contabilita.fatturazione", "Fatturazione", mm.contabilita.fatturazione, "select", ["Mensile", "Trimestrale", "Annuale"])}`,
+      ${campo("mandati.contabilita.fatturazione", "Fatturazione", mm.contabilita.fatturazione || "Trimestrale", "select", FREQ_FATTURAZIONE)}`,
     funzione: "",
-    domiciliazione: `${campo("mandati.domiciliazione.tipo", "Tipo", mm.domiciliazione.tipo, "select", TIPI_DOMICILIO)}${campo("mandati.domiciliazione.dal", "Dal", mm.domiciliazione.dal, "date")}`
+    domiciliazione: `${campo("mandati.domiciliazione.tipo", "Tipo", mm.domiciliazione.tipo, "select", TIPI_DOMICILIO)}${campo("mandati.domiciliazione.dal", "Dal", mm.domiciliazione.dal, "date")}`,
+    intestazione: `${campo("mandati.intestazione.tipoTitoli", "Titoli intestati", mm.intestazione.tipoTitoli, "select", TIPI_TITOLI)}
+      ${campo("mandati.intestazione.numero", "Numero di azioni / quote", mm.intestazione.numero, "number")}
+      ${campo("mandati.intestazione.valoreNominale", "Valore nominale unitario CHF", mm.intestazione.valoreNominale, "number")}
+      ${campo("mandati.intestazione.percentuale", "Quota del capitale %", mm.intestazione.percentuale, "number")}
+      ${campo("mandati.intestazione.intestatario", "Intestate a (persona o società dello studio)", mm.intestazione.intestatario)}
+      ${campo("mandati.intestazione.dal", "Intestate dal", mm.intestazione.dal, "date")}
+      ${campo("mandati.intestazione.contratto", "Contratto fiduciario", mm.intestazione.contratto, "select", ["Firmato", "Da firmare", "Da aggiornare"])}
+      ${campo("mandati.intestazione.iscrizione", "Libro azioni / Registro di commercio", mm.intestazione.iscrizione, "select", ISCRIZIONE_TITOLI)}
+      ${admin ? `<div class="largo riservato-campo">${campo("kyc.intestazione.fiduciante", "Fiduciante: per conto di chi sono detenute (visibile solo agli amministratori)", kyc?.intestazione?.fiduciante, "text", [], true)}</div>` : ""}`
   };
   const funzioni = mm.funzione.funzioni.length ? mm.funzione.funzioni : [{}];
   p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
@@ -352,9 +363,10 @@ function schedaMandati(p, c, ricarica) {
   form.addEventListener("submit", async ev => {
     ev.preventDefault();
     if (bloccaDate(form)) return;
-    const { mandati } = leggiForm(form);
+    const { mandati, kyc: k } = leggiForm(form);
     mandati.funzione.funzioni = Object.values(mandati.funzione.funzioni || {}).filter(f => f.ruolo || f.persona);
     await D.salvaCliente({ ...c, mandati });
+    if (k?.intestazione) await D.salvaKycCliente(c.id, { ...(kyc || {}), intestazione: k.intestazione });
     avviso("Mandati salvati"); ricarica();
   });
 }

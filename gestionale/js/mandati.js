@@ -75,7 +75,7 @@ export async function vistaMandati(el) {
       return `<tr class="cliccabile" data-id="${e(c.id)}" tabindex="0"><td><strong>${e(c.ragioneSociale)}</strong><div class="tenue">${e(c.codice)}</div></td>
         ${TIPI_MANDATO.map(([k]) => { const m = mm[k], st = statoMandato(m);
           if (!st) return '<td class="tenue">–</td>';
-          const sotto = k === "funzione" ? m.funzioni.map(f => f.ruolo).filter(Boolean).join(", ") : k === "domiciliazione" ? m.tipo : "";
+          const sotto = k === "funzione" ? m.funzioni.map(f => f.ruolo).filter(Boolean).join(", ") : k === "domiciliazione" ? m.tipo : k === "intestazione" && m.numero ? `${fmtNum(m.numero, 0)} ${(m.tipoTitoli || "").toLowerCase()}` : "";
           return `<td>${stato(st, st === "ok" ? "Aggiornato" : m.stato === "Mancante" ? "Mancante" : "Da aggiornare")}${sotto ? `<div class="tenue" style="font-size:12px;margin-top:3px">${e(sotto)}</div>` : ""}${admin && m.budget ? `<div class="tenue" style="font-size:12px">CHF ${fmtNum(m.budget, 0)}</div>` : ""}</td>`; }).join("")}
         ${admin ? `<td class="num">${budgetTotale(mm) ? fmtNum(budgetTotale(mm), 0) : ""}</td>` : ""}</tr>`;
     }).join("") || `<tr><td colspan="5" class="vuoto">Nessun cliente.</td></tr>`}

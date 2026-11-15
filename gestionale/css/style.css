@@ -374,3 +374,4 @@ tr.fatturato td { color: var(--tenue); }
 .voce-f { width: 100%; font: inherit; font-size: 13px; padding: 5px 7px; border: 1px solid var(--linea); border-radius: 6px; resize: vertical; }
 .desc-r { font-size: 13px; max-width: 360px; }
 strong.neg { color: var(--rosso); }
+.riservato-campo { background: var(--grigio-tinta); border-radius: 6px; padding: 8px 10px; }

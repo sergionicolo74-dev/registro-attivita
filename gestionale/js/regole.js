@@ -91,6 +91,8 @@ export function campiMancanti(c, nPersone, kyc) {
   for (const [k, n] of attivi) if (vuoto(mm[k].stato)) m.push(`Stato mandato ${n}`);
   if (mm.funzione.attivo && !mm.funzione.funzioni.some(f => f.ruolo)) m.push("Ruolo nella funzione societaria");
   if (mm.domiciliazione.attivo && vuoto(mm.domiciliazione.tipo)) m.push("Tipo di domiciliazione");
+  if (mm.intestazione.attivo && (vuoto(mm.intestazione.tipoTitoli) || vuoto(mm.intestazione.numero))) m.push("Titoli dell'intestazione fiduciaria");
+  if (mm.intestazione.attivo && mm.intestazione.contratto !== "Firmato") m.push("Contratto fiduciario");
   if (!Object.values(c.servizi || {}).some(Boolean)) m.push("Servizi");
   if (c.servizi?.iva && vuoto(c.iva?.periodicita)) m.push("Periodicità IVA");
   if (c.servizi?.stipendi && vuoto(c.giornoPaga)) m.push("Giorno di paga");
@@ -133,8 +135,11 @@ export const GIORNI = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 export const TIPI_MANDATO = [
   ["contabilita", "Contabilità e Tax"],
   ["funzione", "Funzione societaria"],
-  ["domiciliazione", "Domiciliazione"]
+  ["domiciliazione", "Domiciliazione"],
+  ["intestazione", "Intestazione fiduciaria"]
 ];
+export const TIPI_TITOLI = ["Azioni", "Quote sociali"];
+export const ISCRIZIONE_TITOLI = ["Libro delle azioni aggiornato", "Iscritto a Registro di commercio", "Da aggiornare"];
 export const NOME_MANDATO = Object.fromEntries(TIPI_MANDATO);
 export const STATI_MANDATO = ["Firmato aggiornato", "Da aggiornare", "Mancante"];
 export const RUOLI_FUNZIONE = ["Amministratore unico", "Membro CdA", "Presidente CdA", "Gerente", "Presidente dei gerenti", "Direttore", "Nessuna funzione (responsabile)"];
@@ -149,7 +154,8 @@ export function mandatiDi(c) {
     return {
       contabilita: { ...base, budgetOre: null, tariffa: null, fatturazione: "", ...c.mandati.contabilita },
       funzione: { ...base, ...c.mandati.funzione, funzioni: c.mandati.funzione?.funzioni || [] },
-      domiciliazione: { ...base, tipo: "", dal: null, ...c.mandati.domiciliazione }
+      domiciliazione: { ...base, tipo: "", dal: null, ...c.mandati.domiciliazione },
+      intestazione: { ...base, tipoTitoli: "", numero: null, valoreNominale: null, percentuale: null, intestatario: "", dal: null, contratto: "", iscrizione: "", ...c.mandati.intestazione }
     };
   }
   const m = c.mandato || {}, s = c.servizi || {}, o = c.onorario || {}, f = c.funzione || {};
@@ -162,7 +168,8 @@ export function mandatiDi(c) {
       attivo: !!(f.tipo || conTipo("Amministrazione fiduciaria", "Completo")),
       funzioni: f.tipo ? [{ ruolo: RUOLO_VECCHIO[f.tipo] || f.tipo, persona: f.persona || "", firma: f.firma || "", inizio: f.inizio || null }] : [] },
     domiciliazione: { ...base, ...(conTipo("Domiciliazione", "Completo") ? comune : { aggiornareEntro: m.aggiornareEntro || null }),
-      attivo: !!(s.domiciliazione || conTipo("Domiciliazione", "Completo")), tipo: "", dal: null }
+      attivo: !!(s.domiciliazione || conTipo("Domiciliazione", "Completo")), tipo: "", dal: null },
+    intestazione: { ...base, tipoTitoli: "", numero: null, valoreNominale: null, percentuale: null, intestatario: "", dal: null, contratto: "", iscrizione: "" }
   };
 }
 

@@ -238,7 +238,8 @@ function creaDemo() {
     c("d1", "C001", "Alfa Servizi SA", "SA", { localita: "Lugano", cantone: "TI", mandati: {
       contabilita: { attivo: true, stato: "Da aggiornare", aggiornareEntro: "2026-12-31", budget: 2200, budgetOre: 15 },
       funzione: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2025-05-01", budget: 3000, funzioni: [{ ruolo: "Amministratore unico", persona: "Utente demo", firma: "Collettiva a due" }] },
-      domiciliazione: { attivo: true, stato: "Mancante", aggiornareEntro: "2026-12-31", budget: 1200, tipo: "Recapito c/o" } } }),
+      domiciliazione: { attivo: true, stato: "Mancante", aggiornareEntro: "2026-12-31", budget: 1200, tipo: "Recapito c/o" },
+      intestazione: { attivo: true, stato: "Firmato aggiornato", budget: 1500, tipoTitoli: "Azioni", numero: 100, valoreNominale: 1000, percentuale: 100, intestatario: "Studio demo SA", contratto: "Firmato", iscrizione: "Libro delle azioni aggiornato" } } }),
     c("d2", "C002", "Beta Consulenze Sagl", "Sagl", { responsabile: "Anna", localita: "Bellinzona", cantone: "TI", mandati: {
       contabilita: { attivo: true, stato: "Firmato aggiornato", dataFirma: "2026-03-01", budget: 4000, budgetOre: 25, fatturazione: "Trimestrale" } } }),
     c("d3", "C003", "Gamma Costruzioni SA", "SA", { localita: "Mendrisio", cantone: "TI", revisione: true, mandati: {

@@ -25,7 +25,8 @@ Date in formato ISO `aaaa-mm-gg` (mostrate come `gg.mm.aaaa`). Ogni documento ha
 `mandati` {
   `contabilita` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget` (CHF/anno), `budgetOre`, `tariffa`, `fatturazione`, `note`},
   `funzione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `funzioni`: [{`ruolo`, `persona`, `firma`, `inizio`}]},
-  `domiciliazione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `tipo` (Domicilio con ufficio proprio / Recapito c/o), `dal`}
+  `domiciliazione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `note`, `tipo` (Domicilio con ufficio proprio / Recapito c/o), `dal`},
+  `intestazione` {`attivo`, `stato`, `dataFirma`, `aggiornareEntro`, `budget`, `fatturazione`, `note`, `tipoTitoli` (Azioni / Quote sociali), `numero`, `valoreNominale`, `percentuale`, `intestatario`, `dal`, `contratto`, `iscrizione`} — il fiduciante è in `clienti_kyc.intestazione.fiduciante` (solo amministratori)
 } — `stato`: Firmato aggiornato / Da aggiornare / Mancante. I campi vecchi `mandato`, `funzione`, `onorario` vengono letti e convertiti (regole.js, mandatiDi),
 `iva` {`regime`, `periodicita` (Trimestrale/Semestrale/Mensile/Annuale)}, `contabilitaPeriodicita` (Mensile/Trimestrale), `giornoPaga` (1–31), `dipendenti`, `cassaAvs`, `lainf`, `lpp`,
 `servizi` {`contabilita`, `iva`, `stipendi`, `ifTrimestrale`, `ifAnnuale`, `dichiarazione`, `avsLainfIpg`, `lpp`, `domiciliazione`, `revisione`} (vero/falso), `revisione`,

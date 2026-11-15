@@ -10,7 +10,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finch�
 - Dati KYC (clienti e persone) separati e visibili solo agli amministratori
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
 - Completezza: per ogni cliente l'elenco dei dati mancanti (filtro "Dati da completare")
-- Mandati: fino a tre per cliente (Contabilità e Tax, Funzione societaria, Domiciliazione), ognuno con stato, date e budget; riepilogo con grafico budget/ore lavorate e griglia per cliente
+- Mandati: fino a quattro per cliente (Contabilità e Tax, Funzione societaria, Domiciliazione, Intestazione fiduciaria), ognuno con stato, date e budget; riepilogo con grafico budget/ore lavorate e griglia per cliente
 - Compiti: elenco per urgenza o a colonne, assegnazione, stati con motivo d'attesa, aggiornamenti, scaduti / entro 5 giorni / fermi da 5 giorni
 - Registro ore: lavoro svolto, nota/decisione, da fare; "attende riscontro" crea un compito; barra della giornata; settimana; dettatura
 - Scadenziario: scadenze ricorrenti calcolate dai servizi di ogni cliente; elenco per urgenza con riepilogo cliccabile, griglia clienti × servizi per anno, proroghe, responsabile, aggiornamenti

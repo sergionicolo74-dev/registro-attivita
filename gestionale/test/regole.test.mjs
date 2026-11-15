@@ -235,3 +235,15 @@ console.log("Test compiti superati");
   ok(R.redditivita(550, 300, 150, 240).percOre, 125, "ore preventivate indicate: 125%");
   ok([R.tipoFatturazione({ praticaId: "x" }), R.tipoFatturazione({ fatturabile: false }), R.tipoFatturazione({ fatturabile: true, extra: true }), R.tipoFatturazione({ fatturabile: true })], ["pratica", "non", "extra", "mandato"], "tipo di fatturazione");
 }
+
+// ---------- Intestazione fiduciaria ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  const c = { codice: "C009", forma: "SA", idi: "x", responsabile: "x", indirizzo: "x", npa: "x", localita: "x", chiusuraEsercizio: "31.12", servizi: { contabilita: true },
+    mandati: { intestazione: { attivo: true, stato: "Firmato aggiornato", tipoTitoli: "Azioni", numero: 100 } } };
+  ok(R.TIPI_MANDATO.map(([k]) => k), ["contabilita", "funzione", "domiciliazione", "intestazione"], "quattro mandati");
+  ok(R.campiMancanti(c, 1, null), ["Contratto fiduciario"], "manca il contratto fiduciario firmato");
+  ok(R.mandatiDi({ servizi: {} }).intestazione.attivo, false, "dati vecchi: intestazione non attiva");
+  ok(R.budgetTotale(R.mandatiDi({ mandati: { intestazione: { attivo: true, budget: 1500 }, contabilita: { attivo: true, budget: 2200 } } })), 3700, "budget con intestazione");
+}

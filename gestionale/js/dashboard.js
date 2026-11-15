@@ -6,7 +6,7 @@ import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
   riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
-  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, redditivita } from "./regole.js";
+  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, valoreOra } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
@@ -30,7 +30,7 @@ export async function vistaDashboard(el) {
   const finora = a < oggi ? a : aggiungiGiorni(oggi, -1) < da ? da : aggiungiGiorni(oggi, -1);
 
   const [utentiTutti, reg, presenze, vacanze, clienti, pratiche, extra] = await Promise.all([
-    admin ? D.listaUtenti() : Promise.resolve([]),
+    admin || fatt ? D.listaUtenti().catch(() => []) : Promise.resolve([]),
     D.listaRegistrazioniPeriodo(da, a, fatt),
     admin ? D.listaPresenzeStudio(da, a) : D.listaPresenze(u.uid, da, a),
     D.listaVacanze().catch(() => []), D.listaClienti(), D.listaPratiche().catch(() => []),
@@ -43,6 +43,8 @@ export async function vistaDashboard(el) {
   const cliPer = Object.fromEntries(clienti.map(c => [c.id, c]));
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
   const tariffaDi = id => Number(mmDi[id]?.contabilita.tariffa) || TARIFFA;
+  const tariffeUt = Object.fromEntries(utentiTutti.filter(x => x.tariffa).map(x => [x.id, Number(x.tariffa)]));
+  const valR = r => valoreOra(r, mmDi[r.clienteId], tariffeUt);
   const scelti = chi === "tutti" ? utenti.map(x => x.id) : [chi];
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r),
     mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && cliPer[r.clienteId]?.codice !== "C000" ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
@@ -79,10 +81,10 @@ export async function vistaDashboard(el) {
       const m = mmDi[c.id][k]; if (!m.attivo || !aForfait(m) || c.stato === "Cessato") continue;
       forf[k] = (forf[k] || 0) + Number(m.budget) * q;
     }
-    lavoro.forEach(r => { if (r.tf === "mandato" || r.tf === "non") valore[r.mand] = (valore[r.mand] || 0) + r.minuti / 60 * tariffaDi(r.clienteId); });
+    lavoro.forEach(r => { if (r.tf === "mandato" || r.tf === "non") valore[r.mand] = (valore[r.mand] || 0) + valR(r); });
     const aTariffa = lavoro.filter(r => r.tf === "extra" || (r.tf === "mandato" && (r.mand === "nonAttribuito" || !aForfait(mmDi[r.clienteId]?.[r.mand]))));
-    const extraCHF = aTariffa.reduce((s, r) => s + r.minuti / 60 * tariffaDi(r.clienteId), 0);
-    const extraFatt = aTariffa.filter(r => r.fatturataIl).reduce((s, r) => s + r.minuti / 60 * tariffaDi(r.clienteId), 0);
+    const extraCHF = aTariffa.reduce((s, r) => s + valR(r), 0);
+    const extraFatt = aTariffa.filter(r => r.fatturataIl).reduce((s, r) => s + valR(r), 0);
     const minPrat = {}; lavoro.filter(r => r.praticaId).forEach(r => { minPrat[r.praticaId] = (minPrat[r.praticaId] || 0) + r.minuti; });
     const pratConcluse = pratiche.filter(p => p.fase === "Conclusa" && p.conclusaIl >= da && p.conclusaIl <= a && p.fatturazione?.modo !== "Non fatturare");
     const pratCHF = pratConcluse.reduce((s, p) => s + importoPratica({ ...p, fatturazione: { ...p.fatturazione, tariffa: Number(p.fatturazione?.tariffa) || tariffaDi(p.clienteId) } }, minPrat[p.id] || 0), 0);
@@ -156,15 +158,15 @@ export async function vistaDashboard(el) {
     const righe = TIPI_MANDATO.map(([k, n]) => ({ k, n, forf: ricavi.forf[k] || 0, val: ricavi.valore[k] || 0 })).filter(r => r.forf || r.val);
     return `<div class="griglia-d">
       <section class="pannello sez-d"><div class="testa-d"><h2>Composizione dei ricavi</h2></div>${ciambella(ricavi.voci, ricavi.totale)}
-        <p class="tenue nota-d">Forfait = budget annuo dei mandati attivi × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : periodo === "mese" ? "1/12" : "7/365"}. Ore extra e a tariffa: registrate nel periodo. Pratiche: concluse nel periodo.</p></section>
-      <section class="pannello sez-d"><div class="testa-d"><h2>Budget dei mandati: ore consumate</h2></div>
+        <p class="tenue nota-d">Onorari = onorario annuo dei mandati attivi × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : periodo === "mese" ? "1/12" : "7/365"}. Ore extra e a tariffa: registrate nel periodo. Pratiche: concluse nel periodo.</p></section>
+      <section class="pannello sez-d"><div class="testa-d"><h2>Onorari dei mandati: quanto è stato consumato</h2></div>
         ${righe.length ? `<div class="meter-d">${righe.map(r => { const pc = r.forf ? Math.round(r.val / r.forf * 100) : null;
           const esito = !r.forf ? null : r.val <= r.forf ? "ok" : r.val <= r.forf * 1.15 ? "urgente" : "scaduto";
-          return `<div class="meter-r"><div class="meter-t"><strong>${e(r.n)}</strong><span>${pc != null ? `${pc}% del forfait` : "senza forfait"}</span></div>
-            <div class="meter-b" role="img" aria-label="${e(r.n)}: valore ore CHF ${chf(r.val)} su forfait CHF ${chf(r.forf)}"><span class="${esito === "scaduto" ? "oltre" : esito === "urgente" ? "limite" : "ok"}" style="width:${Math.min(100, pc || 0)}%"></span></div>
-            <div class="meter-t tenue"><span>ore CHF ${chf(r.val)} · forfait CHF ${chf(r.forf)}</span>${esito ? stato(esito, esito === "ok" ? `margine CHF ${chf(r.forf - r.val)}` : `oltre di CHF ${chf(r.val - r.forf)}`) : ""}</div></div>`; }).join("")}</div>`
+          return `<div class="meter-r"><div class="meter-t"><strong>${e(r.n)}</strong><span>${pc != null ? `${pc}% dell'onorario` : "senza onorario"}</span></div>
+            <div class="meter-b" role="img" aria-label="${e(r.n)}: valore ore CHF ${chf(r.val)} su onorario CHF ${chf(r.forf)}"><span class="${esito === "scaduto" ? "oltre" : esito === "urgente" ? "limite" : "ok"}" style="width:${Math.min(100, pc || 0)}%"></span></div>
+            <div class="meter-t tenue"><span>ore CHF ${chf(r.val)} · onorario CHF ${chf(r.forf)}</span>${esito ? stato(esito, esito === "ok" ? `margine CHF ${chf(r.forf - r.val)}` : `oltre di CHF ${chf(r.val - r.forf)}`) : ""}</div></div>`; }).join("")}</div>`
           : '<div class="vuoto">Nessun mandato a forfait.</div>'}
-        <p class="tenue nota-d">Valore delle ore nel mandato (anche non fatturabili) alla tariffa del cliente, confrontato con la quota di forfait del periodo. <a href="#/report">Report → Redditività</a> per il dettaglio per cliente.</p></section>
+        <p class="tenue nota-d">Valore delle ore nel mandato (anche non fatturabili) alla tariffa concordata o di chi ha lavorato, confrontato con la quota di onorario del periodo. <a href="#/report">Report → Redditività</a> per il dettaglio per cliente.</p></section>
     </div>
     <div class="tiles-d" style="grid-template-columns:repeat(3,1fr)">
       ${tile("t-arancio", "+", "Ore extra e a tariffa", `CHF ${chf(ricavi.extraCHF)}`, `${h(ricavi.aTariffaMin)} nel periodo`)}

@@ -1,7 +1,7 @@
 // Riepilogo dei mandati: quanti, a che punto, budget e ore lavorate per tipo.
 import * as D from "./data.js";
 import { e, stato } from "./ui.js";
-import { fmtNum, fmtOre, TIPI_MANDATO, mandatiDi, statoMandato, daAggiornare, budgetTotale } from "./regole.js";
+import { fmtNum, fmtOre, TIPI_MANDATO, mandatiDi, statoMandato, daAggiornare, budgetTotale, valoreOra } from "./regole.js";
 
 const TARIFFA_STUDIO = 150;
 let filtro = "";
@@ -19,8 +19,9 @@ export function mandatoDiRegistrazione(r, mm) {
 export async function vistaMandati(el) {
   const admin = D.isAdmin();
   const anno = new Date().getFullYear();
-  const [clienti, reg] = await Promise.all([D.listaClienti(),
-    admin ? D.listaRegistrazioniPeriodo(`${anno}-01-01`, `${anno}-12-31`) : Promise.resolve([])]);
+  const [clienti, reg, utenti] = await Promise.all([D.listaClienti(),
+    admin ? D.listaRegistrazioniPeriodo(`${anno}-01-01`, `${anno}-12-31`) : Promise.resolve([]), admin ? D.listaUtenti().catch(() => []) : Promise.resolve([])]);
+  const tariffeUt = Object.fromEntries(utenti.filter(x => x.tariffa).map(x => [x.id, Number(x.tariffa)]));
   const veri = clienti.filter(c => c.codice !== "C000").sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
 
@@ -34,8 +35,7 @@ export async function vistaMandati(el) {
     if (r.tipo === "nota" || !r.minuti) continue;
     const mm = mmDi[r.clienteId]; if (!mm) continue;
     const k = mandatoDiRegistrazione(r, mm);
-    const tariffa = Number(mm.contabilita.tariffa) || TARIFFA_STUDIO;
-    tot[k].minuti += r.minuti; tot[k].valore += r.minuti / 60 * tariffa;
+    tot[k].minuti += r.minuti; tot[k].valore += valoreOra(r, mm, tariffeUt);
   }
   const maxVal = Math.max(1, ...TIPI_MANDATO.flatMap(([k]) => [tot[k].budget, tot[k].valore]));
   const righe = veri.filter(c => filtro !== "agg" || TIPI_MANDATO.some(([k]) => daAggiornare(mmDi[c.id][k])));
@@ -47,19 +47,19 @@ export async function vistaMandati(el) {
     <div class="tenue" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em">${e(n)}</div>
     <div class="grande">${tot[k].attivi} <span class="tenue" style="font-size:14px;font-weight:400">clienti</span></div>
     <div class="segnali">${tot[k].daAgg ? stato("urgente", `${tot[k].daAgg} da aggiornare`) : tot[k].attivi ? stato("ok", "Tutti aggiornati") : ""}</div>
-    ${admin ? `<div class="tenue" style="margin-top:8px">Budget CHF <strong style="color:var(--inchiostro)">${fmtNum(tot[k].budget)}</strong></div>` : ""}
+    ${admin ? `<div class="tenue" style="margin-top:8px">Onorari CHF <strong style="color:var(--inchiostro)">${fmtNum(tot[k].budget)}</strong></div>` : ""}
   </div>`).join("")}</div>
 
   ${admin ? `<section class="pannello" style="margin:14px 0">
-    <h2 style="font-size:16px">Budget e ore lavorate ${anno}, per mandato</h2>
-    <p class="tenue" style="margin:4px 0 14px">Valore delle ore = ore registrate × tariffa del cliente (CHF ${TARIFFA_STUDIO} se non indicata). Se il valore supera il budget, il mandato costa più di quanto rende.</p>
-    <div class="grafico" role="img" aria-label="Budget e valore delle ore lavorate per tipo di mandato">
+    <h2 style="font-size:16px">Onorari e ore lavorate ${anno}, per mandato</h2>
+    <p class="tenue" style="margin:4px 0 14px">Valore delle ore = ore registrate × tariffa concordata con il cliente, altrimenti quella di chi ha lavorato (CHF ${TARIFFA_STUDIO} se non indicata). Se il valore supera l'onorario, il mandato costa più di quanto rende.</p>
+    <div class="grafico" role="img" aria-label="Onorari e valore delle ore lavorate per tipo di mandato">
     ${TIPI_MANDATO.map(([k, n]) => {
       const t = tot[k], sforo = t.budget && t.valore > t.budget;
       return `<div class="gruppo"><div class="nome">${e(n)}</div>
-        <div class="riga"><span class="etichetta">Budget</span><div class="pista"><div class="b budget" style="width:${t.budget / maxVal * 100}%"></div></div><span class="valore">CHF ${fmtNum(t.budget, 0)}</span></div>
+        <div class="riga"><span class="etichetta">Onorario</span><div class="pista"><div class="b budget" style="width:${t.budget / maxVal * 100}%"></div></div><span class="valore">CHF ${fmtNum(t.budget, 0)}</span></div>
         <div class="riga"><span class="etichetta">Ore lavorate</span><div class="pista"><div class="b lavoro${sforo ? " sforo" : ""}" style="width:${t.valore / maxVal * 100}%"></div></div><span class="valore">CHF ${fmtNum(t.valore, 0)} · ${fmtOre(t.minuti)} h</span></div>
-        ${t.budget ? `<div class="tenue" style="font-size:12px;margin-left:110px">${sforo ? stato("scaduto", `Oltre il budget di CHF ${fmtNum(t.valore - t.budget, 0)}`) : `Usato ${Math.round(t.valore / t.budget * 100)}% del budget`}</div>` : ""}</div>`;
+        ${t.budget ? `<div class="tenue" style="font-size:12px;margin-left:110px">${sforo ? stato("scaduto", `Oltre il budget di CHF ${fmtNum(t.valore - t.budget, 0)}`) : `Usato ${Math.round(t.valore / t.budget * 100)}% dell'onorario`}</div>` : ""}</div>`;
     }).join("")}
     </div>
     ${tot.pratica.minuti ? `<p class="tenue" style="font-size:13px">${fmtOre(tot.pratica.minuti)} ore registrate su pratiche amministrative (fuori mandato, si fatturano a parte): <a href="#/pratiche">vedi Pratiche</a>.</p>` : ""}
@@ -69,7 +69,7 @@ export async function vistaMandati(el) {
   <section class="pannello" style="margin-top:14px">
     <div class="testata" style="margin-bottom:10px"><h2 style="font-size:16px">Per cliente</h2>
       <select id="filtro-m" aria-label="Filtro"><option value="">Tutti i clienti</option><option value="agg"${filtro === "agg" ? " selected" : ""}>Solo con mandati da aggiornare</option></select></div>
-    <table class="tabella griglia-mandati"><thead><tr><th>Cliente</th>${TIPI_MANDATO.map(([, n]) => `<th>${e(n)}</th>`).join("")}${admin ? '<th class="num">Budget annuo</th>' : ""}</tr></thead><tbody>
+    <table class="tabella griglia-mandati"><thead><tr><th>Cliente</th>${TIPI_MANDATO.map(([, n]) => `<th>${e(n)}</th>`).join("")}${admin ? '<th class="num">Onorari annui</th>' : ""}</tr></thead><tbody>
     ${righe.map(c => {
       const mm = mmDi[c.id];
       return `<tr class="cliccabile" data-id="${e(c.id)}" tabindex="0"><td><strong>${e(c.ragioneSociale)}</strong><div class="tenue">${e(c.codice)}</div></td>

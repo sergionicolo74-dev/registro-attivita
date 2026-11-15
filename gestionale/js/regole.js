@@ -561,6 +561,26 @@ export function redditivita(forfait, minuti, tariffa, minutiPreventivati = null)
     minutiPreventivati: Math.round(prev), percOre: prev ? Math.round(minuti / prev * 100) : null,
     esito: !forfait ? null : valore <= forfait ? "ok" : valore <= forfait * 1.15 ? "urgente" : "scaduto" };
 }
+// ---------- Tariffe e ore previste ----------
+// Onorario annuo = prezzo totale del mandato (es. CHF 2'200 per una piccola contabilità).
+// Le ore previste si ricavano dall'onorario: onorario ÷ tariffa (concordata col cliente, altrimenti CHF 150).
+// Il valore delle ore lavorate usa la tariffa concordata col cliente, altrimenti quella di chi ha lavorato (es. 190 per il titolare).
+export const TARIFFA_BASE = 150;
+export const minutiPrevisti = (onorario, tariffaCliente) => Number(onorario) > 0 ? Math.round(Number(onorario) / (Number(tariffaCliente) || TARIFFA_BASE) * 60) : 0;
+/** Tariffa oraria di una registrazione: concordata col cliente, poi del collaboratore, poi base. */
+export function tariffaOra(r, mm, tariffeUtenti = {}) {
+  return Number(mm?.contabilita?.tariffa) || Number(tariffeUtenti[r.autoreUid]) || TARIFFA_BASE;
+}
+/** Valore in CHF di una registrazione alla sua tariffa. */
+export const valoreOra = (r, mm, tariffeUtenti) => Math.round((r.minuti || 0) / 60 * tariffaOra(r, mm, tariffeUtenti) * 100) / 100;
+/** Esito di un mandato a onorario: valore ore (già calcolato con le tariffe di ognuno) rispetto all'onorario. */
+export function esitoMandato(onorario, minuti, valore, minutiPrev) {
+  const margine = Math.round((onorario - valore) * 100) / 100;
+  return { valore: Math.round(valore * 100) / 100, margine, tariffaEffettiva: minuti ? Math.round(onorario / (minuti / 60) * 100) / 100 : null,
+    minutiPreventivati: Math.round(minutiPrev || 0), percOre: minutiPrev ? Math.round(minuti / minutiPrev * 100) : null,
+    esito: !onorario ? null : valore <= onorario ? "ok" : valore <= onorario * 1.15 ? "urgente" : "scaduto" };
+}
+
 /** Come è fatturata una registrazione: pratica | extra | mandato | non */
 export function tipoFatturazione(r) {
   if (r.praticaId) return "pratica";

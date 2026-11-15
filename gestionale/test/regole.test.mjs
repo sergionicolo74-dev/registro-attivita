@@ -247,3 +247,16 @@ console.log("Test compiti superati");
   ok(R.mandatiDi({ servizi: {} }).intestazione.attivo, false, "dati vecchi: intestazione non attiva");
   ok(R.budgetTotale(R.mandatiDi({ mandati: { intestazione: { attivo: true, budget: 1500 }, contabilita: { attivo: true, budget: 2200 } } })), 3700, "budget con intestazione");
 }
+
+// ---------- Onorario, ore previste e tariffe ----------
+{
+  const R = await import("../js/regole.js");
+  const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
+  ok(R.minutiPrevisti(2200), 880, "onorario 2'200 a 150/h = 14h40 previste");
+  ok(R.minutiPrevisti(2200, 200), 660, "con tariffa concordata 200/h = 11h00");
+  const mm = { contabilita: { tariffa: null } }, tu = { seo: 190 };
+  ok([R.tariffaOra({ autoreUid: "seo" }, mm, tu), R.tariffaOra({ autoreUid: "anna" }, mm, tu), R.tariffaOra({ autoreUid: "seo" }, { contabilita: { tariffa: 170 } }, tu)], [190, 150, 170], "tariffa: titolare 190, collaboratore 150, concordata 170");
+  ok(R.valoreOra({ autoreUid: "seo", minuti: 90 }, mm, tu), 285, "1h30 del titolare = 285");
+  const es = R.esitoMandato(550, 300, 150 * 3 + 190 * 2, R.minutiPrevisti(550));
+  ok([es.valore, es.margine, es.minutiPreventivati, es.esito], [830, -280, 220, "scaduto"], "trimestre 550: 3h a 150 + 2h a 190 = 830, in perdita");
+}

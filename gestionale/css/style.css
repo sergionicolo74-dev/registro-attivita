@@ -427,3 +427,5 @@ strong.neg { color: var(--rosso); }
 .legenda i.c-mand { background: #2a78d6; } .legenda i.c-extra { background: #eb6834; } .legenda i.c-prat { background: #1baf7a; }
 .legenda i.c-non { background: repeating-linear-gradient(45deg, #8a8780, #8a8780 3px, #C9C6BD 3px, #C9C6BD 6px); }
 .barra-t.vuota span { color: var(--tenue); font-weight: 400; }
+.ore-prev { display: flex; flex-direction: column; justify-content: flex-end; font-size: 13px; padding-bottom: 6px; }
+.ore-prev strong { font-size: 16px; }

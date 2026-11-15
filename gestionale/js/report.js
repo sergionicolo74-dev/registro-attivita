@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, periodoDi, spostaPeriodo, mandatiDi, TIPI_MANDATO, NOME_MANDATO,
-  freqMandato, periodiFatturazione, aForfait, redditivita, tipoFatturazione, importoPratica } from "./regole.js";
+  freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 
 let periodo = "trimestre", rif = oggiISO(), vista = "fatturare", fCli = "", fMand = "", fChi = "";
@@ -24,6 +24,8 @@ export async function vistaReport(el) {
   const cliPer = Object.fromEntries(clienti.map(c => [c.id, c]));
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
   const tariffaDi = id => Number(mmDi[id]?.contabilita.tariffa) || TARIFFA;
+  const tariffeUt = Object.fromEntries(utenti.filter(x => x.tariffa).map(x => [x.id, Number(x.tariffa)]));
+  const valR = r => valoreOra(r, mmDi[r.clienteId], tariffeUt);
   const fattPer = Object.fromEntries(fatture.map(f => [f.id, f]));
   const nomeCli = id => cliPer[id] ? `${cliPer[id].codice} · ${cliPer[id].ragioneSociale}` : "–";
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r), mand: r.praticaId ? "pratica" : mmDi[r.clienteId] ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
@@ -38,11 +40,11 @@ export async function vistaReport(el) {
     if (!m.attivo || !aForfait(m) || (fMand && fMand !== k)) continue;
     for (const p of periodiFatturazione(freqMandato(k, m), +da.slice(0, 4))) {
       if (p.a < da || p.a > a) continue;
-      const minuti = lavoro.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non") && r.data >= p.da && r.data <= p.a && (!fChi || r.autoreUid === fChi)).reduce((s, r) => s + r.minuti, 0);
+      const rr = lavoro.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non") && r.data >= p.da && r.data <= p.a && (!fChi || r.autoreUid === fChi));
+      const minuti = rr.reduce((s, r) => s + r.minuti, 0), valore = rr.reduce((s, r) => s + valR(r), 0);
       const importo = Math.round(Number(m.budget) * p.quota * 100) / 100;
-      const prev = k === "contabilita" && Number(m.budgetOre) ? Number(m.budgetOre) * 60 * p.quota : null;
       const id = `${c.id}_${k}_${p.periodo}`;
-      forfait.push({ id, c, k, p, importo, minuti, chiuso: p.a < oggi, fatt: fattPer[id], ...redditivita(importo, minuti, tariffaDi(c.id), prev) });
+      forfait.push({ id, c, k, p, importo, minuti, chiuso: p.a < oggi, fatt: fattPer[id], ...esitoMandato(importo, minuti, valore, minutiPrevisti(importo, mmDi[c.id].contabilita.tariffa)) });
     }
   }
   const forfaitDaFatt = forfait.filter(x => x.chiuso && !x.fatt);
@@ -52,7 +54,7 @@ export async function vistaReport(el) {
   const extraAperte = aParte.filter(r => !r.fatturataIl);
   const perCliExtra = {};
   extraAperte.forEach(r => { (perCliExtra[r.clienteId] = perCliExtra[r.clienteId] || []).push(r); });
-  const importoExtra = r => Math.round(r.minuti / 60 * tariffaDi(r.clienteId) * 100) / 100;
+  const importoExtra = r => valR(r);
   const totExtra = extraAperte.reduce((s, r) => s + importoExtra(r), 0);
 
   // --- pratiche concluse da fatturare ---
@@ -86,14 +88,14 @@ export async function vistaReport(el) {
   function htmlFatturare() {
     return `<div class="kpi-d" style="grid-template-columns:repeat(4,1fr)">
       <div class="kpi-c princ"><span class="tenue">Totale da fatturare</span><strong>CHF ${chf(totForf + totExtra + totPrat)}</strong><span class="tenue">periodi chiusi entro il ${e(fmtData(a < oggi ? a : oggi))}</span></div>
-      <div class="kpi-c"><span class="tenue">Forfait dei mandati</span><strong>CHF ${chf(totForf)}</strong><span class="tenue">${forfaitDaFatt.length} periodi chiusi</span></div>
+      <div class="kpi-c"><span class="tenue">Onorari dei mandati</span><strong>CHF ${chf(totForf)}</strong><span class="tenue">${forfaitDaFatt.length} periodi chiusi</span></div>
       <div class="kpi-c"><span class="tenue">Ore extra e a ore</span><strong>CHF ${chf(totExtra)}</strong><span class="tenue">${h(extraAperte.reduce((s, r) => s + r.minuti, 0))} non ancora fatturate</span></div>
       <div class="kpi-c"><span class="tenue">Pratiche concluse</span><strong>CHF ${chf(totPrat)}</strong><span class="tenue">${pratDaFatt.length} da fatturare</span></div>
     </div>
     <div class="azioni" style="margin:0 0 12px"><button class="btn" id="csv-fatt">Esporta tutto il da fatturare (CSV)</button></div>
 
-    <section class="pannello sez-d"><div class="testa-d"><h2>Mandati a forfait</h2><span class="tenue" style="font-size:13px">Periodi che terminano in ${e(P.etichetta)}, con le ore impiegate nel periodo</span></div>
-    ${forfait.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th>Periodo</th><th class="num">Forfait CHF</th><th>Ore impiegate / preventivate</th><th class="num">Valore ore</th><th>Esito</th><th></th></tr></thead><tbody>
+    <section class="pannello sez-d"><div class="testa-d"><h2>Mandati a onorario</h2><span class="tenue" style="font-size:13px">Periodi che terminano in ${e(P.etichetta)}, con le ore impiegate nel periodo</span></div>
+    ${forfait.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th>Periodo</th><th class="num">Onorario CHF</th><th>Ore impiegate / preventivate</th><th class="num">Valore ore</th><th>Esito</th><th></th></tr></thead><tbody>
       ${forfait.sort((x, y) => (x.fatt ? 1 : 0) - (y.fatt ? 1 : 0) || x.p.a.localeCompare(y.p.a) || x.c.codice.localeCompare(y.c.codice)).map(x => `<tr${x.fatt ? ' class="fatturato"' : ""}>
         <td><a href="#/clienti/${encodeURIComponent(x.c.id)}/mandati">${e(nomeCli(x.c.id))}</a></td><td>${e(NOME_MANDATO[x.k])}</td><td>${e(x.p.etichetta)}${x.chiuso ? "" : ' <span class="tenue">(in corso)</span>'}</td>
         <td class="num">${chf(x.importo)}</td><td>${barraOre(x.minuti, x.minutiPreventivati)}</td><td class="num">${chf(x.valore)}</td>
@@ -104,7 +106,7 @@ export async function vistaReport(el) {
 
     <section class="pannello sez-d"><div class="testa-d"><h2>Ore da fatturare a parte</h2><span class="tenue" style="font-size:13px">Extra mandato, mandati senza forfait e clienti occasionali · ${e(P.etichetta)}</span></div>
     ${Object.keys(perCliExtra).length ? Object.entries(perCliExtra).sort(([x], [y]) => nomeCli(x).localeCompare(nomeCli(y))).map(([cid, l]) => `
-      <div class="blocco-extra"><div class="testa-d"><h3>${e(nomeCli(cid))} <span class="tenue">· ${h(l.reduce((s, r) => s + r.minuti, 0))} · CHF ${chf(l.reduce((s, r) => s + importoExtra(r), 0))} (tariffa ${chf(tariffaDi(cid))})</span></h3>
+      <div class="blocco-extra"><div class="testa-d"><h3>${e(nomeCli(cid))} <span class="tenue">· ${h(l.reduce((s, r) => s + r.minuti, 0))} · CHF ${chf(l.reduce((s, r) => s + importoExtra(r), 0))}${mmDi[cid]?.contabilita.tariffa ? ` (tariffa concordata ${chf(tariffaDi(cid))})` : " (alla tariffa di chi ha lavorato)"}</span></h3>
         <div class="barra"><button class="btn piccolo" data-stampa="${e(cid)}">Rapporto per il cliente</button><button class="btn piccolo primario" data-extra="${e(cid)}">✓ Fatturate</button></div></div>
       <table class="tabella"><thead><tr><th>Data</th><th>Chi</th><th>Descrizione registrata</th><th style="width:34%">Voce per la fattura</th><th class="num">Ore</th><th class="num">CHF</th></tr></thead><tbody>
       ${l.sort((x, y) => x.data.localeCompare(y.data)).map(r => `<tr><td style="white-space:nowrap">${e(fmtData(r.data))}</td><td>${e(r.autoreNome || "")}</td>
@@ -127,26 +129,26 @@ export async function vistaReport(el) {
     for (const c of clientiVeri) for (const [k, n] of TIPI_MANDATO) {
       const m = mmDi[c.id][k];
       if (!m.attivo || !aForfait(m) || (fMand && fMand !== k)) continue;
-      const minuti = nelPeriodo.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non")).reduce((s, r) => s + r.minuti, 0);
+      const rr = nelPeriodo.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non"));
+      const minuti = rr.reduce((s, r) => s + r.minuti, 0), valore = rr.reduce((s, r) => s + valR(r), 0);
       const extra = nelPeriodo.filter(r => r.clienteId === c.id && r.mand === k && r.tf === "extra").reduce((s, r) => s + r.minuti, 0);
       const forf = Math.round(Number(m.budget) * q * 100) / 100;
-      const prev = k === "contabilita" && Number(m.budgetOre) ? Number(m.budgetOre) * 60 * q : null;
-      righe.push({ c, k, n, forf, minuti, extra, ...redditivita(forf, minuti, tariffaDi(c.id), prev) });
+      righe.push({ c, k, n, forf, minuti, extra, ...esitoMandato(forf, minuti, valore, minutiPrevisti(forf, mmDi[c.id].contabilita.tariffa)) });
     }
     const tot = righe.reduce((s, r) => ({ forf: s.forf + r.forf, valore: s.valore + r.valore, minuti: s.minuti + r.minuti }), { forf: 0, valore: 0, minuti: 0 });
-    const margine = tot.forf - tot.valore, esitoTot = redditivita(tot.forf, tot.minuti, tot.minuti ? tot.valore / (tot.minuti / 60) : TARIFFA).esito;
+    const margine = tot.forf - tot.valore, esitoTot = esitoMandato(tot.forf, tot.minuti, tot.valore, 0).esito;
     const perTipo = TIPI_MANDATO.map(([k, n]) => { const l = righe.filter(r => r.k === k); return { k, n, forf: l.reduce((s, r) => s + r.forf, 0), valore: l.reduce((s, r) => s + r.valore, 0), minuti: l.reduce((s, r) => s + r.minuti, 0), perdita: l.filter(r => r.esito === "scaduto").length, num: l.length }; }).filter(x => x.num);
     righe.sort((x, y) => x.margine - y.margine);
-    return `<p class="tenue nota-d">Forfait del periodo = budget annuo × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : "1/12"}. Le ore impiegate (comprese le non fatturabili, escluse extra e pratiche) sono valutate alla tariffa del cliente. Per la contabilità il confronto più affidabile è sull'anno, perché il lavoro di un trimestre si fa spesso nel trimestre dopo.</p>
+    return `<p class="tenue nota-d">Onorario del periodo = onorario annuo × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : "1/12"}. Le ore impiegate (comprese le non fatturabili, escluse extra e pratiche) sono valutate alla tariffa concordata con il cliente o, se manca, a quella di chi ha lavorato (impostata in Utenti). Ore previste = onorario ÷ tariffa (CHF 150 se non concordata). Per la contabilità il confronto più affidabile è sull'anno, perché il lavoro di un trimestre si fa spesso nel trimestre dopo.</p>
     <div class="kpi-d" style="grid-template-columns:repeat(4,1fr)">
-      <div class="kpi-c princ"><span class="tenue">Margine sui forfait</span><strong class="${margine < 0 ? "neg" : ""}">CHF ${chf(margine)}</strong>${esitoTot ? stato(...ESITO[esitoTot]) : ""}</div>
-      <div class="kpi-c"><span class="tenue">Forfait del periodo</span><strong>CHF ${chf(tot.forf)}</strong><span class="tenue">${righe.length} mandati a forfait</span></div>
+      <div class="kpi-c princ"><span class="tenue">Margine sugli onorari</span><strong class="${margine < 0 ? "neg" : ""}">CHF ${chf(margine)}</strong>${esitoTot ? stato(...ESITO[esitoTot]) : ""}</div>
+      <div class="kpi-c"><span class="tenue">Onorari del periodo</span><strong>CHF ${chf(tot.forf)}</strong><span class="tenue">${righe.length} mandati a forfait</span></div>
       <div class="kpi-c"><span class="tenue">Valore delle ore impiegate</span><strong>CHF ${chf(tot.valore)}</strong><span class="tenue">${h(tot.minuti)}</span></div>
-      <div class="kpi-c"><span class="tenue">Tariffa effettiva media</span><strong>${tot.minuti ? "CHF " + chf(tot.forf / (tot.minuti / 60)) + "/h" : "–"}</strong><span class="tenue">forfait ÷ ore impiegate</span></div>
+      <div class="kpi-c"><span class="tenue">Tariffa effettiva media</span><strong>${tot.minuti ? "CHF " + chf(tot.forf / (tot.minuti / 60)) + "/h" : "–"}</strong><span class="tenue">onorario ÷ ore impiegate</span></div>
     </div>
     ${perTipo.length > 1 ? `<div class="kpi-s">${perTipo.map(t => `<div class="kpi-b fermo"><span class="tenue">${e(t.n)}</span><strong class="${t.forf - t.valore < 0 ? "neg" : ""}">CHF ${chf(t.forf - t.valore)}</strong><span class="tenue">${t.num} mandati${t.perdita ? ` · ${t.perdita} in perdita` : ""}</span></div>`).join("")}</div>` : ""}
     <section class="pannello sez-d"><div class="testa-d"><h2>Per mandato</h2><div class="legenda"><span><i class="s-fat"></i>Ore impiegate</span><span><i class="s-vuoto"></i>Ore preventivate</span><span><i class="s-oltre"></i>Oltre il preventivo</span></div></div>
-    ${righe.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th class="num">Forfait</th><th style="min-width:220px">Ore impiegate / preventivate</th><th class="num">Valore ore</th><th class="num">Margine</th><th class="num">CHF/h effettivi</th><th>Esito</th></tr></thead><tbody>
+    ${righe.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th class="num">Onorario</th><th style="min-width:220px">Ore impiegate / preventivate</th><th class="num">Valore ore</th><th class="num">Margine</th><th class="num">CHF/h effettivi</th><th>Esito</th></tr></thead><tbody>
       ${righe.map(r => `<tr><td><a href="#/clienti/${encodeURIComponent(r.c.id)}/mandati">${e(nomeCli(r.c.id))}</a></td><td>${e(r.n)}${r.extra ? `<div class="tenue">+ ${h(r.extra)} extra fatturate a parte</div>` : ""}</td>
         <td class="num">${chf(r.forf)}</td><td>${barraOre(r.minuti, r.minutiPreventivati)}</td><td class="num">${chf(r.valore)}</td>
         <td class="num"><span class="${r.margine < 0 ? "neg" : ""}">${chf(r.margine)}</span></td><td class="num">${r.tariffaEffettiva != null ? chf(r.tariffaEffettiva) : "–"}</td>
@@ -198,7 +200,7 @@ export async function vistaReport(el) {
   corpo.querySelectorAll("[data-stampa]").forEach(b => b.addEventListener("click", () => {
     const cid = b.dataset.stampa, tutte = !!b.dataset.tutte;
     const l = (tutte ? nelPeriodo.filter(r => r.clienteId === cid && r.tf !== "non") : perCliExtra[cid] || []).sort((x, y) => x.data.localeCompare(y.data));
-    stampaRapporto(cliPer[cid], P.etichetta, l, tutte ? null : tariffaDi(cid));
+    stampaRapporto(cliPer[cid], P.etichetta, l, tutte ? null : importoExtra);
   }));
   corpo.querySelector("#csv-fatt")?.addEventListener("click", () => scaricaCsv(`Da_fatturare_${P.etichetta.replace(/\W+/g, "_")}.csv`, [
     ["Tipo", "Codice cliente", "Cliente", "Descrizione", "Periodo / data", "Ore", "Importo CHF"],
@@ -229,8 +231,8 @@ function scaricaCsv(nome, righe) {
 }
 
 /** Rapporto ore stampabile per il cliente (o da allegare alla fattura). */
-function stampaRapporto(c, periodo, l, tariffa) {
-  const tot = l.reduce((s, r) => s + r.minuti, 0);
+function stampaRapporto(c, periodo, l, importo) {
+  const tot = l.reduce((s, r) => s + r.minuti, 0), tariffa = !!importo, totChf = importo ? l.reduce((s, r) => s + importo(r), 0) : 0;
   const w = window.open("", "_blank");
   if (!w) { avviso("Il browser ha bloccato la finestra: consenti i pop-up per questo sito"); return; }
   w.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Rapporto ore ${e(c?.ragioneSociale || "")}</title>
@@ -238,8 +240,8 @@ function stampaRapporto(c, periodo, l, tariffa) {
     th,td{border-bottom:1px solid #ccc;padding:6px 4px;text-align:left;vertical-align:top}th{font-size:11px;color:#555}.n{text-align:right;white-space:nowrap}tfoot td{font-weight:bold;border-top:2px solid #1A1A18}</style></head><body>
     <h1>Rapporto delle prestazioni</h1><div>${e(c?.ragioneSociale || "")} (${e(c?.codice || "")}) · ${e(periodo)}</div>
     <table><thead><tr><th>Data</th><th>Prestazione</th><th class="n">Ore</th>${tariffa ? '<th class="n">CHF</th>' : ""}</tr></thead><tbody>
-    ${l.map(r => `<tr><td class="n" style="text-align:left">${e(fmtData(r.data))}</td><td>${e(r.voceFattura || r.descrizione)}</td><td class="n">${(r.minuti / 60).toFixed(2)}</td>${tariffa ? `<td class="n">${fmtNum(r.minuti / 60 * tariffa)}</td>` : ""}</tr>`).join("")}</tbody>
-    <tfoot><tr><td></td><td>Totale${tariffa ? ` (tariffa CHF ${fmtNum(tariffa)}/h, IVA esclusa)` : ""}</td><td class="n">${(tot / 60).toFixed(2)}</td>${tariffa ? `<td class="n">${fmtNum(tot / 60 * tariffa)}</td>` : ""}</tr></tfoot></table>
+    ${l.map(r => `<tr><td class="n" style="text-align:left">${e(fmtData(r.data))}</td><td>${e(r.voceFattura || r.descrizione)}</td><td class="n">${(r.minuti / 60).toFixed(2)}</td>${tariffa ? `<td class="n">${fmtNum(importo(r))}</td>` : ""}</tr>`).join("")}</tbody>
+    <tfoot><tr><td></td><td>Totale${tariffa ? " (IVA esclusa)" : ""}</td><td class="n">${(tot / 60).toFixed(2)}</td>${tariffa ? `<td class="n">${fmtNum(totChf)}</td>` : ""}</tr></tfoot></table>
     <script>window.onload=()=>window.print()<\/script></body></html>`);
   w.document.close();
 }

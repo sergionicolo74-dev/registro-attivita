@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
   TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
-  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE } from "./regole.js";
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, TARIFFA_BASE, minutiPrevisti, fmtDurata } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -130,7 +130,7 @@ export async function vistaScheda(el, id) {
         <div><span>Contatto</span>${principale ? e(`${principale.nome || ""} ${principale.cognome || ""}`.trim()) : "–"}</div>
         ${c.forma === "Persona fisica" ? `<div><span>Nato/a il</span>${e(fmtData(c.df?.nascita) || "–")}</div><div><span>Stato civile</span>${e(c.df?.statoCivile || "–")}</div>`
           : `<div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>`}
-        ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Budget annuo</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
+        ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Onorari annui</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
       </div>
       ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
@@ -320,10 +320,10 @@ function schedaMandati(p, c, ricarica, kyc) {
       ${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
       ${campo(`mandati.${k}.dataFirma`, "Data firma", mm[k].dataFirma, "date")}
       ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}
-      ${admin ? campo(`mandati.${k}.budget`, "Budget annuo CHF (forfait)", mm[k].budget, "number") : ""}
+      ${admin ? campo(`mandati.${k}.budget`, "Onorario annuo CHF (prezzo del mandato)", mm[k].budget, "number") + `<div class="ore-prev" data-k="${k}"></div>` : ""}
       ${k !== "contabilita" ? campo(`mandati.${k}.fatturazione`, "Fatturazione", mm[k].fatturazione || "Annuale", "select", FREQ_FATTURAZIONE) : ""}`;
   const specifici = {
-    contabilita: `${admin ? campo("mandati.contabilita.budgetOre", "Budget ore annue", mm.contabilita.budgetOre, "number") + campo("mandati.contabilita.tariffa", "Tariffa oraria CHF (vuoto = 150)", mm.contabilita.tariffa, "number") : ""}
+    contabilita: `${admin ? campo("mandati.contabilita.tariffa", "Tariffa concordata con il cliente CHF/h (vuoto = tariffa di chi lavora)", mm.contabilita.tariffa, "number") : ""}
       ${campo("mandati.contabilita.fatturazione", "Fatturazione", mm.contabilita.fatturazione || "Trimestrale", "select", FREQ_FATTURAZIONE)}`,
     funzione: "",
     domiciliazione: `${campo("mandati.domiciliazione.tipo", "Tipo", mm.domiciliazione.tipo, "select", TIPI_DOMICILIO)}${campo("mandati.domiciliazione.dal", "Dal", mm.domiciliazione.dal, "date")}`,
@@ -350,11 +350,17 @@ function schedaMandati(p, c, ricarica, kyc) {
           <div class="griglia">${specifici[k]}${comuni(k)}${campo(`mandati.${k}.note`, "Note", mm[k].note, "text", [], true)}</div>
         </div></section>`;
     }).join("")}</div></fieldset>
-    ${admin ? `<div class="fatti" style="margin-top:14px"><div><span>Budget annuo totale</span><strong>CHF ${fmtNum(budgetTotale(mm))}</strong></div></div>
+    ${admin ? `<div class="fatti" style="margin-top:14px"><div><span>Onorari annui totali</span><strong>CHF ${fmtNum(budgetTotale(mm))}</strong></div></div>
       <div class="azioni"><button class="btn primario">Salva</button></div>` : '<p class="tenue" style="margin-top:14px">Solo gli amministratori possono modificare i mandati.</p>'}
   </form>`;
   if (!admin) return;
   const form = p.querySelector("form");
+  // Ore previste: onorario ÷ tariffa concordata (o CHF 150), aggiornate mentre si scrive
+  const orePrev = () => form.querySelectorAll(".ore-prev").forEach(box => {
+    const on = Number(form[`mandati.${box.dataset.k}.budget`]?.value), t = Number(form["mandati.contabilita.tariffa"]?.value) || TARIFFA_BASE;
+    box.innerHTML = on > 0 ? `<span class="tenue">Ore previste</span><strong>${fmtDurata(minutiPrevisti(on, t))}</strong><span class="tenue">all'anno (CHF ${fmtNum(on, 0)} ÷ ${fmtNum(t, 0)}/h)</span>` : "";
+  });
+  form.addEventListener("input", orePrev); orePrev();
   form.querySelectorAll(".interruttore input").forEach(cb => cb.addEventListener("change", () => cb.closest(".mandato").classList.toggle("spento", !cb.checked)));
   p.querySelector("#aggiungi-funzione")?.addEventListener("click", () => {
     const box = p.querySelector("#funzioni");

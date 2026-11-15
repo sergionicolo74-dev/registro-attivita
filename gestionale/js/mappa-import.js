@@ -35,11 +35,11 @@ function clientiDaExcelV3(righe) {
     const m = (k, extra = {}) => {
       const p = PREF_MANDATO[k];
       return { attivo: X(r[`${p} – mandato attivo`]), stato: T(r[`${p} – stato mandato firmato`]), dataFirma: parseData(r[`${p} – data firma`]),
-        aggiornareEntro: parseData(r[`${p} – aggiornare entro`]), budget: N(r[`${p} – forfait annuo CHF`]), fatturazione: T(r[`${p} – fatturazione`]), ...extra };
+        aggiornareEntro: parseData(r[`${p} – aggiornare entro`]), budget: N(r[`${p} – onorario annuo CHF`] ?? r[`${p} – forfait annuo CHF`]), fatturazione: T(r[`${p} – fatturazione`]), ...extra };
     };
     const ruolo = T(r["Funzione – ruolo"]), persona = T(r["Funzione – persona dello studio"]);
     const mandati = {
-      contabilita: m("contabilita", { budgetOre: N(r["Contabilità – budget ore annue"]), tariffa: N(r["Contabilità – tariffa oraria CHF"]) }),
+      contabilita: m("contabilita", { tariffa: N(r["Contabilità – tariffa concordata CHF/h"] ?? r["Contabilità – tariffa oraria CHF"]) }),
       funzione: m("funzione", { funzioni: ruolo || persona ? [{ ruolo, persona, firma: T(r["Funzione – diritto di firma"]), inizio: parseData(r["Funzione – dal"]) }] : [] }),
       domiciliazione: m("domiciliazione", { tipo: T(r["Domiciliazione – tipo"]), dal: parseData(r["Domiciliazione – dal"]) }),
       intestazione: m("intestazione", { tipoTitoli: T(r["Intestazione – titoli"]), numero: N(r["Intestazione – numero"]), valoreNominale: N(r["Intestazione – valore nominale CHF"]),

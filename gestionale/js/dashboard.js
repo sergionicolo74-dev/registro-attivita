@@ -1,90 +1,101 @@
-// Dashboard: le ore sui mandati al centro, confrontate con le ore di presenza di ognuno.
-// Colori: fatturabile = verde pieno, non fatturabile = blu a righe, non registrato = vuoto tratteggiato.
+// Dashboard a schede: Panoramica, Collaboratori, Ricavi e budget, Andamento.
+// Ogni scheda sta in una schermata; in alto restano i semafori dello studio.
+// Colori del tempo (verificati per il daltonismo): nel mandato blu, extra arancio, pratiche verde acqua,
+// non fatturabile grigio a righe, non registrato vuoto tratteggiato. Il nome e la cifra sono sempre scritti.
 import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
-  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, PERIODI, INIZIO_SCADENZIARIO, urgenzaPratica } from "./regole.js";
+  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
+  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, redditivita } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
-let periodo = "mese", rif = oggiISO(), chi = null;
+let periodo = "mese", rif = oggiISO(), chi = null, scheda = "panoramica";
 const TARIFFA = 150;
-const ETI_COP = { ok: "Ore registrate", urgente: "Quasi complete", scaduto: "Mancano ore" };
+const QUOTA = { settimana: 7 / 365, mese: 1 / 12, trimestre: 1 / 4, anno: 1 };
 const h = (min) => fmtDurata(Math.round(min || 0));
 const perc = (a, b) => b ? Math.round(a / b * 100) : 0;
+const chf = n => fmtNum(n || 0, 0);
+// Composizione del tempo: chiave, nome, classe colore
+const TEMPO = [["M", "Nel mandato", "c-mand"], ["X", "Extra da fatturare", "c-extra"], ["PR", "Pratiche", "c-prat"], ["N", "Non fatturabile", "c-non"], ["NR", "Non registrato", "c-nr"]];
+// Composizione dei ricavi: ordine dei colori verificato anche tra primo e ultimo spicchio
+const RICAVI = [["contabilita", "Contabilità e Tax", "#2a78d6"], ["funzione", "Funzione societaria", "#eb6834"], ["domiciliazione", "Domiciliazione", "#1baf7a"],
+  ["intestazione", "Intestazione fiduciaria", "#6250d6"], ["extra", "Ore extra e a tariffa", "#eda100"], ["pratiche", "Pratiche", "#e87ba4"]];
 
 export async function vistaDashboard(el) {
-  const admin = D.isAdmin(), u = D.utenteCorrente(), oggi = oggiISO();
+  const admin = D.isAdmin(), fatt = D.puoFatturare(), u = D.utenteCorrente(), oggi = oggiISO();
   if (!admin || !chi) chi = admin ? (chi || "tutti") : u.uid;
+  if (!fatt && scheda === "ricavi") scheda = "panoramica";
   const P = periodoDi(periodo, rif), { da, a } = P;
   const finora = a < oggi ? a : aggiungiGiorni(oggi, -1) < da ? da : aggiungiGiorni(oggi, -1);
-  const anno = +rif.slice(0, 4);
 
-  const [utentiTutti, reg, presenze, vacanze, clienti, extra] = await Promise.all([
+  const [utentiTutti, reg, presenze, vacanze, clienti, pratiche, extra] = await Promise.all([
     admin ? D.listaUtenti() : Promise.resolve([]),
-    D.listaRegistrazioniPeriodo(da, a),
+    D.listaRegistrazioniPeriodo(da, a, fatt),
     admin ? D.listaPresenzeStudio(da, a) : D.listaPresenze(u.uid, da, a),
-    D.listaVacanze().catch(() => []),
-    D.listaClienti(),
-    admin && chi === "tutti" ? caricaSemafori() : Promise.resolve(null)
+    D.listaVacanze().catch(() => []), D.listaClienti(), D.listaPratiche().catch(() => []),
+    admin ? caricaSemafori() : Promise.resolve(null)
   ]);
   const utenti = admin ? utentiTutti.filter(x => x.ruolo && (x.attivo !== false || reg.some(r => r.autoreUid === x.id))) : [{ id: u.uid, nome: u.nome }];
   if (!utenti.some(x => x.id === u.uid)) utenti.unshift({ id: u.uid, nome: u.nome });
   utenti.sort((x, y) => (x.id === u.uid ? -1 : y.id === u.uid ? 1 : String(x.nome).localeCompare(String(y.nome))));
   const profili = Object.fromEntries((admin ? utentiTutti : [await D.leggiProfilo(u.uid).catch(() => null) || {}]).map(x => [x.id || u.uid, x]));
   const cliPer = Object.fromEntries(clienti.map(c => [c.id, c]));
+  const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
+  const tariffaDi = id => Number(mmDi[id]?.contabilita.tariffa) || TARIFFA;
   const scelti = chi === "tutti" ? utenti.map(x => x.id) : [chi];
+  const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r),
+    mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && cliPer[r.clienteId]?.codice !== "C000" ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+  const miei = lavoro.filter(r => scelti.includes(r.autoreUid));
 
-  // --- calcoli per persona ---
-  const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0 && scelti.includes(r.autoreUid));
+  // --- composizione del tempo per persona (fino a ieri, confronto con la presenza) ---
   const perPersona = utenti.filter(x => scelti.includes(x.id)).map(x => {
-    const mie = reg.filter(r => r.autoreUid === x.id && r.tipo !== "nota");
-    const regFin = mie.filter(r => r.data <= finora);
+    const rr = lavoro.filter(r => r.autoreUid === x.id && r.data <= finora);
     const pres = presenze.filter(p => p.uid === x.id);
-    const presMap = conVacanze(Object.fromEntries(pres.map(p => [p.data, p])), vacanze, x.id);
-    const presMin = pres.filter(p => p.data <= finora).reduce((s, p) => s + (p.minuti || 0), 0);
-    const regMin = regFin.reduce((s, r) => s + (r.minuti || 0), 0);
+    const t = { M: 0, X: 0, PR: 0, N: 0 };
+    rr.forEach(r => { t[r.tf === "mandato" ? "M" : r.tf === "extra" ? "X" : r.tf === "pratica" ? "PR" : "N"] += r.minuti; });
+    const P_ = pres.filter(p => p.data <= finora).reduce((s, p) => s + (p.minuti || 0), 0);
+    const regTot = t.M + t.X + t.PR + t.N;
+    t.NR = Math.max(0, P_ - regTot);
     const prof = profili[x.id] || {};
+    const presMap = conVacanze(Object.fromEntries(pres.map(p => [p.data, p])), vacanze, x.id);
     const dal = prof.inizioPresenze || pres.map(p => p.data).sort()[0] || "9999-12-31";
     const rp = finora >= da ? riepilogoPresenze(presMap, prof, da, finora, dal) : { daCompilare: 0 };
-    // giorni in cui le ore sui mandati sono meno del 90% della presenza
-    const regGiorno = {}; regFin.forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + (r.minuti || 0); });
+    const regGiorno = {}; rr.forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + r.minuti; });
     const incompleti = pres.filter(p => p.data <= finora && p.minuti > 0 && (regGiorno[p.data] || 0) < p.minuti * 0.9)
       .map(p => ({ data: p.data, pres: p.minuti, reg: regGiorno[p.data] || 0 })).sort((p, q) => p.data.localeCompare(q.data));
-    return { x, regMin, fatMin: regFin.filter(r => r.fatturabile).reduce((s, r) => s + (r.minuti || 0), 0), presMin, daCompilare: rp.daCompilare, incompleti,
-      regTutto: mie.reduce((s, r) => s + (r.minuti || 0), 0), haPresenze: pres.length > 0 };
+    return { x, t, pres: P_, reg: regTot, base: Math.max(P_, regTot), resa: perc(t.M + t.X + t.PR, Math.max(P_, regTot)), daCompilare: rp.daCompilare, incompleti, haPresenze: pres.length > 0 };
   });
-  const tot = perPersona.reduce((s, p) => ({ reg: s.reg + p.regTutto, regFin: s.regFin + p.regMin, fat: s.fat + p.fatMin, pres: s.pres + p.presMin }), { reg: 0, regFin: 0, fat: 0, pres: 0 });
-  const fatTutto = lavoro.filter(r => r.fatturabile).reduce((s, r) => s + r.minuti, 0);
-  const regTutto = lavoro.reduce((s, r) => s + r.minuti, 0);
-  const valore = lavoro.filter(r => r.fatturabile).reduce((s, r) => s + r.minuti / 60 * (Number(mandatiDi(cliPer[r.clienteId] || {}).contabilita.tariffa) || TARIFFA), 0);
-  const cop = statoCopertura(tot.regFin, tot.pres);
+  const tot = perPersona.reduce((s, p) => { TEMPO.forEach(([k]) => { s.t[k] += p.t[k]; }); s.pres += p.pres; s.reg += p.reg; s.base += p.base; return s; },
+    { t: { M: 0, X: 0, PR: 0, N: 0, NR: 0 }, pres: 0, reg: 0, base: 0 });
+  const resaTot = perc(tot.t.M + tot.t.X + tot.t.PR, tot.base);
+  const nonReso = tot.t.N + tot.t.NR;
 
-  // --- andamento ---
-  const colonne = colonnePeriodo(periodo, da, a).map(c => {
-    const rr = lavoro.filter(r => r.data >= c.da && r.data <= c.a), pp = presenze.filter(p => scelti.includes(p.uid) && p.data >= c.da && p.data <= c.a);
-    return { ...c, fat: rr.filter(r => r.fatturabile).reduce((s, r) => s + r.minuti, 0), non: rr.filter(r => !r.fatturabile).reduce((s, r) => s + r.minuti, 0), pres: pp.reduce((s, p) => s + (p.minuti || 0), 0), futuro: c.da > oggi };
-  });
-
-  // --- per mandato e per cliente ---
-  const perMandato = {};
-  const perCliente = {};
-  for (const r of lavoro) {
-    const c = cliPer[r.clienteId], mm = mandatiDi(c || {});
-    const k = r.praticaId ? "pratica" : c && c.codice !== "C000" ? mandatoDiRegistrazione(r, mm) : "nonAttribuito";
-    const g = perMandato[k] = perMandato[k] || { fat: 0, non: 0 };
-    g[r.fatturabile ? "fat" : "non"] += r.minuti;
-    const pc = perCliente[r.clienteId || "-"] = perCliente[r.clienteId || "-"] || { fat: 0, non: 0, c };
-    pc[r.fatturabile ? "fat" : "non"] += r.minuti;
+  // --- ricavi del periodo (solo chi può fatturare) ---
+  let ricavi = null;
+  if (fatt) {
+    const q = QUOTA[periodo], forf = {}, valore = {};
+    for (const c of clienti) for (const [k] of TIPI_MANDATO) {
+      const m = mmDi[c.id][k]; if (!m.attivo || !aForfait(m) || c.stato === "Cessato") continue;
+      forf[k] = (forf[k] || 0) + Number(m.budget) * q;
+    }
+    lavoro.forEach(r => { if (r.tf === "mandato" || r.tf === "non") valore[r.mand] = (valore[r.mand] || 0) + r.minuti / 60 * tariffaDi(r.clienteId); });
+    const aTariffa = lavoro.filter(r => r.tf === "extra" || (r.tf === "mandato" && (r.mand === "nonAttribuito" || !aForfait(mmDi[r.clienteId]?.[r.mand]))));
+    const extraCHF = aTariffa.reduce((s, r) => s + r.minuti / 60 * tariffaDi(r.clienteId), 0);
+    const extraFatt = aTariffa.filter(r => r.fatturataIl).reduce((s, r) => s + r.minuti / 60 * tariffaDi(r.clienteId), 0);
+    const minPrat = {}; lavoro.filter(r => r.praticaId).forEach(r => { minPrat[r.praticaId] = (minPrat[r.praticaId] || 0) + r.minuti; });
+    const pratConcluse = pratiche.filter(p => p.fase === "Conclusa" && p.conclusaIl >= da && p.conclusaIl <= a && p.fatturazione?.modo !== "Non fatturare");
+    const pratCHF = pratConcluse.reduce((s, p) => s + importoPratica({ ...p, fatturazione: { ...p.fatturazione, tariffa: Number(p.fatturazione?.tariffa) || tariffaDi(p.clienteId) } }, minPrat[p.id] || 0), 0);
+    const voci = RICAVI.map(([k, n, col]) => ({ k, n, col, v: k === "extra" ? extraCHF : k === "pratiche" ? pratCHF : (forf[k] || 0) }));
+    ricavi = { voci, totale: voci.reduce((s, x) => s + x.v, 0), forf, valore, extraCHF, extraFatt, aTariffaMin: aTariffa.reduce((s, r) => s + r.minuti, 0), pratConcluse: pratConcluse.length };
   }
-  const righeMandato = [...TIPI_MANDATO, ["pratica", "Pratiche amministrative (fuori mandato)"], ["nonAttribuito", "Non attribuite / occasionali"]].map(([k, n]) => ({ k, n, ...(perMandato[k] || { fat: 0, non: 0 }) })).filter(x => x.fat + x.non);
-  const righeClienti = Object.values(perCliente).sort((p, q) => (q.fat + q.non) - (p.fat + p.non));
 
   const nomeChi = chi === "tutti" ? "Tutto lo studio" : (utenti.find(x => x.id === chi)?.nome || u.nome);
+  const SCHEDE = [["panoramica", "Panoramica"], ["persone", admin ? "Collaboratori" : "Le mie ore"], ...(fatt ? [["ricavi", "Ricavi e budget"]] : []), ["andamento", "Andamento"]];
 
   el.innerHTML = `
   <div class="testata">
-    <div><h1>Dashboard</h1><div class="tenue">${e(nomeChi)} · ${e(P.etichetta)}${a >= oggi && da <= oggi ? ` · confronto con la presenza fino a ${e(fmtData(finora))}` : ""}</div></div>
+    <div><h1>Dashboard</h1><div class="tenue">${e(nomeChi)} · ${e(P.etichetta)}${a >= oggi && da <= oggi ? ` · ore confrontate fino a ${e(fmtData(finora))}` : ""}</div></div>
     <div class="barra">
       <div class="segmenti" role="radiogroup" aria-label="Periodo">${PERIODI.map(([k, n]) => `<button type="button" role="radio" data-p="${k}" aria-checked="${k === periodo}">${n}</button>`).join("")}</div>
       <button class="btn" id="p-prec" aria-label="Periodo precedente">◀</button><span class="per-eti">${e(P.etichetta)}</span><button class="btn" id="p-succ" aria-label="Periodo successivo">▶</button>
@@ -93,45 +104,142 @@ export async function vistaDashboard(el) {
         ${utenti.map(x => `<option value="${e(x.id)}"${chi === x.id ? " selected" : ""}>${x.id === u.uid ? "Io (" + e(x.nome) + ")" : e(x.nome || x.id)}</option>`).join("")}</select>` : ""}
     </div>
   </div>
-
   ${extra ? semafori(extra) : ""}
+  <div class="schede schede-d" role="tablist">${SCHEDE.map(([k, n]) => `<button role="tab" aria-selected="${k === scheda}" data-s="${k}">${e(n)}</button>`).join("")}</div>
+  <div id="corpo-d"></div>`;
 
-  <div class="kpi-d">
-    <div class="kpi-c princ"><span class="tenue">Ore sui mandati</span><strong>${h(regTutto)}</strong>
-      <div class="mini-barra" role="img" aria-label="${h(fatTutto)} fatturabili, ${h(regTutto - fatTutto)} non fatturabili"><div class="s-fat" style="width:${perc(fatTutto, regTutto)}%"></div><div class="s-non" style="width:${100 - perc(fatTutto, regTutto)}%"></div></div>
-      <span class="tenue">${h(fatTutto)} fatturabili (${perc(fatTutto, regTutto)}%) · ${h(regTutto - fatTutto)} non fatturabili</span></div>
-    <div class="kpi-c"><span class="tenue">Ore di presenza${a >= oggi ? " finora" : ""}</span><strong>${tot.pres ? h(tot.pres) : "–"}</strong><span class="tenue">${tot.pres ? "entrata–uscita, pause escluse" : "nessuna presenza registrata"}</span></div>
-    <div class="kpi-c"><span class="tenue">Ore registrate sul totale presenza</span><strong>${tot.pres ? perc(tot.regFin, tot.pres) + "%" : "–"}</strong>
-      ${cop ? stato(cop, ETI_COP[cop]) : ""}<span class="tenue">${tot.pres ? (tot.pres > tot.regFin ? `${h(tot.pres - tot.regFin)} non registrate sui mandati` : "tutte registrate") : ""}</span></div>
-    ${admin ? `<div class="kpi-c"><span class="tenue">Valore ore fatturabili</span><strong>CHF ${fmtNum(valore, 0)}</strong><span class="tenue">alla tariffa del cliente (o CHF ${TARIFFA}/h)</span></div>` : ""}
-  </div>
+  const corpo = el.querySelector("#corpo-d");
+  if (scheda === "panoramica") corpo.innerHTML = htmlPanoramica();
+  else if (scheda === "persone") corpo.innerHTML = htmlPersone();
+  else if (scheda === "ricavi") corpo.innerHTML = htmlRicavi();
+  else corpo.innerHTML = htmlAndamento();
 
-  ${chi === "tutti" ? `<section class="pannello sez-d"><div class="testa-d"><h2>Ore per collaboratore</h2>${legenda("persone")}</div>
-    <p class="tenue nota-d">La barra intera è la presenza; la parte colorata sono le ore scritte sui mandati. Lo spazio vuoto sono ore lavorate ma non registrate.</p>
-    ${graficoPersone(perPersona, tot)}</section>` : sezioneGiorni(perPersona[0])}
+  function htmlPanoramica() {
+    const attr = tot.t.M + tot.t.X + tot.t.PR;
+    return `<div class="tiles-d">
+      ${tile("t-blu", "◷", "Ore lavorate", tot.base ? h(tot.base) : "–", tot.pres ? `${h(tot.pres)} dalla scheda presenze` : "nessuna presenza registrata")}
+      ${tile("t-verde", "✓", "Attribuite ai clienti", h(attr), tot.base ? `${perc(attr, tot.base)}% delle ore lavorate` : "")}
+      ${fatt && ricavi && chi === "tutti" ? tile("t-arancio", "+", "Ore extra a tariffa", `CHF ${chf(ricavi.extraCHF)}`, `${h(ricavi.aTariffaMin)} · ${chf(ricavi.extraFatt)} già fatturati`)
+        : tile("t-arancio", "+", "Extra da fatturare", h(tot.t.X), tot.base ? `${perc(tot.t.X, tot.base)}% delle ore` : "")}
+      ${tile("t-rosso", "!", "Tempo non reso", h(nonReso), tot.base ? `${perc(nonReso, tot.base)}% · non fatturabile ${h(tot.t.N)}, non registrato ${h(tot.t.NR)}` : "")}
+    </div>
+    <div class="griglia-d">
+      <section class="pannello sez-d"><div class="testa-d"><h2>Come è stato usato il tempo</h2>${resaChip(resaTot, tot.base)}</div>
+        ${barraTempo(tot.t, tot.base, true)}
+        ${listaTempo(tot.t, tot.base)}</section>
+      ${fatt && ricavi ? `<section class="pannello sez-d"><div class="testa-d"><h2>Ricavi del periodo</h2><button type="button" class="link-btn" data-s="ricavi">Dettaglio →</button></div>
+        ${ciambella(ricavi.voci, ricavi.totale)}</section>`
+        : `<section class="pannello sez-d"><div class="testa-d"><h2>Ore per mandato</h2></div>${barreMandato()}</section>`}
+    </div>
+    ${chi === "tutti" && perPersona.length > 1 ? `<section class="pannello sez-d"><div class="testa-d"><h2>Collaboratori</h2><button type="button" class="link-btn" data-s="persone">Dettaglio →</button></div>
+      ${perPersona.map(p => `<button type="button" class="riga-mini" data-chi="${e(p.x.id)}"><span class="nome-p">${e(p.x.nome)}</span>${barraTempo(p.t, p.base, false)}<span class="val-p">${resaChip(p.resa, p.base)}</span></button>`).join("")}
+      ${legendaTempo()}</section>` : ""}`;
+  }
 
-  <section class="pannello sez-d"><div class="testa-d"><h2>Andamento</h2>${legenda("andamento")}</div>
-    ${graficoAndamento(colonne, periodo)}</section>
+  function htmlPersone() {
+    const max = Math.max(1, ...perPersona.map(p => p.base));
+    return `<section class="pannello sez-d"><div class="testa-d"><h2>Ore lavorate e come sono state usate</h2>${legendaTempo()}</div>
+      <p class="tenue nota-d">Ore lavorate = scheda presenze (o le ore registrate, se sono di più). Ogni barra è lunga quanto le ore lavorate; le percentuali sono sul totale della persona.</p>
+      <div class="persone-d">${perPersona.map(p => `<div class="riga-pd" ${admin && chi === "tutti" ? `data-chi="${e(p.x.id)}" role="button" tabindex="0"` : ""}>
+        <div class="testa-pd"><strong>${e(p.x.nome || p.x.id)}</strong><span class="tenue">${p.base ? h(p.base) : "nessuna ora"}${p.pres && p.reg > p.pres ? " (registrate più della presenza)" : ""}</span>${resaChip(p.resa, p.base)}
+          ${p.daCompilare ? stato("urgente", `${p.daCompilare} gg senza presenza`) : ""}${!p.haPresenze && p.reg ? stato("neutro", "Presenze non compilate") : ""}</div>
+        <div style="width:${(p.base / max * 100).toFixed(1)}%;min-width:120px">${barraTempo(p.t, p.base, true)}</div></div>`).join("")}</div></section>
+    <section class="pannello sez-d"><table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Ore lavorate</th>${TEMPO.map(([, n]) => `<th class="num">${e(n)}</th>`).join("")}<th class="num">Resa</th></tr></thead><tbody>
+      ${perPersona.map(p => `<tr><td>${e(p.x.nome)}</td><td class="num">${h(p.base)}</td>${TEMPO.map(([k]) => `<td class="num">${h(p.t[k])}<div class="tenue">${perc(p.t[k], p.base)}%</div></td>`).join("")}<td class="num"><strong>${p.base ? p.resa + "%" : "–"}</strong></td></tr>`).join("")}
+      ${perPersona.length > 1 ? `<tr class="totale"><td><strong>Totale</strong></td><td class="num"><strong>${h(tot.base)}</strong></td>${TEMPO.map(([k]) => `<td class="num">${h(tot.t[k])}<div class="tenue">${perc(tot.t[k], tot.base)}%</div></td>`).join("")}<td class="num"><strong>${resaTot}%</strong></td></tr>` : ""}
+    </tbody></table><p class="tenue nota-d" style="margin-top:8px">Resa = ore nel mandato + extra + pratiche, sul totale delle ore lavorate.</p></section>
+    ${chi !== "tutti" ? sezioneGiorni(perPersona[0]) : ""}`;
+  }
 
-  <div class="due-d">
-    <section class="pannello sez-d"><div class="testa-d"><h2>Ore per mandato</h2></div>
-      ${righeMandato.length ? barreOrizz(righeMandato.map(x => ({ nome: x.n, fat: x.fat, non: x.non })), regTutto) : '<div class="vuoto">Nessuna ora nel periodo.</div>'}</section>
-    <section class="pannello sez-d"><div class="testa-d"><h2>Clienti con più ore</h2></div>
-      ${righeClienti.length ? barreOrizz(righeClienti.slice(0, 10).map(x => ({ nome: x.c ? `${x.c.codice} · ${x.c.ragioneSociale}` : "Senza cliente", fat: x.fat, non: x.non, link: x.c ? `#/clienti/${encodeURIComponent(x.c.id)}/ore` : null })), regTutto)
-        + (righeClienti.length > 10 ? `<p class="tenue nota-d">Altri ${righeClienti.length - 10} clienti: ${h(righeClienti.slice(10).reduce((s, x) => s + x.fat + x.non, 0))}</p>` : "") : '<div class="vuoto">Nessuna ora nel periodo.</div>'}</section>
-  </div>
-  <details class="pannello sez-d"><summary><strong>Tabella dei dati</strong> <span class="tenue">(per collaboratore)</span></summary>
-    <table class="tabella" style="margin-top:10px"><thead><tr><th>Collaboratore</th><th class="num">Ore sui mandati</th><th class="num">Fatturabili</th><th class="num">Presenza</th><th class="num">Registrate / presenza</th><th class="num">Giorni da compilare</th><th class="num">Giorni incompleti</th></tr></thead>
-    <tbody>${perPersona.map(p => `<tr><td>${e(p.x.nome || p.x.id)}</td><td class="num">${h(p.regTutto)}</td><td class="num">${h(p.fatMin)}</td><td class="num">${p.presMin ? h(p.presMin) : "–"}</td><td class="num">${p.presMin ? perc(p.regMin, p.presMin) + "%" : "–"}</td><td class="num">${p.haPresenze ? p.daCompilare : "–"}</td><td class="num">${p.incompleti.length}</td></tr>`).join("")}
-    ${perPersona.length > 1 ? `<tr class="totale"><td><strong>Totale</strong></td><td class="num"><strong>${h(tot.reg)}</strong></td><td class="num">${h(tot.fat)}</td><td class="num">${h(tot.pres)}</td><td class="num">${tot.pres ? perc(tot.regFin, tot.pres) + "%" : "–"}</td><td></td><td></td></tr>` : ""}</tbody></table></details>`;
+  function htmlRicavi() {
+    const q = QUOTA[periodo];
+    const righe = TIPI_MANDATO.map(([k, n]) => ({ k, n, forf: ricavi.forf[k] || 0, val: ricavi.valore[k] || 0 })).filter(r => r.forf || r.val);
+    return `<div class="griglia-d">
+      <section class="pannello sez-d"><div class="testa-d"><h2>Composizione dei ricavi</h2></div>${ciambella(ricavi.voci, ricavi.totale)}
+        <p class="tenue nota-d">Forfait = budget annuo dei mandati attivi × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : periodo === "mese" ? "1/12" : "7/365"}. Ore extra e a tariffa: registrate nel periodo. Pratiche: concluse nel periodo.</p></section>
+      <section class="pannello sez-d"><div class="testa-d"><h2>Budget dei mandati: ore consumate</h2></div>
+        ${righe.length ? `<div class="meter-d">${righe.map(r => { const pc = r.forf ? Math.round(r.val / r.forf * 100) : null;
+          const esito = !r.forf ? null : r.val <= r.forf ? "ok" : r.val <= r.forf * 1.15 ? "urgente" : "scaduto";
+          return `<div class="meter-r"><div class="meter-t"><strong>${e(r.n)}</strong><span>${pc != null ? `${pc}% del forfait` : "senza forfait"}</span></div>
+            <div class="meter-b" role="img" aria-label="${e(r.n)}: valore ore CHF ${chf(r.val)} su forfait CHF ${chf(r.forf)}"><span class="${esito === "scaduto" ? "oltre" : esito === "urgente" ? "limite" : "ok"}" style="width:${Math.min(100, pc || 0)}%"></span></div>
+            <div class="meter-t tenue"><span>ore CHF ${chf(r.val)} · forfait CHF ${chf(r.forf)}</span>${esito ? stato(esito, esito === "ok" ? `margine CHF ${chf(r.forf - r.val)}` : `oltre di CHF ${chf(r.val - r.forf)}`) : ""}</div></div>`; }).join("")}</div>`
+          : '<div class="vuoto">Nessun mandato a forfait.</div>'}
+        <p class="tenue nota-d">Valore delle ore nel mandato (anche non fatturabili) alla tariffa del cliente, confrontato con la quota di forfait del periodo. <a href="#/report">Report → Redditività</a> per il dettaglio per cliente.</p></section>
+    </div>
+    <div class="tiles-d" style="grid-template-columns:repeat(3,1fr)">
+      ${tile("t-arancio", "+", "Ore extra e a tariffa", `CHF ${chf(ricavi.extraCHF)}`, `${h(ricavi.aTariffaMin)} nel periodo`)}
+      ${tile("t-verde", "✓", "Di cui già fatturate", `CHF ${chf(ricavi.extraFatt)}`, `${perc(ricavi.extraFatt, ricavi.extraCHF)}% · da fatturare CHF ${chf(ricavi.extraCHF - ricavi.extraFatt)}`)}
+      ${tile("t-viola", "▣", "Pratiche concluse", `CHF ${chf(ricavi.voci.find(v => v.k === "pratiche").v)}`, `${ricavi.pratConcluse} nel periodo`)}
+    </div>`;
+  }
 
+  function htmlAndamento() {
+    const colonne = colonnePeriodo(periodo, da, a).map(c => {
+      const rr = miei.filter(r => r.data >= c.da && r.data <= c.a), pp = presenze.filter(p => scelti.includes(p.uid) && p.data >= c.da && p.data <= c.a);
+      return { ...c, fat: rr.filter(r => r.fatturabile).reduce((s, r) => s + r.minuti, 0), non: rr.filter(r => !r.fatturabile).reduce((s, r) => s + r.minuti, 0), pres: pp.reduce((s, p) => s + (p.minuti || 0), 0), futuro: c.da > oggi };
+    });
+    const regTutto = miei.reduce((s, r) => s + r.minuti, 0);
+    const perCli = {}; miei.forEach(r => { const g = perCli[r.clienteId || "-"] = perCli[r.clienteId || "-"] || { fat: 0, non: 0, c: cliPer[r.clienteId] }; g[r.fatturabile ? "fat" : "non"] += r.minuti; });
+    const rc = Object.values(perCli).sort((p, q) => (q.fat + q.non) - (p.fat + p.non));
+    return `<section class="pannello sez-d"><div class="testa-d"><h2>Andamento delle ore</h2>${legenda("andamento")}</div>${graficoAndamento(colonne, periodo)}</section>
+    <div class="griglia-d">
+      <section class="pannello sez-d"><div class="testa-d"><h2>Ore per mandato</h2></div>${barreMandato()}</section>
+      <section class="pannello sez-d"><div class="testa-d"><h2>Clienti con più ore</h2></div>
+        ${rc.length ? barreOrizz(rc.slice(0, 8).map(x => ({ nome: x.c ? `${x.c.codice} · ${x.c.ragioneSociale}` : "Senza cliente", fat: x.fat, non: x.non, link: x.c ? `#/clienti/${encodeURIComponent(x.c.id)}/ore` : null })), regTutto) : '<div class="vuoto">Nessuna ora nel periodo.</div>'}</section>
+    </div>`;
+  }
+
+  function barreMandato() {
+    const g = {}; miei.forEach(r => { const k = r.mand; g[k] = g[k] || { fat: 0, non: 0 }; g[k][r.fatturabile ? "fat" : "non"] += r.minuti; });
+    const righe = [...TIPI_MANDATO, ["pratica", "Pratiche (fuori mandato)"], ["nonAttribuito", "Non attribuite / occasionali"]].map(([k, n]) => ({ nome: n, ...(g[k] || { fat: 0, non: 0 }) })).filter(x => x.fat + x.non);
+    return righe.length ? barreOrizz(righe, miei.reduce((s, r) => s + r.minuti, 0)) : '<div class="vuoto">Nessuna ora nel periodo.</div>';
+  }
+
+  // --- eventi ---
   const ricarica = () => vistaDashboard(el);
   el.querySelectorAll("[data-p]").forEach(b => b.addEventListener("click", () => { periodo = b.dataset.p; ricarica(); }));
   el.querySelector("#p-prec").addEventListener("click", () => { rif = spostaPeriodo(periodo, rif, -1); ricarica(); });
   el.querySelector("#p-succ").addEventListener("click", () => { rif = spostaPeriodo(periodo, rif, 1); ricarica(); });
   el.querySelector("#p-oggi").addEventListener("click", () => { rif = oggiISO(); ricarica(); });
   el.querySelector("#chi-d")?.addEventListener("change", ev => { chi = ev.target.value; ricarica(); });
-  el.querySelectorAll("[data-chi]").forEach(b => b.addEventListener("click", () => { chi = b.dataset.chi; ricarica(); }));
+  el.querySelectorAll("[data-s]").forEach(b => b.addEventListener("click", () => { scheda = b.dataset.s; ricarica(); }));
+  el.querySelectorAll("[data-chi]").forEach(b => {
+    const vai = () => { chi = b.dataset.chi; scheda = "persone"; ricarica(); };
+    b.addEventListener("click", vai); b.addEventListener("keydown", ev => { if (ev.key === "Enter") vai(); });
+  });
+}
+
+function tile(cl, ic, titolo, valore, sotto) {
+  return `<div class="tile-d ${cl}"><span class="tile-ic" aria-hidden="true">${ic}</span><div><div class="tile-t">${e(titolo)}</div><div class="tile-v">${e(valore)}</div><div class="tile-s">${e(sotto || "")}</div></div></div>`;
+}
+function resaChip(resa, base) {
+  if (!base) return stato("neutro", "Nessuna ora");
+  return stato(resa >= 85 ? "ok" : resa >= 70 ? "urgente" : "scaduto", `Resa ${resa}%`);
+}
+/** Barra segmentata del tempo (100% = ore lavorate). etichette: scrive le % dentro i segmenti abbastanza larghi. */
+function barraTempo(t, base, etichette) {
+  if (!base) return `<div class="barra-t vuota"><span class="tenue" style="font-size:12px;padding-left:8px">nessuna ora</span></div>`;
+  return `<div class="barra-t" role="img" aria-label="${TEMPO.map(([k, n]) => `${n} ${perc(t[k], base)}%`).join(", ")}">${TEMPO.map(([k, n, cl]) => {
+    const p = t[k] / base * 100; if (p <= 0) return "";
+    return `<span class="${cl}" style="width:${p.toFixed(2)}%" title="${e(`${n}: ${fmtDurata(Math.round(t[k]))} (${Math.round(p)}%)`)}">${etichette && p >= 9 ? Math.round(p) + "%" : ""}</span>`;
+  }).join("")}</div>`;
+}
+function listaTempo(t, base) {
+  return `<div class="lista-t">${TEMPO.map(([k, n, cl]) => `<div class="voce-t"><i class="${cl}"></i><span class="n">${e(n)}</span><span class="v">${fmtDurata(Math.round(t[k]))}</span><span class="p">${perc(t[k], base)}%</span></div>`).join("")}</div>`;
+}
+function legendaTempo() {
+  return `<div class="legenda">${TEMPO.map(([, n, cl]) => `<span><i class="${cl}"></i>${e(n)}</span>`).join("")}</div>`;
+}
+/** Ciambella dei ricavi con totale al centro e legenda con importi e percentuali (i nomi sono sempre scritti). */
+function ciambella(voci, totale) {
+  const v = voci.filter(x => x.v > 0);
+  if (!totale) return '<div class="vuoto">Nessun ricavo nel periodo (imposta i forfait nei mandati).</div>';
+  const R = 70, C = 2 * Math.PI * R, gap = v.length > 1 ? 2.5 : 0;
+  let acc = 0;
+  const archi = v.map(x => { const l = x.v / totale * C; const s = `<circle r="${R}" cx="90" cy="90" fill="none" stroke="${x.col}" stroke-width="26" stroke-dasharray="${Math.max(0, l - gap).toFixed(2)} ${(C - Math.max(0, l - gap)).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"><title>${e(x.n)}: CHF ${fmtNum(x.v)} (${perc(x.v, totale)}%)</title></circle>`; acc += l; return s; }).join("");
+  return `<div class="ciambella"><svg viewBox="0 0 180 180" role="img" aria-label="Ricavi CHF ${fmtNum(totale, 0)}"><g transform="rotate(-90 90 90)">${archi}</g>
+      <text x="90" y="84" text-anchor="middle" class="c-tit">Totale</text><text x="90" y="106" text-anchor="middle" class="c-val">CHF ${fmtNum(totale, 0)}</text></svg>
+    <div class="lista-t">${voci.map(x => `<div class="voce-t${x.v ? "" : " zero"}"><i style="background:${x.col}"></i><span class="n">${e(x.n)}</span><span class="v">CHF ${fmtNum(x.v, 0)}</span><span class="p">${perc(x.v, totale)}%</span></div>`).join("")}</div></div>`;
 }
 
 function legenda(tipo) {
@@ -140,25 +248,7 @@ function legenda(tipo) {
 }
 
 /** Una riga per collaboratore: traccia = presenza, riempimento = ore sui mandati. Stessa scala per tutti. */
-function graficoPersone(pp, tot) {
-  const max = Math.max(1, ...pp.map(p => Math.max(p.presMin, p.regMin)));
-  const w = m => (m / max * 100).toFixed(2);
-  const riga = (p) => {
-    const c = statoCopertura(p.regMin, p.presMin), non = p.regMin - p.fatMin;
-    const tip = `${p.x.nome}: ${h(p.regMin)} sui mandati (${h(p.fatMin)} fatturabili) su ${p.presMin ? h(p.presMin) + " di presenza" : "presenza non registrata"}`;
-    return `<button type="button" class="riga-p" data-chi="${e(p.x.id)}" title="${e(tip)}" aria-label="${e(tip)}">
-      <span class="nome-p">${e(p.x.nome || p.x.id)}</span>
-      <span class="traccia">${p.presMin ? `<span class="pres" style="width:${w(p.presMin)}%"></span>` : ""}
-        <span class="s-fat" style="width:${w(p.fatMin)}%"></span><span class="s-non" style="left:${w(p.fatMin)}%;width:${w(non)}%"></span></span>
-      <span class="val-p"><strong>${h(p.regMin)}</strong>${p.presMin ? ` <span class="tenue">su ${h(p.presMin)}</span>` : ""}</span>
-      <span class="chip-p">${c ? stato(c, `${perc(p.regMin, p.presMin)}%`) : stato("neutro", "Nessuna presenza")}${p.daCompilare ? stato("urgente", `${p.daCompilare} gg da compilare`) : ""}</span></button>`;
-  };
-  return `<div class="grafico-p">${pp.map(riga).join("")}
-    ${pp.length > 1 ? `<div class="riga-p totale-p"><span class="nome-p">Totale studio</span><span></span><span class="val-p"><strong>${h(tot.regFin)}</strong>${tot.pres ? ` <span class="tenue">su ${h(tot.pres)}</span>` : ""}</span>
-      <span class="chip-p">${tot.pres ? stato(statoCopertura(tot.regFin, tot.pres), perc(tot.regFin, tot.pres) + "%") : ""}</span></div>` : ""}</div>`;
-}
 
-/** Colonne impilate (fatturabile + non fatturabile) con una tacca per la presenza: stessa scala in ore. */
 function graficoAndamento(col, periodo) {
   const max = Math.max(60, ...col.map(c => Math.max(c.fat + c.non, c.pres)));
   const passo = [60, 120, 240, 480, 600, 1200, 2400, 3000, 6000, 12000, 24000].find(p => max / p <= 5) || 48000;

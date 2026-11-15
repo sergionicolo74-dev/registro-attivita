@@ -131,6 +131,8 @@ export const salvaUtente = (u) => scrivi("utenti", u);
 export const listaClienti = () => lista("clienti");
 export const leggiCliente = (id) => leggi("clienti", id);
 export const salvaCliente = (c) => scrivi("clienti", c);
+/** Elimina un cliente (solo amministratori), con i suoi dati KYC. Va usato solo per clienti vuoti. */
+export async function eliminaCliente(id) { await elimina("clienti", id); await elimina("clienti_kyc", id).catch(() => {}); }
 export const leggiKycCliente = (id) => ADMIN() ? leggi("clienti_kyc", id) : Promise.resolve(null);
 export const salvaKycCliente = (id, k) => scrivi("clienti_kyc", { ...k, id });
 export const listaTuttiKycClienti = () => ADMIN() ? lista("clienti_kyc") : Promise.resolve([]);

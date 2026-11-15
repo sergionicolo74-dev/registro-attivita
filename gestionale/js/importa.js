@@ -93,7 +93,12 @@ async function anteprimaBackup(file, box) {
   const opzioni = (sel) => `<option value="">— non importare —</option><option value="__crea"${sel === "__crea" ? " selected" : ""}>+ Crea nuovo cliente con questo nome</option><option value="__nuovo_occasionali"${sel === "__nuovo_occasionali" ? " selected" : ""}>Clienti occasionali (C000)</option>` +
     clienti.sort((a, b) => (a.codice || "").localeCompare(b.codice || "")).map(c => `<option value="${e(c.id)}"${c.id === sel ? " selected" : ""}>${e(c.codice)} · ${e(c.ragioneSociale)}</option>`).join("");
   const proposta = n => { const c = abbinaNome(n, clienti); if (c) return c.id; return occasionali(n) ? (clienti.find(x => x.codice === "C000")?.id || "__nuovo_occasionali") : "__crea"; };
-  box.innerHTML = `<p>${backup.attivita.length} attività (${fmtOre(backup.attivita.reduce((s, a) => s + (a.minuti || 0), 0))} ore), ${(backup.promemoria || []).length} promemoria, ${(backup.deleghe || []).length} deleghe. Controlla gli abbinamenti dei clienti:</p>
+  // Clienti già presenti che non corrispondono a nessun nome del registro (es. prove): spostano la numerazione dei codici
+  const estranei = clienti.filter(c => c.codice !== "C000" && !nomi.some(n => abbinaNome(n, [c])));
+  box.innerHTML = `${estranei.length ? `<div class="pannello allerta" style="margin-bottom:12px">${stato("urgente", "Prima di importare")}
+    <p style="margin:8px 0 0">Nel gestionale ci sono già ${estranei.length === 1 ? "un cliente che non è" : estranei.length + " clienti che non sono"} nel registro: ${estranei.map(c => `<a href="#/clienti/${encodeURIComponent(c.id)}">${e(c.codice)} · ${e(c.ragioneSociale)}</a>`).join(", ")}.
+    Se ${estranei.length === 1 ? "è una prova, eliminalo" : "sono prove, eliminali"} (apri il cliente → <strong>Elimina cliente</strong>) e poi ricarica questa pagina: così i nuovi clienti avranno i codici C001… come nel file Excel dell'anagrafica.</p></div>` : ""}
+    <p>${backup.attivita.length} attività (${fmtOre(backup.attivita.reduce((s, a) => s + (a.minuti || 0), 0))} ore), ${(backup.promemoria || []).length} promemoria, ${(backup.deleghe || []).length} deleghe. Controlla gli abbinamenti dei clienti:</p>
     <table class="tabella"><thead><tr><th>Nome nel vecchio registro</th><th class="num">Ore</th><th>Cliente nel gestionale</th></tr></thead><tbody>
     ${nomi.map(n => `<tr><td>${e(n)}</td><td class="num">${fmtOre(minPer[n] || 0)}</td><td><select data-nome="${e(n)}" aria-label="Cliente per ${e(n)}">${opzioni(proposta(n))}</select></td></tr>`).join("")}</tbody></table>
     <div class="azioni"><span id="mancanti" class="tenue" style="margin-right:auto"></span><button class="btn primario" id="vai-json">Importa</button></div><div class="avanzamento" hidden><div></div></div>`;

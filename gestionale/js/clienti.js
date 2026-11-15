@@ -106,7 +106,8 @@ export async function vistaScheda(el, id) {
   const mancanti = campiMancanti(c, persone.length, D.isAdmin() ? (kyc || {}) : null);
 
   el.innerHTML = `
-    <a href="#/clienti" class="tenue">← Clienti</a>
+    <div style="display:flex;justify-content:space-between;align-items:center"><a href="#/clienti" class="tenue">← Clienti</a>
+      ${D.isAdmin() ? '<button type="button" class="btn piccolo" id="elimina-cli">Elimina cliente</button>' : ""}</div>
     <section class="riepilogo" style="margin-top:10px">
       <div class="titolo">
         <div><div class="tenue">${e(c.codice)}</div><h1>${e(c.ragioneSociale)}</h1></div>
@@ -130,6 +131,16 @@ export async function vistaScheda(el, id) {
 
   const p = el.querySelector("#pannello");
   const ricarica = () => vistaScheda(el, id);
+  el.querySelector("#elimina-cli")?.addEventListener("click", async () => {
+    // Si elimina solo un cliente vuoto: con ore, compiti o persone collegate si rischierebbe di perdere dati
+    const [reg, comp] = await Promise.all([D.listaRegistrazioni(id), D.listaCompiti(id)]);
+    if (reg.length || comp.length || persone.length) {
+      avviso(`Non si può eliminare: ha ${[reg.length && reg.length + " registrazioni", comp.length && comp.length + " compiti", persone.length && persone.length + " persone"].filter(Boolean).join(", ")}. Puoi metterlo in stato Cessato.`);
+      return;
+    }
+    if (!confirm(`Eliminare definitivamente ${c.codice} · ${c.ragioneSociale}?`)) return;
+    await D.eliminaCliente(id); avviso("Cliente eliminato"); location.hash = "#/clienti";
+  });
   if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica);
   if (scheda === "dati") return schedaDati(p, c, kyc, ricarica);
   if (scheda === "mandati") return schedaMandati(p, c, ricarica);

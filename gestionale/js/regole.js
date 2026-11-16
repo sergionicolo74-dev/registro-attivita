@@ -346,10 +346,32 @@ export function giornoSettimana(iso) {
   return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
 }
 /** Minuti dovuti in un giorno secondo il profilo orario (ore settimanali su 5 giorni × percentuale). */
+/** Giorni della settimana in cui la persona lavora (0 = lunedì … 4 = venerdì). Di base tutti e cinque. */
+export function giorniLavoroDi(profilo) {
+  const g = Array.isArray(profilo?.giorniLavoro) ? profilo.giorniLavoro.map(Number).filter(n => n >= 0 && n <= 4) : [];
+  return g.length ? [...new Set(g)].sort() : [0, 1, 2, 3, 4];
+}
+/** La persona lavora in questo giorno? (giorno della settimana previsto e non festivo) */
+export function lavoraIl(profilo, iso) {
+  return !festiviTicino(+iso.slice(0, 4))[iso] && giorniLavoroDi(profilo).includes(giornoSettimana(iso));
+}
+/** Minuti dovuti: ore settimanali × grado, divise sui giorni di lavoro della persona (es. 80% su 4 giorni = 8h24 al giorno). */
 export function minutiDovuti(profilo, iso) {
-  if (giornoSettimana(iso) >= 5 || festiviTicino(+iso.slice(0, 4))[iso]) return 0;
+  if (!lavoraIl(profilo, iso)) return 0;
   const ore = Number(profilo?.oreSettimanali) || 42, perc = profilo?.percentuale == null || profilo.percentuale === "" ? 100 : Number(profilo.percentuale);
-  return Math.round(ore * 60 / 5 * perc / 100);
+  return Math.round(ore * 60 * perc / 100 / giorniLavoroDi(profilo).length);
+}
+/** Diritto di vacanza nei giorni della persona: il diritto a tempo pieno (giorni su 5) riportato ai suoi giorni di lavoro. 25 su 4 giorni = 20. */
+export function dirittoVacanze(profilo) {
+  const g = Number(profilo?.giorniVacanza) || 0;
+  return Math.round(g * giorniLavoroDi(profilo).length / 5 * 2) / 2;
+}
+/** "lu–gi" / "lu, me, ve" */
+export function fmtGiorniLavoro(profilo) {
+  const g = giorniLavoroDi(profilo), N = ["lu", "ma", "me", "gi", "ve"];
+  if (g.length === 5) return "lu–ve";
+  const cont = g.every((x, i) => i === 0 || x === g[i - 1] + 1);
+  return cont && g.length > 2 ? `${N[g[0]]}–${N[g[g.length - 1]]}` : g.map(x => N[x]).join(", ");
 }
 /** "8:30", "8.5", "8,5", "8h30", "8 h", "510m" -> minuti; vuoto -> null; non valido -> NaN */
 export function parseOre(v) {
@@ -416,29 +438,29 @@ export function pausaMinima(minutiLavoro) {
 export const TIPI_VACANZA = ["Vacanza", "Recupero ore", "Assenza"];
 export const STATI_VACANZA = ["Richiesta", "Approvata", "Rifiutata"];
 /** Giorni lavorativi (lunedì–venerdì, esclusi i festivi ticinesi) tra due date incluse. */
-export function giorniLavorativi(da, a) {
+export function giorniLavorativi(da, a, profilo = null) {
   let n = 0;
-  for (let d = da; d && a && d <= a; d = aggiungiGiorni(d, 1)) if (giornoSettimana(d) < 5 && !festiviTicino(+d.slice(0, 4))[d]) n++;
+  for (let d = da; d && a && d <= a; d = aggiungiGiorni(d, 1)) if (lavoraIl(profilo, d)) n++;
   return n;
 }
-/** Giorni che una richiesta consuma: mezza giornata = 0.5 */
-export const giorniRichiesta = (v) => v.mezza ? (giorniLavorativi(v.dal, v.dal) ? 0.5 : 0) : giorniLavorativi(v.dal, v.al);
+/** Giorni che una richiesta consuma (solo i giorni in cui la persona lavora): mezza giornata = 0.5 */
+export const giorniRichiesta = (v, profilo = null) => v.mezza ? (giorniLavorativi(v.dal, v.dal, profilo) ? 0.5 : 0) : giorniLavorativi(v.dal, v.al, profilo);
 /** Giorni di vacanza approvati di un utente in un anno (le richieste a cavallo d'anno contano per la parte nell'anno). */
-export function vacanzeUsate(vacanze, uid, anno) {
+export function vacanzeUsate(vacanze, uid, anno, profilo = null) {
   return vacanze.filter(v => v.uid === uid && v.stato === "Approvata" && v.tipo === "Vacanza").reduce((s, v) => {
-    if (v.mezza) return s + (v.dal.startsWith(String(anno)) ? giorniRichiesta(v) : 0);
+    if (v.mezza) return s + (v.dal.startsWith(String(anno)) ? giorniRichiesta(v, profilo) : 0);
     const da = v.dal > `${anno}-01-01` ? v.dal : `${anno}-01-01`, a = v.al < `${anno}-12-31` ? v.al : `${anno}-12-31`;
-    return s + (da <= a ? giorniLavorativi(da, a) : 0);
+    return s + (da <= a ? giorniLavorativi(da, a, profilo) : 0);
   }, 0);
 }
 /** Aggiunge alle presenze i giorni di vacanza/assenza approvati che non hanno già una registrazione. */
-export function conVacanze(pres, vacanze, uid) {
+export function conVacanze(pres, vacanze, uid, profilo = null) {
   const out = { ...pres };
   for (const v of vacanze) {
     if (v.uid !== uid || v.stato !== "Approvata") continue;
     const tipo = v.tipo === "Vacanza" ? (v.mezza ? "Vacanza mezza giornata" : "Vacanza") : v.tipo === "Assenza" ? (v.mezza ? "Assenza mezza giornata" : "Assenza") : "Recupero ore";
     for (let d = v.dal; d <= (v.mezza ? v.dal : v.al); d = aggiungiGiorni(d, 1)) {
-      if (giornoSettimana(d) >= 5 || festiviTicino(+d.slice(0, 4))[d] || out[d]) continue;
+      if (!lavoraIl(profilo, d) || out[d]) continue;
       out[d] = { data: d, assenza: tipo, minuti: null, daPiano: true };
     }
   }

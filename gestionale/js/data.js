@@ -336,6 +336,6 @@ function creaDemo() {
       "d3_iva_2026-T3": { id: "d3_iva_2026-T3", clienteId: "d3", servizio: "iva", periodo: "2026-T3", anno: 2026, stato: "In attesa cliente", note: "Mancano estratti conto" }
     },
     utenti: { demo: { id: "demo", nome: "Utente demo", ruolo: "admin", oreSettimanali: 42, percentuale: 100, accordo73b: "2026-11-02", giorniVacanza: 25, inizioPresenze: oggiPiu(-7) },
-      u2: { id: "u2", nome: "Anna", ruolo: "utente", fatturazione: true, oreSettimanali: 42, percentuale: 50, giorniVacanza: 25, pausaStandard: 0, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
+      u2: { id: "u2", nome: "Anna", ruolo: "utente", fatturazione: true, oreSettimanali: 42, percentuale: 80, giorniLavoro: [0, 1, 2, 3], giorniVacanza: 25, pausaStandard: 0, inizioPresenze: oggiPiu(-7) }, u3: { id: "u3", nome: "Marco", ruolo: "utente" } }
   };
 }

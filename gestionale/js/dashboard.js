@@ -64,7 +64,7 @@ export async function vistaDashboard(el) {
     const bo = !!(prof.backoffice || x.backoffice);
     t.BO = bo ? Math.max(0, P_ - regTot) : 0;
     t.NR = bo ? 0 : Math.max(0, P_ - regTot);
-    const presMap = conVacanze(Object.fromEntries(pres.map(p => [p.data, p])), vacanze, x.id);
+    const presMap = conVacanze(Object.fromEntries(pres.map(p => [p.data, p])), vacanze, x.id, prof);
     const dal = prof.inizioPresenze || pres.map(p => p.data).sort()[0] || "9999-12-31";
     const rp = finora >= da ? riepilogoPresenze(presMap, prof, da, finora, dal) : { daCompilare: 0 };
     const regGiorno = {}; rr.forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + r.minuti; });

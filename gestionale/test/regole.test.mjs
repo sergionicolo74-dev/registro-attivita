@@ -282,3 +282,19 @@ console.log("Test compiti superati");
   tst(R.tipoPraticaDa("Fare il reclamo delle tasse del cliente X") === "Reclamo / ricorso", "tipo pratica dal testo: reclamo");
   tst(R.tipoPraticaDa("Telefonare") === "Altro", "tipo pratica dal testo: altro");
 }
+
+// tempo parziale su meno giorni (es. 80% da lunedì a giovedì)
+{
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  const R = await import("../js/regole.js");
+  const laura = { oreSettimanali: 42, percentuale: 80, giorniLavoro: [0, 1, 2, 3], giorniVacanza: 25 };
+  tst(R.minutiDovuti(laura, "2026-11-16") === 504, "80% su 4 giorni: lunedì 8h24 (504 min)");
+  tst(R.minutiDovuti(laura, "2026-11-20") === 0, "80% lu–gi: venerdì 0");
+  tst(R.minutiDovuti({ oreSettimanali: 42, percentuale: 100 }, "2026-11-20") === 504, "tempo pieno: venerdì 8h24");
+  tst(R.minutiDovuti({ oreSettimanali: 42, percentuale: 50 }, "2026-11-20") === 252, "50% su 5 giorni: 4h12");
+  tst(R.dirittoVacanze(laura) === 20, "diritto vacanze 25 su 4 giorni = 20");
+  tst(R.dirittoVacanze({ giorniVacanza: 25, percentuale: 50 }) === 25, "50% su 5 giorni: 25 giorni");
+  tst(R.giorniLavorativi("2026-11-16", "2026-11-22", laura) === 4, "settimana di Laura: 4 giorni");
+  tst(R.giorniRichiesta({ dal: "2026-11-16", al: "2026-11-22" }, laura) === 4, "una settimana di vacanza consuma 4 giorni a Laura");
+  tst(R.fmtGiorniLavoro(laura) === "lu–gi" && R.fmtGiorniLavoro({}) === "lu–ve", "etichetta giorni di lavoro");
+}

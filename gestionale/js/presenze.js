@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtDurata, fmtSaldo, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, minutiDovuti, minutiCredito,
-  parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima, conVacanze } from "./regole.js";
+  lavoraIl, giorniLavoroDi, fmtGiorniLavoro, dirittoVacanze, parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima, conVacanze } from "./regole.js";
 
 const PAUSE = [0, 15, 30, 45, 60, 75, 90, 120];
 
@@ -31,7 +31,7 @@ export async function vistaPresenze(el) {
     D.listaVacanze().catch(() => [])
   ]);
   // Le vacanze approvate entrano da sole nei giorni senza registrazione
-  const pres = conVacanze(Object.fromEntries(presAnno.map(p => [p.data, p])), vacanze, chi);
+  const pres = conVacanze(Object.fromEntries(presAnno.map(p => [p.data, p])), vacanze, chi, profilo);
   const regGiorno = {};
   regMese.filter(r => r.autoreUid === chi && r.tipo !== "nota").forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + (r.minuti || 0); });
   const dal = profilo.inizioPresenze || presAnno.map(p => p.data).sort()[0] || da;
@@ -67,22 +67,23 @@ export async function vistaPresenze(el) {
     <div class="kpi-b fermo"><span class="tenue">Lavorate</span><strong>${fmtDurata(rMese.lavorate)}</strong>${rMese.credito ? `<span class="tenue">+ ${fmtDurata(rMese.credito)} assenze/vacanze</span>` : ""}</div>
     <div class="kpi-b fermo"><span class="tenue">Saldo del mese${rMese.dovute !== rMeseTutto.dovute ? " finora" : ""}</span><strong>${fmtSaldo(rMese.saldo)}</strong></div>
     <div class="kpi-b fermo"><span class="tenue">Saldo ${anno} fino a ${e(fmtData(fineAnnoCalc))}</span><strong>${fmtSaldo(saldoAnno)}</strong></div>
-    <div class="kpi-b fermo"><span class="tenue">Vacanze ${anno}</span><strong>${String(rAnno.vacanze).replace(".5", "½")} ${rAnno.vacanze === 1 ? "giorno" : "giorni"}</strong>${profilo.giorniVacanza ? `<span class="tenue">su ${e(profilo.giorniVacanza)}</span>` : ""}</div>
+    <div class="kpi-b fermo"><span class="tenue">Vacanze ${anno}</span><strong>${String(rAnno.vacanze).replace(".5", "½")} ${rAnno.vacanze === 1 ? "giorno" : "giorni"}</strong>${profilo.giorniVacanza ? `<span class="tenue">su ${String(dirittoVacanze(profilo)).replace(".5", "½")}</span>` : ""}</div>
     <div class="kpi-b fermo"><span class="tenue">Giorni da compilare</span><strong>${rMese.daCompilare ? stato("urgente", String(rMese.daCompilare)) : stato("ok", "0")}</strong></div>
   </div>
   <div class="pannello" style="padding:0">
     <div class="scorri"><table class="tabella presenze"><thead><tr><th>Giorno</th><th class="num">Dovute</th><th>Entrata</th><th>Uscita</th><th>Pausa</th><th class="num">Lavorate</th><th>Assenza</th><th class="num">Registro ore</th><th class="num">Saldo</th></tr></thead><tbody>
     ${giorniDelMese().map(d => {
       const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0, gs = giornoSettimana(d), f = fest[d];
-      const lib = gs >= 5 || f, futuro = d > oggi;
+      const libPers = gs < 5 && !f && !lavoraIl(profilo, d); // giorno libero della persona (tempo parziale)
+      const lib = gs >= 5 || f || libPers, futuro = d > oggi;
       const saldo = (p.minuti != null || p.assenza) ? (p.minuti || 0) + minutiCredito(p.assenza, dov) - dov : null;
       const reg = regGiorno[d];
       const manca = !lib && dov && !futuro && d >= dal && p.minuti == null && !p.assenza;
       return `<tr class="${lib ? "libero" : ""}${d === oggi ? " oggi" : ""}" data-d="${d}">
-        <td style="white-space:nowrap"><strong>${GIORNI[gs]} ${e(fmtData(d).slice(0, 5))}</strong>${f ? `<div class="tenue">${e(f)}</div>` : ""}${manca ? `<div>${stato("urgente", "Da compilare")}</div>` : ""}</td>
+        <td style="white-space:nowrap"><strong>${GIORNI[gs]} ${e(fmtData(d).slice(0, 5))}</strong>${f ? `<div class="tenue">${e(f)}</div>` : libPers ? '<div class="tenue">giorno libero</div>' : ""}${manca ? `<div>${stato("urgente", "Da compilare")}</div>` : ""}</td>
         <td class="num">${dov ? ore(dov) : "–"}</td>
-        <td><input class="t-in ent" value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
-        <td><input class="t-in usc" value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
+        <td><input class="t-in ent"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
+        <td><input class="t-in usc"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
         <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></td>
         <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
           ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
@@ -94,7 +95,7 @@ export async function vistaPresenze(el) {
     </tbody></table></div></div>
   <p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>
   ${admin ? formProfilo(profilo, nomeChi) : `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:8px">Orario e accordo</h3><div class="fatti">
-      <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}%</div>
+      <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}% · ${fmtGiorniLavoro(profilo)}</div>
       <div><span>Accordo art. 73b</span>${profilo.accordo73b ? e(fmtData(profilo.accordo73b)) : "–"}</div></div></div>`}`;
 
   const ricarica = () => vistaPresenze(el);
@@ -133,7 +134,7 @@ export async function vistaPresenze(el) {
     const segno = /^[−-]/.test(String(d.saldoRiportato || "").trim()) ? -1 : 1;
     if (Number.isNaN(parseOrario(d.entrataStandard))) { avviso("Entrata abituale non valida: es. 8:00"); return; }
     await D.salvaProfilo(chi, { entrataStandard: fmtOrario(parseOrario(d.entrataStandard)) || "", pausaStandard: d.pausaStandard === "" ? 60 : Number(d.pausaStandard),
-      oreSettimanali: d.oreSettimanali, percentuale: d.percentuale, giorniVacanza: d.giorniVacanza,
+      oreSettimanali: d.oreSettimanali, percentuale: d.percentuale, giorniVacanza: d.giorniVacanza, giorniLavoro: giorniDaForm(f),
       accordo73b: d.accordo73b, inizioPresenze: d.inizioPresenze, saldoRiportatoMinuti: saldo == null ? 0 : segno * saldo });
     avviso("Orario salvato"); ricarica();
   });
@@ -147,14 +148,15 @@ function formProfilo(p, nome) {
     <div class="griglia">
       ${campo("oreSettimanali", "Ore settimanali a tempo pieno", p.oreSettimanali ?? 42, "number")}
       ${campo("percentuale", "Grado di occupazione (%)", p.percentuale ?? 100, "number")}
-      ${campo("giorniVacanza", "Giorni di vacanza all'anno", p.giorniVacanza, "number")}
+      ${campo("giorniVacanza", "Giorni di vacanza all'anno (a tempo pieno)", p.giorniVacanza, "number")}
+      ${sceltaGiorniLavoro(p)}
       ${campo("entrataStandard", "Entrata abituale (per il pulsante Standard)", p.entrataStandard || "08:00")}
       <div><label for="f_pausaStandard">Pausa abituale</label><select id="f_pausaStandard" name="pausaStandard">${PAUSE.map(x => `<option value="${x}"${x === (p.pausaStandard ?? 60) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></div>
       ${campo("accordo73b", "Accordo scritto art. 73b firmato il", p.accordo73b, "date")}
       ${campo("inizioPresenze", "Registrazione delle presenze dal", p.inizioPresenze, "date")}
       ${campo("saldoRiportato", "Saldo ore riportato a inizio anno (es. 12:30 o -4:00)", sr ? (sr < 0 ? "-" : "") + Math.floor(Math.abs(sr) / 60) + ":" + String(Math.abs(sr) % 60).padStart(2, "0") : "")}
     </div>
-    <p class="tenue" style="font-size:13px;margin-top:8px">Le ore dovute si calcolano dal lunedì al venerdì, esclusi i 15 giorni festivi ufficiali del Ticino, a partire dalla data di inizio registrazione.</p>
+    <p class="tenue" style="font-size:13px;margin-top:8px">Le ore dovute si calcolano sui giorni di lavoro scelti (ore settimanali × grado ÷ numero di giorni), esclusi i 15 giorni festivi ufficiali del Ticino, a partire dalla data di inizio registrazione.</p>
     <div class="azioni"><button class="btn primario">Salva orario</button></div></form>`;
 }
 
@@ -162,7 +164,7 @@ async function vistaPanoramica(el, utenti) {
   const anno = mese.slice(0, 4), da = primoDel(mese), a = ultimoDel(mese), oggi = oggiISO();
   const [tutte, vacanze] = await Promise.all([D.listaPresenzeStudio(`${anno}-01-01`, `${anno}-12-31`), D.listaVacanze().catch(() => [])]);
   const righe = utenti.map(x => {
-    const mie = tutte.filter(p => p.uid === x.id), pres = conVacanze(Object.fromEntries(mie.map(p => [p.data, p])), vacanze, x.id);
+    const mie = tutte.filter(p => p.uid === x.id), pres = conVacanze(Object.fromEntries(mie.map(p => [p.data, p])), vacanze, x.id, x);
     const dal = x.inizioPresenze || mie.map(p => p.data).sort()[0] || da;
     const finora = pres[oggi] ? oggi : aggiungiGiorni(oggi, -1), fine = a < finora ? a : finora;
     const rm = fine >= da ? riepilogoPresenze(pres, x, da, fine, dal) : riepilogoPresenze({}, x, da, da, "9999"), ra = riepilogoPresenze(pres, x, `${anno}-01-01`, fine, dal);
@@ -173,10 +175,10 @@ async function vistaPanoramica(el, utenti) {
       <button class="btn" id="m-succ" aria-label="Mese successivo">▶</button><button class="btn" id="indietro">Torna al singolo</button></div></div>
     <table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Dovute finora</th><th class="num">Lavorate</th><th class="num">Saldo mese</th><th class="num">Saldo ${anno}</th><th class="num">Vacanze ${anno}</th><th>Da compilare</th><th>Accordo 73b</th></tr></thead>
     <tbody>${righe.map(({ x, rm, ra, saldoAnno, vuoto }) => `<tr class="cliccabile" data-uid="${e(x.id)}" tabindex="0">
-      <td><strong>${e(x.nome || x.id)}</strong>${x.percentuale != null && +x.percentuale !== 100 ? ` <span class="tenue">${e(x.percentuale)}%</span>` : ""}</td>
+      <td><strong>${e(x.nome || x.id)}</strong>${x.percentuale != null && +x.percentuale !== 100 ? ` <span class="tenue">${e(x.percentuale)}%</span>` : ""}${giorniLavoroDi(x).length < 5 ? ` <span class="tenue">${fmtGiorniLavoro(x)}</span>` : ""}</td>
       <td class="num">${vuoto ? "–" : fmtDurata(rm.dovute)}</td><td class="num">${fmtDurata(rm.lavorate + rm.credito)}</td>
       <td class="num"><span class="${rm.saldo < 0 && !vuoto ? "neg" : ""}">${vuoto ? "–" : fmtSaldo(rm.saldo)}</span></td><td class="num"><span class="${saldoAnno < 0 && !vuoto ? "neg" : ""}">${vuoto ? "–" : fmtSaldo(saldoAnno)}</span></td>
-      <td class="num">${String(ra.vacanze).replace(".5", "½")}${x.giorniVacanza ? ` / ${e(x.giorniVacanza)}` : ""}</td>
+      <td class="num">${String(ra.vacanze).replace(".5", "½")}${x.giorniVacanza ? ` / ${String(dirittoVacanze(x)).replace(".5", "½")}` : ""}</td>
       <td>${vuoto ? stato("neutro", "Non iniziata") : rm.daCompilare ? stato("urgente", `${rm.daCompilare} ${rm.daCompilare === 1 ? "giorno" : "giorni"}`) : stato("ok", "In ordine")}</td>
       <td>${x.accordo73b ? stato("ok", fmtData(x.accordo73b)) : stato("scaduto", "Mancante")}</td></tr>`).join("")}</tbody></table>
     <p class="tenue" style="margin-top:10px">Lavorate comprende vacanze e assenze. Clicca un collaboratore per vedere e correggere il suo mese.</p>`;
@@ -210,4 +212,16 @@ function esportaAnno(nome, profilo, pres, anno, dal) {
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   a.download = `Presenze_${anno}_${nome.replace(/[^\w]+/g, "_")}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** Scelta dei giorni di lavoro (lun–ven): usata in Presenze e in Utenti. */
+export function sceltaGiorniLavoro(p) {
+  const g = giorniLavoroDi(p);
+  return `<div class="largo"><label>Giorni di lavoro</label><div class="chips giorni-lav">${["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"].map((n, i) =>
+    `<label class="chip-g"><input type="checkbox" name="gl${i}" ${g.includes(i) ? "checked" : ""}> ${n}</label>`).join("")}</div>
+    <div class="tenue" style="font-size:12px;margin-top:4px">Nei giorni non spuntati non si compila nulla e non mancano ore (es. 80% da lunedì a giovedì).</div></div>`;
+}
+export function giorniDaForm(f) {
+  const g = [0, 1, 2, 3, 4].filter(i => f[`gl${i}`]?.checked);
+  return g.length ? g : [0, 1, 2, 3, 4];
 }

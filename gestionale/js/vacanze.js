@@ -2,7 +2,7 @@
 // Il motivo delle assenze non si registra: solo il tipo (Vacanza, Recupero ore, Assenza).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
-import { fmtData, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, giorniLavorativi, giorniRichiesta, vacanzeUsate,
+import { fmtData, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, giorniLavorativi, giorniRichiesta, vacanzeUsate, dirittoVacanze,
   chiusa, TIPI_VACANZA, GIORNI, MESI, coloriUtenti, lunedi } from "./regole.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
@@ -35,7 +35,7 @@ export async function vistaVacanze(el) {
   const oggiFuori = attive.filter(v => v.stato === "Approvata" && oggi >= v.dal && oggi <= (v.mezza ? v.dal : v.al));
 
   const rigaRichiesta = (v) => {
-    const sd = scadenzeDurante(v, scadenze), n = giorniRichiesta(v);
+    const sd = scadenzeDurante(v, scadenze), n = giorniRichiesta(v, utenti.find(y => y.id === v.uid));
     return `<li class="richiesta">
       <div style="flex:1"><strong>${e(v.nome)}</strong> · ${e(v.tipo)}${v.mezza ? " (mezza giornata)" : ""} · ${e(fmtData(v.dal))}${v.mezza || v.al === v.dal ? "" : ` – ${e(fmtData(v.al))}`}
         <span class="tenue">· ${String(n).replace(".5", "½")} ${n === 1 ? "giorno lavorativo" : "giorni lavorativi"}</span>
@@ -75,8 +75,8 @@ export async function vistaVacanze(el) {
   <section class="pannello"><h2 style="font-size:15px;margin-bottom:10px">Saldo vacanze ${anno}</h2>
     <table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Diritto</th><th class="num">Approvate</th><th class="num">In attesa</th><th class="num">Restanti</th><th style="width:40%"></th></tr></thead><tbody>
     ${utenti.filter(x => admin || x.id === u.uid).map(x => {
-      const dir = Number(x.giorniVacanza) || 0, usate = vacanzeUsate(vacanze, x.id, anno);
-      const chieste = vacanze.filter(v => v.uid === x.id && v.stato === "Richiesta" && v.tipo === "Vacanza" && v.dal.startsWith(String(anno))).reduce((s, v) => s + giorniRichiesta(v), 0);
+      const dir = dirittoVacanze(x), usate = vacanzeUsate(vacanze, x.id, anno, x);
+      const chieste = vacanze.filter(v => v.uid === x.id && v.stato === "Richiesta" && v.tipo === "Vacanza" && v.dal.startsWith(String(anno))).reduce((s, v) => s + giorniRichiesta(v, x), 0);
       const rest = dir - usate - chieste, f = n => String(n).replace(".5", "½");
       const p = n => dir ? Math.min(100, n / dir * 100) : 0;
       return `<tr><td><strong>${e(x.nome || x.id)}</strong></td><td class="num">${dir ? f(dir) : '<span class="tenue">da impostare</span>'}</td><td class="num">${f(usate)}</td><td class="num">${f(chieste)}</td>
@@ -143,9 +143,9 @@ function cassetto(v, utenti, vacanze, scadenze, ricarica) {
     const r = leggi();
     if (!r.dal) { calc.innerHTML = '<span class="tenue">Indica le date.</span>'; return; }
     if (r.al < r.dal) { calc.innerHTML = stato("scaduto", "La data di fine è prima di quella di inizio"); return; }
-    const n = giorniRichiesta(r), sd = scadenzeDurante(r, scadenze), x = utenti.find(y => y.id === r.uid);
-    const dir = Number(x?.giorniVacanza) || 0, anno = +r.dal.slice(0, 4);
-    const altre = vacanze.filter(w => w.id !== v.id && w.uid === r.uid && w.tipo === "Vacanza" && w.stato !== "Rifiutata" && w.dal.startsWith(String(anno))).reduce((s, w) => s + giorniRichiesta(w), 0);
+    const x = utenti.find(y => y.id === r.uid), n = giorniRichiesta(r, x), sd = scadenzeDurante(r, scadenze);
+    const dir = dirittoVacanze(x), anno = +r.dal.slice(0, 4);
+    const altre = vacanze.filter(w => w.id !== v.id && w.uid === r.uid && w.tipo === "Vacanza" && w.stato !== "Rifiutata" && w.dal.startsWith(String(anno))).reduce((s, w) => s + giorniRichiesta(w, x), 0);
     const sovrapp = vacanze.filter(w => w.id !== v.id && w.uid !== r.uid && w.stato !== "Rifiutata" && w.dal <= r.al && (w.mezza ? w.dal : w.al) >= r.dal);
     calc.innerHTML = `<div class="fatti"><div><span>Giorni lavorativi</span><strong>${String(n).replace(".5", "½")}</strong></div>
       ${r.tipo === "Vacanza" && dir ? `<div><span>Restano dopo questa</span><strong>${String(dir - altre - n).replace(".5", "½")}</strong> su ${dir}</div>` : ""}</div>
@@ -159,7 +159,7 @@ function cassetto(v, utenti, vacanze, scadenze, ricarica) {
     const r = leggi();
     if (!r.dal) { form.dal.focus(); avviso("Indica la data di inizio"); return; }
     if (r.al < r.dal) { form.al.focus(); avviso("La data di fine è prima di quella di inizio"); return; }
-    if (!giorniRichiesta(r)) { avviso("Nel periodo non ci sono giorni lavorativi"); return; }
+    if (!giorniRichiesta(r, utenti.find(y => y.id === r.uid))) { avviso("Nel periodo non ci sono giorni di lavoro di questa persona"); return; }
     await D.salvaVacanza({ ...(v.id ? { id: v.id } : { creato: new Date().toISOString() }), uid: r.uid, nome: r.nome, dal: r.dal, al: r.al, tipo: r.tipo, mezza: !!r.mezza,
       stato: admin ? (r.stato || "Approvata") : "Richiesta" });
     chiudi(); avviso(admin ? "Salvato" : "Richiesta inviata"); ricarica();

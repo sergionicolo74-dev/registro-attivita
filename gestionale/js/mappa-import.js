@@ -126,8 +126,10 @@ export function personeDaExcel(righe, codiciValidi) {
     if (codice.toUpperCase() === "ESEMPIO") return;
     if (!T(r["Cognome"]) && !T(r["Nome"])) return;
     if (codiciValidi && !codiciValidi.has(codice)) { errori.push(`Persone, riga ${i + 2}: codice cliente ${codice} non trovato`); return; }
+    const codicePF = T(r["Cliente persona fisica (DF)"]);
+    if (codicePF && codiciValidi && !codiciValidi.has(codicePF)) errori.push(`Persone, riga ${i + 2}: cliente persona fisica ${codicePF} non trovato`);
     persone.push({
-      codice,
+      codice, codicePF: codicePF && (!codiciValidi || codiciValidi.has(codicePF)) ? codicePF : "",
       dati: { cognome: T(r["Cognome"]), nome: T(r["Nome"]), ruolo: T(r["Ruolo"]), principale: X(r["Contatto principale"]), firma: T(r["Diritto di firma"]),
         email: T(r["Email"]), telefono: T(r["Telefono"]), canale: T(r["Canale preferito"]), lingua: T(r["Lingua"]), note: T(r["Note"]) },
       kyc: { nazionalita: T(r["Nazionalità"]), domicilio: T(r["Paese di domicilio"]), tipoDocumento: T(r["Tipo documento"]),

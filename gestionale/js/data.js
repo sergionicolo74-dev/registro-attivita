@@ -149,6 +149,8 @@ export const listaTuttiKycClienti = () => ADMIN() ? lista("clienti_kyc") : Promi
 
 // ---------- persone ----------
 export const listaPersone = (clienteId) => lista("persone", [["clienteId", "==", clienteId]]);
+/** Persone (contatti di società) collegate a un cliente persona fisica per la dichiarazione fiscale privata. */
+export const listaPersoneCollegate = (clientePF) => lista("persone", [["clientePF", "==", clientePF]]);
 export const salvaPersona = (p) => scrivi("persone", p);
 export async function eliminaPersona(id) { await elimina("persone", id); if (ADMIN()) await elimina("persone_kyc", id); }
 export const listaTuttePersone = () => lista("persone");

@@ -288,8 +288,9 @@ export async function vistaRegistro(el) {
     // pratiche aperte del cliente: ore separate, da fatturare a parte con la pratica
     const prat = pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto));
     const voci = cli.interno ? [["non", "Non fatturabile", "ore interne dello studio", "c-non"]] : [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
+      ...(cli.forma === "Persona fisica" ? [["mandato", "Dichiarazione fiscale", "nel mandato", "c-mand"]] : [
       ["mandato", mandatoPrinc ? NOME_MANDATO[mandatoPrinc] : "Contabilità", "nel mandato", "c-mand"],
-      ["stipendi", "Stipendi", "nel forfait", "c-mand"],
+      ["stipendi", "Stipendi", "nel forfait", "c-mand"]]),
       ["non", "Non fatturabile", "ore interne", "c-non"],
       ...prat.map(p => ["pratica:" + p.id, "📁 " + (p.titolo || p.tipo), `pratica · ${p.fatturazione?.modo === "A ore" ? "a ore" : p.fatturazione?.modo === "Non fatturare" ? "non fatturata" : "forfait"}`, "c-prat"])];
     box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");

@@ -106,7 +106,9 @@ const SCHEDE = [["persone", "Persone"], ["dati", "Dati società"], ["mandati", "
 
 export async function vistaScheda(el, id) {
   const scheda = location.hash.split("/")[3] || "persone";
-  const [c, kyc, persone, kycP] = await Promise.all([D.leggiCliente(id), D.leggiKycCliente(id), D.listaPersone(id), D.listaKycPersone(id)]);
+  const [c, kyc, persone, kycP, collegate, tuttiClienti] = await Promise.all([D.leggiCliente(id), D.leggiKycCliente(id), D.listaPersone(id), D.listaKycPersone(id),
+    D.listaPersoneCollegate(id).catch(() => []), D.listaClienti().catch(() => [])]);
+  const cliPer = Object.fromEntries(tuttiClienti.map(x => [x.id, x]));
   if (!c) { el.innerHTML = `<div class="pannello">Cliente non trovato. <a href="#/clienti">Torna all'elenco</a></div>`; return; }
   const kycPer = Object.fromEntries(kycP.map(k => [k.id, k]));
   const docScad = kycP.map(k => ({ k, s: statoScadenza(k.scadenzaDocumento, 60) })).filter(x => x.s === "scaduto" || x.s === "urgente");
@@ -132,6 +134,7 @@ export async function vistaScheda(el, id) {
           : `<div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>`}
         ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Onorari annui</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
       </div>
+      ${collegate.length ? `<div style="font-size:14px">🔗 Collegato a ${collegate.map(x => `<a href="#/clienti/${encodeURIComponent(x.clienteId)}/persone">${e(cliPer[x.clienteId]?.ragioneSociale || "società")}</a>${x.ruolo ? ` <span class="tenue">(${e(x.ruolo)})</span>` : ""}`).join(", ")}</div>` : ""}
       ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
     <div class="schede" role="tablist">${SCHEDE.map(([k, n]) => `<button role="tab" aria-selected="${k === scheda}" data-k="${k}">${e(k === "dati" && c.forma === "Persona fisica" ? "Dati personali e DF" : n)}${k === "persone" ? ` (${persone.length})` : ""}</button>`).join("")}</div>
@@ -150,10 +153,10 @@ export async function vistaScheda(el, id) {
     if (!confirm(`Eliminare definitivamente ${c.codice} · ${c.ragioneSociale}?`)) return;
     await D.eliminaCliente(id); avviso("Cliente eliminato"); location.hash = "#/clienti";
   });
-  if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica);
+  if (scheda === "persone") return schedaPersone(p, c, persone, kycPer, ricarica, cliPer, tuttiClienti);
   if (scheda === "dati") return schedaDati(p, c, kyc, ricarica);
   if (scheda === "mandati") return schedaMandati(p, c, ricarica, kyc);
-  if (scheda === "servizi") return await schedaServizi(p, c, ricarica);
+  if (scheda === "servizi") return await schedaServizi(p, c, ricarica, persone, cliPer);
   if (scheda === "compiti") return schedaCompiti(p, c);
   if (scheda === "pratiche") return await schedaPratiche(p, c);
   if (scheda === "ore") return schedaOre(p, c);
@@ -161,7 +164,7 @@ export async function vistaScheda(el, id) {
 }
 
 // ---------- Persone ----------
-function schedaPersone(p, c, persone, kycPer, ricarica) {
+function schedaPersone(p, c, persone, kycPer, ricarica, cliPer = {}, tuttiClienti = []) {
   const admin = D.isAdmin();
   persone.sort((a, b) => (b.principale ? 1 : 0) - (a.principale ? 1 : 0) || (a.cognome || "").localeCompare(b.cognome || ""));
   p.innerHTML = `<div class="pannello">
@@ -169,17 +172,19 @@ function schedaPersone(p, c, persone, kycPer, ricarica) {
     <div class="elenco-persone">${persone.length ? persone.map(x => {
       const k = kycPer[x.id];
       return `<div class="persona"><div class="testa"><div><strong>${e(`${x.nome || ""} ${x.cognome || ""}`.trim() || "Senza nome")}</strong> <span class="tenue">· ${e(x.ruolo || "")}</span></div>
-        <div class="segnali">${x.principale ? stato("info", "Contatto principale") : ""}${admin && k?.scadenzaDocumento ? statoData(k.scadenzaDocumento, (k.tipoDocumento || "Documento") + " scade", 60) : ""}
+        <div class="segnali">${x.clientePF && cliPer[x.clientePF] ? `<a class="stato info" href="#/clienti/${encodeURIComponent(x.clientePF)}/dati" title="Cliente persona fisica per la dichiarazione fiscale privata">DF privata · ${e(cliPer[x.clientePF].codice)}</a>` : ""}${x.principale ? stato("info", "Contatto principale") : ""}${admin && k?.scadenzaDocumento ? statoData(k.scadenzaDocumento, (k.tipoDocumento || "Documento") + " scade", 60) : ""}
         <button class="btn piccolo" data-mod="${e(x.id)}">Modifica</button></div></div>
         <div class="tenue">${[x.email && `✉ ${e(x.email)}`, x.telefono && `☎ ${e(x.telefono)}`, x.canale && `Preferisce: ${e(x.canale)}`, x.lingua && e(x.lingua), x.firma && `Firma: ${e(x.firma)}`].filter(Boolean).join(" · ")}</div></div>`;
     }).join("") : `<div class="vuoto">Nessuna persona inserita.</div>`}</div></div>`;
-  p.querySelector("#nuova").addEventListener("click", () => cassettoPersona({ clienteId: c.id }, null, ricarica));
+  const pf = tuttiClienti.filter(y => y.forma === "Persona fisica" && y.id !== c.id).sort((a, b) => (a.ragioneSociale || "").localeCompare(b.ragioneSociale || ""));
+  p.querySelector("#nuova").addEventListener("click", () => cassettoPersona({ clienteId: c.id }, null, ricarica, pf, tuttiClienti));
   p.querySelectorAll("[data-mod]").forEach(b => b.addEventListener("click", () => {
-    const x = persone.find(y => y.id === b.dataset.mod); cassettoPersona(x, kycPer[x.id] || {}, ricarica);
+    const x = persone.find(y => y.id === b.dataset.mod); cassettoPersona(x, kycPer[x.id] || {}, ricarica, pf, tuttiClienti);
   }));
 }
 
-function cassettoPersona(x, k, ricarica) {
+function cassettoPersona(x, k, ricarica, pf = [], tuttiClienti = []) {
+  const nomePF = id => { const y = pf.find(z => z.id === id); return y ? `${y.codice} · ${y.ragioneSociale}` : ""; };
   const admin = D.isAdmin();
   const velo = document.createElement("div"); velo.className = "velo";
   const box = document.createElement("aside"); box.className = "cassetto"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Persona");
@@ -190,6 +195,11 @@ function cassettoPersona(x, k, ricarica) {
       ${campo("email", "Email", x.email, "email")}${campo("telefono", "Telefono", x.telefono, "tel")}
       ${campo("canale", "Canale preferito", x.canale, "select", ["Email", "Telefono", "WhatsApp", "Posta"])}${campo("lingua", "Lingua", x.lingua, "select", ["Italiano", "Tedesco", "Francese", "Inglese"])}
       ${campo("principale", "Contatto principale", x.principale, "checkbox", [], true)}
+      <div class="largo sezione-df"><label for="f_pf">Dichiarazione fiscale privata: cliente persona fisica</label>
+        <div style="display:flex;gap:8px"><input id="f_pf" list="lista-pf" autocomplete="off" placeholder="Vuoto = non facciamo la sua dichiarazione" value="${e(nomePF(x.clientePF))}" style="flex:1">
+        ${D.isAdmin() ? '<button type="button" class="btn" id="crea-pf" title="Crea il cliente persona fisica con il nome e l\'email di questa persona">+ Crea cliente PF</button>' : ""}</div>
+        <datalist id="lista-pf">${pf.map(y => `<option value="${e(`${y.codice} · ${y.ragioneSociale}`)}"></option>`).join("")}</datalist>
+        <div class="tenue" style="font-size:12px;margin-top:4px">Se allo studio fa anche la dichiarazione fiscale personale, collegala al suo cliente persona fisica: la società la vede nei Servizi.</div></div>
       ${campo("note", "Note", x.note, "textarea", [], true)}
     </div>
     ${admin ? `<div class="sezione riservato"><h3>Identificazione (KYC)</h3><div class="griglia">
@@ -210,9 +220,28 @@ function cassettoPersona(x, k, ricarica) {
     ev.preventDefault();
     if (bloccaDate(ev.target)) return;
     const { k: kd, ...dati } = leggiForm(ev.target);
+    const testoPF = box.querySelector("#f_pf").value.trim();
+    const sceltoPF = testoPF ? pf.find(y => `${y.codice} · ${y.ragioneSociale}` === testoPF || normNome(y.ragioneSociale) === normNome(testoPF)) : null;
+    if (testoPF && !sceltoPF) { box.querySelector("#f_pf").focus(); avviso("Scegli il cliente persona fisica dall'elenco o usa + Crea cliente PF"); return; }
+    dati.clientePF = sceltoPF?.id || null;
     const id = await D.salvaPersona({ ...x, ...dati });
     if (admin && kd) await D.salvaKycPersona(id, { ...kd, clienteId: x.clienteId });
     chiudi(); avviso("Persona salvata"); ricarica();
+  });
+  box.querySelector("#crea-pf")?.addEventListener("click", async () => {
+    const f = box.querySelector("form"), cog = f.cognome.value.trim(), nom = f.nome.value.trim();
+    if (!cog) { f.cognome.focus(); avviso("Scrivi prima il cognome"); return; }
+    const rs = `${cog} ${nom}`.trim();
+    const esiste = pf.find(y => normNome(y.ragioneSociale) === normNome(rs));
+    if (esiste) { box.querySelector("#f_pf").value = `${esiste.codice} · ${esiste.ragioneSociale}`; avviso("Esiste già: collegato"); return; }
+    const max = tuttiClienti.reduce((m, y) => Math.max(m, /^C\d+$/.test(y.codice || "") ? +y.codice.slice(1) : 0), 0);
+    const codice = "C" + String(max + 1).padStart(3, "0");
+    const nuovo = { codice, ragioneSociale: rs, forma: "Persona fisica", stato: "Attivo", emailGenerale: f.email.value.trim(), servizi: { dichiarazione: true }, mandati: {}, df: {} };
+    const idPF = await D.salvaCliente(nuovo);
+    pf.push({ id: idPF, ...nuovo }); tuttiClienti.push({ id: idPF, ...nuovo });
+    box.querySelector("#lista-pf").insertAdjacentHTML("beforeend", `<option value="${e(`${codice} · ${rs}`)}"></option>`);
+    box.querySelector("#f_pf").value = `${codice} · ${rs}`;
+    avviso(`Creato ${codice} · ${rs} (dichiarazione fiscale): salva la persona per collegarlo`);
   });
   box.querySelector("input,select")?.focus();
 }
@@ -378,9 +407,12 @@ function schedaMandati(p, c, ricarica, kyc) {
 }
 
 // ---------- Servizi ----------
-async function schedaServizi(p, c, ricarica) {
+async function schedaServizi(p, c, ricarica, persone = [], cliPer = {}) {
   const admin = D.isAdmin(), s = c.servizi || {};
   const prossime = await prossimeDelCliente(c).catch(() => []);
+  // Dichiarazioni fiscali private delle persone della società (collegate al loro cliente persona fisica)
+  const conDF = persone.filter(x => x.clientePF && cliPer[x.clientePF]);
+  const dfProssime = await Promise.all(conDF.map(x => prossimeDelCliente(cliPer[x.clientePF]).then(l => l.find(o => o.servizio === "dichiarazione" || /dichiarazione/i.test(o.etichetta))).catch(() => null)));
   p.innerHTML = `<form class="pannello"><fieldset ${admin ? "" : "disabled"} style="border:0;padding:0;margin:0">
     <h3 style="font-size:14px;margin-bottom:10px">Servizi svolti dallo studio</h3>
     <div class="servizi">${SERVIZI.map(([k, n]) => `<label><input type="checkbox" name="servizi.${k}" ${s[k] || (k === "revisione" && c.revisione) ? "checked" : ""}> ${e(n)}</label>`).join("")}</div>
@@ -396,7 +428,13 @@ async function schedaServizi(p, c, ricarica) {
     <div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:10px">Prossime scadenze</h3>
       ${prossime.length ? `<ul class="prossime-s">${prossime.map(o => { const g = urgenzaScadenza(o); return `<li><span class="d">${e(fmtData(o.data))}</span><span style="flex:1">${e(o.etichetta)}</span>${g ? stato(g === "preavviso" ? "info" : g, g === "scaduto" ? "Scaduta" : g === "urgente" ? "Entro 5 giorni" : "Preavviso") : ""}${o.stato !== "Da fare" ? stato("neutro", o.stato) : ""}</li>`; }).join("")}</ul>`
         : '<p class="tenue">Nessuna scadenza aperta. Spunta i servizi qui sopra per generarle.</p>'}
-      <div class="azioni"><a class="btn" href="#/scadenziario/${encodeURIComponent(c.id)}">Apri nello Scadenziario</a></div></div>`;
+      <div class="azioni"><a class="btn" href="#/scadenziario/${encodeURIComponent(c.id)}">Apri nello Scadenziario</a></div></div>
+    ${c.forma !== "Persona fisica" ? `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:10px">Dichiarazioni fiscali private</h3>
+      ${conDF.length ? `<table class="tabella"><thead><tr><th>Persona</th><th>Ruolo</th><th>Cliente persona fisica</th><th>Prossima scadenza dichiarazione</th></tr></thead><tbody>
+        ${conDF.map((x, i) => { const y = cliPer[x.clientePF], o = dfProssime[i], g = o ? urgenzaScadenza(o) : null; return `<tr><td>${e(`${x.cognome || ""} ${x.nome || ""}`.trim())}</td><td>${e(x.ruolo || "")}</td>
+          <td><a href="#/clienti/${encodeURIComponent(y.id)}/dati">${e(y.codice)} · ${e(y.ragioneSociale)}</a></td>
+          <td>${o ? `${e(fmtData(o.data))} ${o.stato !== "Da fare" ? stato("neutro", o.stato) : ""}${g ? stato(g === "preavviso" ? "info" : g, g === "scaduto" ? "Scaduta" : g === "urgente" ? "Entro 5 giorni" : "Preavviso") : ""}` : '<span class="tenue">–</span>'}</td></tr>`; }).join("")}</tbody></table>`
+        : '<p class="tenue">Nessuna. Per collegarne una: scheda Persone → Modifica → "Dichiarazione fiscale privata".</p>'}</div>` : ""}`;
   if (!admin) return;
   p.querySelector("form").addEventListener("submit", async ev => {
     ev.preventDefault();

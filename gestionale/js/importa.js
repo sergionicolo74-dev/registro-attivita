@@ -86,7 +86,10 @@ async function anteprimaExcel(file, box) {
     // 2) persone
     for (const p of persone) {
       const clienteId = ids[p.codice] || perCodice[p.codice]?.id;
-      const pid = await D.salvaPersona({ ...p.dati, clienteId });
+      const clientePF = p.codicePF ? (ids[p.codicePF] || perCodice[p.codicePF]?.id || null) : null;
+      // stessa persona già presente (es. importazione ripetuta): si aggiorna invece di duplicarla
+      const gia = (await D.listaPersone(clienteId).catch(() => [])).find(y => normNome(`${y.cognome} ${y.nome}`) === normNome(`${p.dati.cognome} ${p.dati.nome}`));
+      const pid = await D.salvaPersona({ ...(gia ? { id: gia.id } : {}), ...p.dati, clienteId, ...(clientePF ? { clientePF } : {}) });
       if (Object.values(p.kyc).some(Boolean)) await D.salvaKycPersona(pid, { ...p.kyc, clienteId });
     }
     barra.firstElementChild.style.width = "100%";

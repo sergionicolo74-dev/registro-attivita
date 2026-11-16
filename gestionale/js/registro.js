@@ -9,12 +9,19 @@ const TIPI = [["lavoro", "Lavoro svolto"], ["nota", "Nota / decisione"], ["dafar
 let giorno = oggiISO();
 let soloMie = true;
 let modifica = null; // registrazione in modifica
+// Elenco completo
+let ePeriodo = "anno", eCli = "", eMand = "", eFatt = "", eCerca = "", eQuante = 50;
+const PERIODI_E = [["mese", "Questo mese"], ["tre", "Ultimi 3 mesi"], ["anno", "Quest'anno"], ["tutto", "Dall'inizio"]];
+const chiusa = r => !!r.fatturataIl;
 
 export async function vistaRegistro(el) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
   const lun = lunedi(giorno), dom = aggiungiGiorni(lun, 6);
-  const [clienti, reg, profilo, presOggi, pratiche] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
-    D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => []), D.listaPratiche().catch(() => [])]);
+  const oggiE = oggiISO();
+  const daE = ePeriodo === "mese" ? oggiE.slice(0, 8) + "01" : ePeriodo === "tre" ? aggiungiGiorni(oggiE, -92) : ePeriodo === "anno" ? oggiE.slice(0, 4) + "-01-01" : "2000-01-01";
+  const [clienti, reg, profilo, presOggi, pratiche, tutte] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
+    D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => []), D.listaPratiche().catch(() => []),
+    D.listaRegistrazioniPeriodo(daE, "2999-12-31").catch(() => [])]);
   const nomeCli = Object.fromEntries(clienti.map(c => [c.id, `${c.codice} · ${c.ragioneSociale}`]));
   const settimana = reg.filter(r => !admin || !soloMie || r.autoreUid === u.uid);
   const delGiorno = settimana.filter(r => r.data === giorno).sort((a, b) => String(b.creato || b.aggiornato || "").localeCompare(String(a.creato || a.aggiornato || "")));
@@ -29,6 +36,46 @@ export async function vistaRegistro(el) {
   const m = modifica || {};
   const tipo = m.tipo || "lavoro";
   const clientiOrd = [...clienti].sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
+
+  const pratPer = Object.fromEntries(pratiche.map(p => [p.id, p]));
+  const puo = r => admin || r.autoreUid === u.uid;
+  function azioni(r) {
+    if (chiusa(r)) return `<span class="lucchetto" title="Ore già fatturate: non si possono modificare">🔒 Fatturata ${e(fmtData(r.fatturataIl))}</span>`;
+    return puo(r) ? `<button class="btn piccolo" data-mod="${e(r.id)}">Modifica</button> <button class="btn piccolo" data-del="${e(r.id)}" aria-label="Elimina">✕</button>` : "";
+  }
+  const tipoF = r => r.tipo === "nota" ? "nota" : r.praticaId ? "pratica" : r.fatturabile === false ? "non" : r.extra ? "extra" : "mandato";
+  const ETI_F = { mandato: ["ok", "Nel mandato"], extra: ["urgente", "Extra"], non: ["neutro", "Non fatturabile"], pratica: ["info", "Pratica"], nota: ["info", "Nota"] };
+  const q = normNome(eCerca);
+  const elenco = tutte.filter(r => (!admin || !soloMie || r.autoreUid === u.uid)
+    && (!eCli || r.clienteId === eCli) && (!eMand || (eMand === "pratica" ? !!r.praticaId : (r.mandato || "contabilita") === eMand && !r.praticaId))
+    && (!eFatt || (eFatt === "aperte" ? !chiusa(r) : eFatt === "chiuse" ? chiusa(r) : tipoF(r) === eFatt))
+    && (!q || normNome(`${r.descrizione} ${nomeCli[r.clienteId] || ""} ${r.autoreNome || ""}`).includes(q)))
+    .sort((a, b) => b.data.localeCompare(a.data) || String(b.creato || "").localeCompare(String(a.creato || "")));
+  function elencoCompleto() {
+    const lav = elenco.filter(r => r.tipo !== "nota"), tot = lav.reduce((s, r) => s + (r.minuti || 0), 0);
+    const somma = t => lav.filter(r => tipoF(r) === t).reduce((s, r) => s + (r.minuti || 0), 0);
+    return `<section class="pannello" id="elenco-reg" style="margin-top:14px">
+    <div class="testa-d"><h2 style="font-size:16px">Tutte le registrazioni${admin && !soloMie ? " dello studio" : ""}</h2>
+      <span class="tenue" style="font-size:13px">${elenco.length} registrazioni · ${fmtDurata(tot)} · nel mandato ${fmtDurata(somma("mandato"))} · extra ${fmtDurata(somma("extra"))} · pratiche ${fmtDurata(somma("pratica"))} · non fatt. ${fmtDurata(somma("non"))}</span></div>
+    <div class="barra" style="margin:8px 0 12px">
+      <select id="e-per" aria-label="Periodo">${PERIODI_E.map(([k, n]) => `<option value="${k}"${k === ePeriodo ? " selected" : ""}>${n}</option>`).join("")}</select>
+      <select id="e-cli" aria-label="Cliente"><option value="">Tutti i clienti</option>${clientiOrd.map(c => `<option value="${e(c.id)}"${c.id === eCli ? " selected" : ""}>${e(nomeCli[c.id])}</option>`).join("")}</select>
+      <select id="e-mand" aria-label="Mandato"><option value="">Tutti i mandati</option>${TIPI_MANDATO.map(([k, n]) => `<option value="${k}"${k === eMand ? " selected" : ""}>${e(n)}</option>`).join("")}<option value="pratica"${eMand === "pratica" ? " selected" : ""}>Pratiche</option></select>
+      <select id="e-fatt" aria-label="Fatturazione"><option value="">Tutte</option>${[["aperte", "Non ancora fatturate"], ["chiuse", "Già fatturate (chiuse)"], ["mandato", "Nel mandato"], ["extra", "Extra"], ["pratica", "Pratiche"], ["non", "Non fatturabili"], ["nota", "Note"]].map(([k, n]) => `<option value="${k}"${k === eFatt ? " selected" : ""}>${n}</option>`).join("")}</select>
+      <input type="search" id="e-cerca" placeholder="Cerca nel testo" value="${e(eCerca)}" aria-label="Cerca">
+    </div>
+    ${elenco.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Mandato / pratica</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Fatturazione</th><th class="num">Durata</th><th></th></tr></thead><tbody>
+      ${elenco.slice(0, eQuante).map(r => `<tr${chiusa(r) ? ' class="chiusa"' : ""}><td style="white-space:nowrap"><a href="#" data-vai="${e(r.data)}">${e(fmtData(r.data))}</a></td>
+        <td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
+        <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}</td>
+        <td class="desc-r">${e(r.descrizione).replace(/\n/g, "<br>")}</td>${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
+        <td>${stato(...ETI_F[tipoF(r)])}</td><td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}</td>
+        <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}</tbody></table></div>
+      ${elenco.length > eQuante ? `<div class="azioni"><button class="btn" id="e-altre">Mostra altre ${Math.min(50, elenco.length - eQuante)} (di ${elenco.length - eQuante})</button></div>` : ""}`
+      : '<div class="vuoto">Nessuna registrazione con questi filtri.</div>'}
+    <p class="tenue" style="font-size:13px;margin-top:8px">Le ore già fatturate (🔒) sono chiuse e non si possono modificare né eliminare. Per correggerle serve l'amministratore.</p>
+  </section>`;
+  }
 
   el.innerHTML = `
   <div class="testata">
@@ -78,7 +125,7 @@ export async function vistaRegistro(el) {
         <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
         ${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : r.extra ? '<div class="tenue">extra</div>' : ""}</td>
-        <td style="white-space:nowrap">${admin || r.autoreUid === u.uid ? `<button class="btn piccolo" data-mod="${e(r.id)}">Modifica</button> <button class="btn piccolo" data-del="${e(r.id)}" aria-label="Elimina">✕</button>` : ""}</td></tr>`).join("")}
+        <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}
     </tbody></table>` : `<div class="vuoto">Nessuna registrazione in questo giorno.</div>`}
   </section>
 
@@ -87,7 +134,9 @@ export async function vistaRegistro(el) {
       const d = aggiungiGiorni(lun, i), rr = settimana.filter(r => r.data === d && r.tipo !== "nota");
       const t = rr.reduce((s, r) => s + (r.minuti || 0), 0), f = rr.filter(r => r.fatturabile).reduce((s, r) => s + (r.minuti || 0), 0);
       return `<button type="button" class="giorno${d === giorno ? " attivo" : ""}" data-g="${d}"><span>${g} ${e(fmtData(d).slice(0, 5))}</span><strong>${t ? fmtDurata(t) : "–"}</strong><span class="tenue">${f ? fmtDurata(f) + " fatt." : ""}</span></button>`;
-    }).join("")}</div></section>`;
+    }).join("")}</div></section>
+
+  ${elencoCompleto()}`;
 
   const form = el.querySelector("#nuova");
   const aggiornaTipo = (t) => {
@@ -137,9 +186,21 @@ export async function vistaRegistro(el) {
   el.querySelectorAll("[data-g]").forEach(b => b.addEventListener("click", () => vai(b.dataset.g)));
   el.querySelector("#annulla-mod")?.addEventListener("click", () => { modifica = null; ricarica(); });
   el.querySelectorAll("[data-mod]").forEach(b => b.addEventListener("click", () => {
-    modifica = delGiorno.find(r => r.id === b.dataset.mod); ricarica(); window.scrollTo(0, 0);
+    modifica = delGiorno.find(r => r.id === b.dataset.mod) || tutte.find(r => r.id === b.dataset.mod);
+    if (modifica && chiusa(modifica)) { modifica = null; avviso("Ore già fatturate: non si possono modificare"); return; }
+    ricarica().then(() => el.querySelector("#nuova")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }));
+  const filtroE = (fn) => ev => { fn(ev.target.value); eQuante = 50; ricarica().then(() => el.querySelector("#elenco-reg")?.scrollIntoView({ block: "start" })); };
+  el.querySelector("#e-per").addEventListener("change", filtroE(v => { ePeriodo = v; }));
+  el.querySelector("#e-cli").addEventListener("change", filtroE(v => { eCli = v; }));
+  el.querySelector("#e-mand").addEventListener("change", filtroE(v => { eMand = v; }));
+  el.querySelector("#e-fatt").addEventListener("change", filtroE(v => { eFatt = v; }));
+  el.querySelector("#e-cerca").addEventListener("change", filtroE(v => { eCerca = v; }));
+  el.querySelector("#e-altre")?.addEventListener("click", () => { eQuante += 50; const y = window.scrollY; ricarica().then(() => window.scrollTo(0, y)); });
+  el.querySelectorAll("[data-vai]").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); vai(a.dataset.vai); window.scrollTo(0, 0); }));
   el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    const r = [...delGiorno, ...tutte].find(x => x.id === b.dataset.del);
+    if (r && chiusa(r)) { avviso("Ore già fatturate: non si possono eliminare"); return; }
     if (!confirm("Eliminare questa registrazione?")) return;
     await D.eliminaRegistrazione(b.dataset.del); avviso("Registrazione eliminata"); ricarica();
   }));
@@ -148,6 +209,7 @@ export async function vistaRegistro(el) {
     ev.preventDefault();
     const bad = dataNonValida(form); if (bad) { bad.focus(); avviso("Data non valida: usa gg.mm.aaaa"); return; }
     const t = form.tipo.value;
+    if (modifica && chiusa(modifica)) { avviso("Ore già fatturate: non si possono modificare"); return; }
     const testoCli = el.querySelector("#f_cliente").value.trim();
     const cli = trovaCliente(testoCli);
     if (!cli && t !== "dafare") { el.querySelector("#f_cliente").focus(); avviso("Scegli un cliente dall'elenco"); return; }

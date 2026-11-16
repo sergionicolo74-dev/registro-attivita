@@ -44,7 +44,9 @@ export async function vistaReport(el) {
       const minuti = rr.reduce((s, r) => s + r.minuti, 0), valore = rr.reduce((s, r) => s + valR(r), 0);
       const importo = Math.round(Number(m.budget) * p.quota * 100) / 100;
       const id = `${c.id}_${k}_${p.periodo}`;
-      forfait.push({ id, c, k, p, importo, minuti, chiuso: p.a < oggi, fatt: fattPer[id], ...esitoMandato(importo, minuti, valore, minutiPrevisti(importo, mmDi[c.id].contabilita.tariffa)) });
+      // tutte le ore del periodo (anche degli altri collaboratori): si chiudono quando il periodo è fatturato
+      const idsPeriodo = lavoro.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non") && r.data >= p.da && r.data <= p.a && !r.fatturataIl).map(r => r.id);
+      forfait.push({ id, c, k, p, importo, minuti, idsPeriodo, chiuso: p.a < oggi, fatt: fattPer[id], ...esitoMandato(importo, minuti, valore, minutiPrevisti(importo, mmDi[c.id].contabilita.tariffa)) });
     }
   }
   const forfaitDaFatt = forfait.filter(x => x.chiuso && !x.fatt);
@@ -184,13 +186,15 @@ export async function vistaReport(el) {
   el.querySelector("#f-chi").addEventListener("change", ev => { fChi = ev.target.value; ricarica(); });
   corpo.querySelectorAll("[data-forf]").forEach(b => b.addEventListener("click", async () => {
     const x = forfait.find(y => y.id === b.dataset.forf);
-    await D.salvaFattura({ id: x.id, clienteId: x.c.id, mandato: x.k, periodo: x.p.periodo, importo: x.importo, minuti: x.minuti, valoreOre: x.valore, stato: "Fatturata", fatturataIl: oggi, fatturataDa: D.utenteCorrente().nome });
+    await D.salvaFattura({ id: x.id, clienteId: x.c.id, mandato: x.k, periodo: x.p.periodo, importo: x.importo, minuti: x.minuti, valoreOre: x.valore, stato: "Fatturata", fatturataIl: oggi, fatturataDa: D.utenteCorrente().nome, registrazioni: x.idsPeriodo });
+    // le ore del periodo si chiudono: nel Registro non si possono più modificare
+    if (x.idsPeriodo.length) await D.aggiornaRegistrazioni(x.idsPeriodo, { fatturataIl: oggi, fatturaRif: x.id });
     avviso(`Fatturato: ${x.c.ragioneSociale}, ${x.p.etichetta}`); ricarica();
   }));
   corpo.querySelectorAll("[data-extra]").forEach(b => b.addEventListener("click", async () => {
     const l = perCliExtra[b.dataset.extra];
     if (!confirm(`Segnare come fatturate ${l.length} registrazioni (CHF ${chf(l.reduce((s, r) => s + importoExtra(r), 0))})?`)) return;
-    await D.aggiornaRegistrazioni(l.map(r => r.id), { fatturataIl: oggi, importoFatturato: null });
+    await D.aggiornaRegistrazioni(l.map(r => r.id), { fatturataIl: oggi, fatturaRif: `extra_${b.dataset.extra}_${oggi}` });
     avviso("Ore segnate come fatturate"); ricarica();
   }));
   corpo.querySelectorAll(".voce-f").forEach(t => t.addEventListener("change", async () => {

@@ -10,6 +10,7 @@ service cloud.firestore {
     function attivo() { return loggato() && exists(/databases/$(database)/documents/utenti/$(request.auth.uid)) && profilo().attivo != false; }
     function admin() { return attivo() && profilo().ruolo == "admin"; }
     function mio(campo) { return resource.data[campo] == request.auth.uid; }
+    function aperta() { return !("fatturataIl" in resource.data) || resource.data.fatturataIl == null || resource.data.fatturataIl == ""; }
     function fatt() { return attivo() && (profilo().ruolo == "admin" || profilo().fatturazione == true); }
 
     // Profili utente: gli utenti attivi vedono l'elenco dei colleghi (per assegnare i compiti); solo l'amministratore modifica

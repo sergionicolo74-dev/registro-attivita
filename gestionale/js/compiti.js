@@ -3,8 +3,10 @@
 // Tre punti di vista: assegnati a me, delegati da me (per seguire chi lavora), tutto lo studio (amministratori).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
+import { parseData } from "./regole.js";
 import { fmtData, giorniA, giorniDa, normNome, urgenzaCompito, aperto, STATI_COMPITO, CATEGORIE_COMPITO, GIORNI_FERMO,
-  PRIORITA, rangoPriorita, colonnaCompito } from "./regole.js";
+  PRIORITA, rangoPriorita, colonnaCompito, statoRichieste, CONTROPARTI, GIORNI_RICHIESTA, tipoPraticaDa, oggiISO, aggiungiGiorni, praticaAperta } from "./regole.js";
+import { nuovaPraticaDa, apriPratica } from "./pratiche.js";
 
 let vista = "colonne";     // colonne | elenco
 let ambito = "miei";       // miei | delegati | studio
@@ -17,7 +19,8 @@ const COLONNE = [["assegnato", "Assegnati", "Da prendere in carico"], ["carico",
 
 export async function vistaCompiti(el, clienteFiltro) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
-  const [compiti, clienti, utenti] = await Promise.all([D.listaCompiti(clienteFiltro || null), D.listaClienti(), D.listaUtenti().catch(() => [])]);
+  const [compiti, clienti, utenti, pratiche] = await Promise.all([D.listaCompiti(clienteFiltro || null), D.listaClienti(), D.listaUtenti().catch(() => []), D.listaPratiche().catch(() => [])]);
+  const praticaPer = Object.fromEntries(pratiche.map(p => [p.id, p]));
   const nomeCli = Object.fromEntries(clienti.map(c => [c.id, `${c.codice} · ${c.ragioneSociale}`]));
   const persone = utenti.filter(x => x.attivo !== false && x.ruolo).map(x => ({ uid: x.id, nome: x.nome || x.id }));
   if (!persone.some(p => p.uid === u.uid)) persone.push({ uid: u.uid, nome: u.nome });
@@ -39,6 +42,7 @@ export async function vistaCompiti(el, clienteFiltro) {
   const aiuti = base.filter(k => aperto(k) && k.aiuto && (delegato(k) || (admin && !mio(k)))).length;
   const allarmi = { scaduto: 0, urgente: 0 };
   aperti.forEach(k => { const g = urgenzaCompito(k); if (g in allarmi) allarmi[g]++; });
+  const daSoll = aperti.reduce((n, k) => n + statoRichieste(k).daSollecitare, 0);
 
   el.innerHTML = `
   <div class="testata">
@@ -59,6 +63,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     <div class="segnali" style="margin-left:auto">
       ${nuovi ? stato("info", `${nuovi} ${nuovi === 1 ? "nuovo assegnato" : "nuovi assegnati"} a te`) : ""}
       ${aiuti ? `<span class="stato aiuto">🙋 ${aiuti} ${aiuti === 1 ? "richiesta" : "richieste"} di aiuto</span>` : ""}
+      ${daSoll ? stato("scaduto", `📨 ${daSoll} ${daSoll === 1 ? "richiesta" : "richieste"} da sollecitare`) : ""}
       ${allarmi.scaduto ? stato("scaduto", `${allarmi.scaduto} ${allarmi.scaduto === 1 ? "scaduto" : "scaduti"}`) : ""}
       ${allarmi.urgente ? stato("urgente", `${allarmi.urgente} entro 5 giorni`) : ""}
     </div>
@@ -74,6 +79,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     if (c === "assegnato") b.push(`<button type="button" class="btn piccolo primario" data-az="carico">▶ Prendo in carico</button>`);
     if (c === "carico") b.push(`<button type="button" class="btn piccolo" data-az="attesa">⏸ In attesa</button>`);
     if (c === "attesa") b.push(`<button type="button" class="btn piccolo" data-az="carico">▶ Riprendo</button>`);
+    if (c !== "assegnato") b.push(`<button type="button" class="btn piccolo" data-az="richiesta" title="Documenti o informazioni chiesti a cliente, banca, uffici">📨 Richiesta</button>`);
     if (c !== "assegnato") b.push(`<button type="button" class="btn piccolo" data-az="fatto">✓ Fatto</button>`);
     return `<div class="azioni-k">${b.join("")}</div>`;
   };
@@ -86,13 +92,21 @@ export async function vistaCompiti(el, clienteFiltro) {
       <div class="testa"><strong>${e(k.titolo)}</strong><span class="etich">${pr !== "normale" ? `<span class="prio ${pr}">${pr === "urgente" ? "Urgente" : "Importante"}</span>` : ""}${nuovo ? stato("info", "Nuovo") : ""}</span></div>
       <div class="tenue">${[k.clienteId ? e(nomeCli[k.clienteId] || "") : "Interno studio", chi].filter(Boolean).join(" · ")}</div>
       ${k.aiuto ? `<div class="aiuto-k">🙋 Chiede aiuto${k.aiutoTesto ? `: ${e(k.aiutoTesto)}` : ""}</div>` : ""}
-      ${colonnaCompito(k) === "attesa" && (k.appuntiFatto || k.motivoAttesa) ? `<div class="motivo">${k.appuntiFatto ? `<div><b>Fatto:</b> ${e(k.appuntiFatto)}</div>` : ""}${k.motivoAttesa ? `<div><b>${k.stato === "In attesa riscontro" ? "Attende" : "Manca"}:</b> ${e(k.motivoAttesa)}</div>` : ""}</div>` : ""}
+      ${richiesteCard(k)}
+      ${k.praticaId ? (() => { const pr = praticaPer[k.praticaId]; return `<div class="prat-k">📁 Pratica: <a href="#" data-prat="${e(k.praticaId)}">${e(pr?.titolo || k.praticaTitolo || "apri")}</a>${pr ? ` · ${e(pr.fase)}` : ""}${pr && !praticaAperta(pr) && aperto(k) ? ` · <strong>conclusa: puoi chiudere il compito</strong>` : ""}</div>`; })() : ""}
+      ${colonnaCompito(k) === "attesa" && !k.attesaPerRichieste && (k.appuntiFatto || k.motivoAttesa) ? `<div class="motivo">${k.appuntiFatto ? `<div><b>Fatto:</b> ${e(k.appuntiFatto)}</div>` : ""}${k.motivoAttesa ? `<div><b>${k.stato === "In attesa riscontro" ? "Attende" : "Manca"}:</b> ${e(k.motivoAttesa)}</div>` : ""}</div>` : ""}
       <div class="piede">${k.scadenza ? `<span${g === "scaduto" ? ' class="rosso"' : ""}>Entro ${e(fmtData(k.scadenza))}${aperto(k) && gs != null ? ` (${gs < 0 ? `${-gs} giorni fa` : gs === 0 ? "oggi" : `tra ${gs} giorni`})` : ""}</span>` : "<span>Senza scadenza</span>"}
         ${g === "fermo" ? stato("neutro", ETICHETTA_URG.fermo) : ""}${vista === "elenco" ? stato(k.stato === "Fatto" ? "ok" : "neutro", k.stato || "Da fare") : ""}${k.visibilita === "privato" ? '<span class="tenue">· privato</span>' : ""}</div>
       ${azioniRapide(k)}
     </article>`;
   };
 
+  function richiesteCard(k) {
+    const st = statoRichieste(k); if (!st.tot) return "";
+    const aperte = (k.richieste || []).filter(x => !x.ricevutaIl);
+    return `<div class="rich-k${st.daSollecitare ? " soll" : ""}">📨 ${st.ricevute} di ${st.tot} ricevute${st.daSollecitare ? ` · <strong>${st.daSollecitare} da sollecitare</strong>` : ""}
+      ${aperte.length ? `<ul>${aperte.map(x => `<li${x.sollecitareIl && x.sollecitareIl <= oggiISO() ? ' class="rosso"' : ""}>${e(x.a)}: ${e(x.cosa)}${x.sollecitareIl ? ` <span class="tenue">· sollecito ${e(fmtData(x.sollecitareIl))}</span>` : ""}</li>`).join("")}</ul>` : ""}</div>`;
+  }
   const vuotoTesto = ambito === "delegati" ? "Non hai delegato compiti ancora aperti. Per delegare: Nuovo compito → Assegna a." : "Nessun compito aperto.";
   if (vista === "colonne") {
     corpo.innerHTML = `<div class="colonne-k">${COLONNE.map(([c, n, sotto]) => {
@@ -121,6 +135,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     assegnatoUid: ambito === "delegati" ? "" : u.uid, assegnatoNome: ambito === "delegati" ? "" : u.nome }, clienti, nomeCli, persone, ricarica));
   const trova = id => compiti.find(x => x.id === id);
   corpo.addEventListener("click", ev => {
+    const lp = ev.target.closest("[data-prat]"); if (lp) { ev.preventDefault(); ev.stopPropagation(); apriPratica(lp.dataset.prat); return; }
     const a = ev.target.closest(".compito"); if (!a) return;
     const k = trova(a.dataset.id); if (!k) return;
     const az = ev.target.closest("[data-az]");
@@ -128,6 +143,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     ev.stopPropagation();
     if (az.dataset.az === "attesa") return finestraAttesa(k, ricarica);
     if (az.dataset.az === "aiuto") return cassettoCompito(k, clienti, nomeCli, persone, ricarica);
+    if (az.dataset.az === "richiesta") return cassettoCompito(k, clienti, nomeCli, persone, ricarica, { richiesta: true });
     cambiaStato(k, az.dataset.az === "fatto" ? "Fatto" : "Preso in carico", ricarica);
   });
   corpo.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.classList.contains("compito")) { const k = trova(ev.target.dataset.id); if (k) cassettoCompito(k, clienti, nomeCli, persone, ricarica); } });
@@ -146,7 +162,7 @@ async function salvaSicuro(dati) {
 async function cambiaStato(k, nuovo, ricarica) {
   const u = D.utenteCorrente(), ora = new Date().toISOString();
   const cron = [...(k.cronologia || []), { quando: ora, nome: u.nome, testo: `${k.stato || "Da fare"} → ${nuovo}` }];
-  const ok = await salvaSicuro({ id: k.id, autoreUid: k.autoreUid, stato: nuovo, cronologia: cron,
+  const ok = await salvaSicuro({ id: k.id, autoreUid: k.autoreUid, stato: nuovo, cronologia: cron, attesaPerRichieste: false,
     ...(nuovo === "Fatto" ? { completatoIl: ora, aiuto: false } : { completatoIl: null }),
     ...(nuovo === "Preso in carico" ? { presoIl: k.presoIl || ora } : {}) });
   if (ok) { avviso(nuovo === "Fatto" ? "Fatto: il compito esce dalle colonne" : "Preso in carico"); ricarica(); }
@@ -181,7 +197,17 @@ function finestraAttesa(k, ricarica) {
   d.showModal(); f.fatto.focus();
 }
 
-function cassettoCompito(k, clienti, nomeCli, persone, ricarica) {
+/** Calcola stato e motivo d'attesa in base alle richieste aperte. */
+function conRichieste(k, richieste) {
+  const aperte = richieste.filter(x => !x.ricevutaIl);
+  const st = k.stato || "Da fare";
+  if (aperte.length && (st === "Da fare" || st === "Preso in carico" || (st === "In attesa" && k.attesaPerRichieste)))
+    return { richieste, stato: "In attesa", attesaPerRichieste: true, motivoAttesa: aperte.map(x => `${x.a}: ${x.cosa}`).join("; ") };
+  if (!aperte.length && st === "In attesa" && k.attesaPerRichieste) return { richieste, stato: "Preso in carico", attesaPerRichieste: false, motivoAttesa: "" };
+  return { richieste };
+}
+
+function cassettoCompito(k, clienti, nomeCli, persone, ricarica, opz = {}) {
   const u = D.utenteCorrente(), admin = D.isAdmin();
   const puoEliminare = admin || k.autoreUid === u.uid || !k.id;
   const velo = document.createElement("div"); velo.className = "velo";
@@ -204,12 +230,28 @@ function cassettoCompito(k, clienti, nomeCli, persone, ricarica) {
       ${k.id ? campo("stato", "Stato", k.stato || "Da fare", "select", STATI_COMPITO) : ""}
       <div><label for="f_tipoK">Categoria</label><input id="f_tipoK" name="tipo" list="lista-tipi-k" value="${e(k.tipo || "")}" placeholder="Facoltativa">
         <datalist id="lista-tipi-k">${CATEGORIE_COMPITO.map(t => `<option value="${e(t)}"></option>`).join("")}</datalist></div>
-      <div class="largo" id="box-motivo"${k.stato === "In attesa" ? "" : " hidden"}>
+      <div class="largo" id="box-motivo"${k.stato === "In attesa" && !k.attesaPerRichieste ? "" : " hidden"}>
         ${campo("appuntiFatto", "Cosa è stato fatto", k.appuntiFatto || "", "textarea", [], true)}
         ${campo("motivoAttesa", "Cosa manca o cosa si aspetta (obbligatorio)", k.motivoAttesa, "textarea", [], true)}</div>
       ${k.id ? `<div class="largo">${campo("aiuto", "Chiede aiuto", !!k.aiuto, "checkbox")}</div>` : ""}
       ${campo("visibilita", "Visibile a", k.visibilita === "privato" ? "Solo a chi lo crea e a chi è assegnato" : "Studio", "select", ["Studio", "Solo a chi lo crea e a chi è assegnato"])}
     </div>
+    ${k.id ? `<div class="sezione" id="sez-rich"><h3>Richieste in sospeso</h3>
+      <p class="tenue" style="font-size:13px;margin-bottom:8px">Documenti o informazioni chiesti a cliente, banca, uffici. Finché una richiesta è aperta il compito sta "In attesa"; quando arriva l'ultima torna "Preso in carico".</p>
+      ${(k.richieste || []).length ? `<ul class="richieste">${(k.richieste || []).map((x, i) => `<li class="${x.ricevutaIl ? "ok" : x.sollecitareIl && x.sollecitareIl <= oggiISO() ? "soll" : ""}">
+        <div><strong>${e(x.a)}</strong>: ${e(x.cosa)}<div class="tenue" style="font-size:12px">chiesta il ${e(fmtData(x.chiestaIl))}${x.solleciti ? ` · ${x.solleciti} ${x.solleciti === 1 ? "sollecito" : "solleciti"}` : ""}${x.ricevutaIl ? ` · ricevuta il ${e(fmtData(x.ricevutaIl))}` : x.sollecitareIl ? ` · sollecitare il ${e(fmtData(x.sollecitareIl))}` : ""}</div></div>
+        ${x.ricevutaIl ? stato("ok", "Ricevuta") : `<span class="barra"><button type="button" class="btn piccolo primario" data-ric="${i}">✓ Ricevuta</button><button type="button" class="btn piccolo" data-sol="${i}">↻ Sollecitato</button></span>`}</li>`).join("")}</ul>` : ""}
+      <div class="nuova-rich">
+        <select id="r_a" aria-label="A chi">${CONTROPARTI.map(c => `<option>${e(c)}</option>`).join("")}</select>
+        <input id="r_cosa" placeholder="Cosa hai chiesto (es. estratti conto 2025)" aria-label="Cosa hai chiesto">
+        <label class="tenue" style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap">sollecito il <input id="r_soll" value="${fmtData(aggiungiGiorni(oggiISO(), GIORNI_RICHIESTA))}" placeholder="gg.mm.aaaa" style="width:110px"></label>
+        <button type="button" class="btn" id="r_agg">+ Aggiungi</button></div>
+    </div>
+    <div class="sezione"><h3>Pratica collegata</h3>
+      ${k.praticaId ? `<p>📁 <a href="#" id="vai-prat">${e(k.praticaTitolo || "Apri la pratica")}</a> <span class="tenue">· il rapporto con l'ente e la fatturazione si seguono nella pratica</span></p>`
+        : `<p class="tenue" style="font-size:13px;margin-bottom:8px">Se il lavoro è una procedura con un ente (reclamo, assegni, rateizzazione, stipendi…) o va fatturato a parte, crea la pratica: resta collegata a questo compito.</p>
+        <button type="button" class="btn" id="crea-prat"${k.clienteId ? "" : " disabled title=\"Indica prima il cliente\""}>📁 Crea pratica collegata</button>`}
+    </div>` : ""}
     <div class="sezione"><h3>Aggiornamenti</h3>
       ${campo("nuovaNota", "Aggiungi un aggiornamento (es. telefonato, mancano documenti, risposta alla richiesta di aiuto…)", "", "textarea", [], true)}
       ${cron.length ? `<ul class="cronologia">${cron.map(x => `<li><span class="tenue">${e(fmtData(String(x.quando).slice(0, 10)))} · ${e(x.nome || "")}</span><div>${e(x.testo)}</div></li>`).join("")}</ul>` : '<p class="tenue" style="font-size:13px">Nessun aggiornamento.</p>'}
@@ -259,6 +301,45 @@ function cassettoCompito(k, clienti, nomeCli, persone, ricarica) {
     if (!ok) return;
     chiudi(); avviso(nuovoStato === "Fatto" ? "Compito chiuso" : !k.id && d.assegnatoUid !== u.uid ? `Delegato a ${ass?.nome || ""}: lo trovi in "Delegati da me"` : "Compito salvato"); ricarica();
   };
+  // --- richieste: si salvano subito ---
+  const riapri = (campi, testo) => async () => {
+    const ora = new Date().toISOString();
+    const nuovo = { ...k, ...campi, cronologia: [...(k.cronologia || []), { quando: ora, nome: u.nome, testo }] };
+    if (campi.stato && campi.stato !== (k.stato || "Da fare")) nuovo.cronologia.push({ quando: ora, nome: u.nome, testo: `${k.stato || "Da fare"} → ${campi.stato}` });
+    const { id, autoreUid, ...resto } = nuovo;
+    if (!(await salvaSicuro({ id, autoreUid, richieste: resto.richieste, stato: resto.stato || "Da fare", attesaPerRichieste: !!resto.attesaPerRichieste,
+      motivoAttesa: resto.motivoAttesa || "", cronologia: resto.cronologia, praticaId: resto.praticaId || null, praticaTitolo: resto.praticaTitolo || null }))) return;
+    chiudi(); ricarica(); cassettoCompito(nuovo, clienti, nomeCli, persone, ricarica, { richiesta: !!campi.richieste });
+  };
+  box.querySelector("#r_agg")?.addEventListener("click", () => {
+    const a = box.querySelector("#r_a").value, cosa = box.querySelector("#r_cosa").value.trim(), soll = parseData(box.querySelector("#r_soll").value) || null;
+    if (!cosa) { box.querySelector("#r_cosa").focus(); avviso("Scrivi cosa hai chiesto"); return; }
+    const l = [...(k.richieste || []), { a, cosa, chiestaIl: oggiISO(), sollecitareIl: soll, solleciti: 0 }];
+    riapri(conRichieste(k, l), `📨 Richiesta a ${a}: ${cosa}`)();
+  });
+  box.querySelector("#r_cosa")?.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); box.querySelector("#r_agg").click(); } });
+  box.querySelectorAll("[data-ric]").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.ric, l = (k.richieste || []).map((x, j) => j === i ? { ...x, ricevutaIl: oggiISO() } : x);
+    riapri(conRichieste(k, l), `✓ Ricevuto da ${l[i].a}: ${l[i].cosa}`)();
+  }));
+  box.querySelectorAll("[data-sol]").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.sol, l = (k.richieste || []).map((x, j) => j === i ? { ...x, solleciti: (x.solleciti || 0) + 1, sollecitareIl: aggiungiGiorni(oggiISO(), GIORNI_RICHIESTA) } : x);
+    riapri({ richieste: l }, `↻ Sollecitato ${l[i].a}: ${l[i].cosa}`)();
+  }));
+  box.querySelector("#vai-prat")?.addEventListener("click", ev => { ev.preventDefault(); chiudi(); apriPratica(k.praticaId); });
+  box.querySelector("#crea-prat")?.addEventListener("click", () => {
+    const tipo = tipoPraticaDa(`${k.titolo} ${k.dettagli || ""}`);
+    chiudi();
+    nuovaPraticaDa({ clienteId: k.clienteId, tipo, titolo: k.titolo, responsabileUid: k.assegnatoUid || u.uid, responsabileNome: k.assegnatoNome || u.nome,
+      compitoId: k.id, compitoTitolo: k.titolo }, async (idP, info) => {
+      if (!idP) return;
+      await salvaSicuro({ id: k.id, autoreUid: k.autoreUid, praticaId: idP, praticaTitolo: info?.titolo || k.titolo,
+        cronologia: [...(k.cronologia || []), { quando: new Date().toISOString(), nome: u.nome, testo: `📁 Creata la pratica collegata: ${info?.titolo || k.titolo}` }] });
+      avviso("Pratica creata e collegata al compito"); ricarica();
+    });
+  });
+  if (opz.richiesta) { box.querySelector("#sez-rich")?.scrollIntoView({ block: "center" }); box.querySelector("#r_cosa")?.focus(); }
+
   form.addEventListener("submit", ev => { ev.preventDefault(); salva(false); });
   box.querySelector("#fatto-k")?.addEventListener("click", () => salva(true));
   box.querySelector("#elimina-k")?.addEventListener("click", async () => {
@@ -266,5 +347,5 @@ function cassettoCompito(k, clienti, nomeCli, persone, ricarica) {
     try { await D.eliminaCompito(k.id); } catch (err) { avviso("Non eliminato: " + (err?.message || err)); return; }
     chiudi(); avviso("Compito eliminato"); ricarica();
   });
-  form.titolo.focus();
+  if (!opz.richiesta) form.titolo.focus();
 }

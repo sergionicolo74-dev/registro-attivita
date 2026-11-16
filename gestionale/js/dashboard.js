@@ -5,7 +5,7 @@
 import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
-  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
+  riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, statoRichieste, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
   urgenzaPratica, tipoFatturazione, aForfait, importoPratica, valoreOra, clienteSpeciale } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
@@ -306,6 +306,7 @@ async function caricaSemafori() {
     entro5: sca.filter(o => urgenzaScadenza(o) === "urgente").length,
     compitiScaduti: compiti.filter(k => aperto(k) && urgenzaCompito(k) === "scaduto").length,
     compitiFermi: compiti.filter(k => aperto(k) && urgenzaCompito(k) === "fermo").length,
+    richiesteSoll: compiti.filter(aperto).reduce((n, k) => n + statoRichieste(k).daSollecitare, 0),
     mandati: clienti.filter(c => !clienteSpeciale(c) && (!c.stato || c.stato === "Attivo") && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]))).length,
     richieste: vacanze.filter(v => v.stato === "Richiesta").length,
     praticheSoll: pratiche.filter(p => urgenzaPratica(p) === "sollecitare").length,
@@ -317,7 +318,7 @@ function semafori(s) {
   const voce = (n, tipo, testo, href) => `<a class="sem" href="${href}">${n ? stato(tipo, String(n)) : stato("ok", "0")}<span>${testo}</span></a>`;
   return `<div class="semafori" role="group" aria-label="Situazione dello studio">
     ${voce(s.scadute, "scaduto", "Scadenze scadute", "#/scadenziario")}${voce(s.entro5, "urgente", "Scadenze entro 5 giorni", "#/scadenziario")}
-    ${voce(s.compitiScaduti, "scaduto", "Compiti scaduti", "#/compiti")}${voce(s.compitiFermi, "urgente", "Compiti fermi", "#/compiti")}
+    ${voce(s.compitiScaduti, "scaduto", "Compiti scaduti", "#/compiti")}${voce(s.compitiFermi, "urgente", "Compiti fermi", "#/compiti")}${voce(s.richiesteSoll, "scaduto", "Richieste da sollecitare", "#/compiti")}
     ${voce(s.praticheSoll, "scaduto", "Pratiche da sollecitare", "#/pratiche")}${voce(s.praticheFatt, "urgente", "Pratiche da fatturare", "#/pratiche")}
     ${voce(s.mandati, "urgente", "Clienti con mandati da aggiornare", "#/mandati")}${voce(s.richieste, "urgente", "Vacanze da approvare", "#/vacanze")}
     <a class="sem" href="#/vacanze">${s.assenti.length ? stato("info", String(s.assenti.length)) : stato("ok", "0")}<span>${s.assenti.length ? "Assenti oggi: " + s.assenti.map(e).join(", ") : "Assenti oggi"}</span></a></div>`;

@@ -6,6 +6,9 @@ import { fmtData, fmtNum, fmtDurata, giorniA, giorniDa, normNome, oggiISO, aggiu
   TIPI_PRATICA, ATTESA_TIPO, ENTE_TIPO, GIORNI_SOLLECITO, GIORNI_DOCUMENTI, praticaAperta, urgenzaPratica, importoPratica } from "./regole.js";
 
 let filtroChi = "tutti", cerca = "", filtroKpi = "";
+let daAprire = null; // pratica da aprire subito (arrivando da un compito collegato)
+/** Va alla pagina Pratiche e apre la pratica indicata. */
+export function apriPratica(id) { daAprire = id; location.hash = "#/pratiche"; }
 const TARIFFA = 150;
 const ETI = { sollecitare: "Da controllare / sollecitare", oggi: "Controllo entro 2 giorni", ritardo: "Oltre la data prevista" };
 const TIPO_STATO = { sollecitare: "scaduto", oggi: "urgente", ritardo: "urgente" };
@@ -112,6 +115,7 @@ export async function vistaPratiche(el, clienteFiltro) {
     const c = ev.target.closest(".pratica"); if (c) apri(c.dataset.id);
   });
   corpo.addEventListener("keydown", ev => { if (ev.key === "Enter") { const c = ev.target.closest(".pratica"); if (c) apri(c.dataset.id); } });
+  if (daAprire) { const id = daAprire; daAprire = null; apri(id); }
   corpo.querySelector("#esporta-pr")?.addEventListener("click", () => {
     const righe = [["Codice cliente", "Cliente", "Pratica", "Tipo", "Conclusa il", "Modo", "Ore", "Importo CHF"],
       ...daFatt.map(p => [cliPer[p.clienteId]?.codice || "", cliPer[p.clienteId]?.ragioneSociale || "", p.titolo || p.tipo, p.tipo, fmtData(p.conclusaIl), p.fatturazione?.modo || "A ore",
@@ -128,6 +132,7 @@ function cassetto(p, clienti, nomeCli, persone, minPer, importo, ricarica) {
   const box = document.createElement("aside"); box.className = "cassetto"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Pratica");
   const passi = (p.passi || []).slice().reverse(), f = p.fatturazione || {};
   box.innerHTML = `<form><h2 style="font-size:18px;margin-bottom:14px">${nuova ? "Nuova pratica" : e(p.titolo || p.tipo)}</h2>
+    ${p.compitoId ? `<p class="tenue" style="font-size:13px;margin:-8px 0 12px">Collegata al compito <a href="#/compiti">${e(p.compitoTitolo || "")}</a>: le richieste a cliente e banca si seguono lì.</p>` : ""}
     ${!nuova && aperta ? `<div class="azioni-rapide" role="group" aria-label="Passaggi">
       ${p.fase === "In preparazione" ? `<button type="button" class="btn primario" data-az="inviata">✉ Inviata all'ente</button>` : ""}
       ${p.fase !== "In preparazione" ? `<button type="button" class="btn" data-az="sollecito">↻ Sollecito fatto</button>` : ""}
@@ -196,11 +201,11 @@ function cassetto(p, clienti, nomeCli, persone, minPer, importo, ricarica) {
     }
     const fatt = { ...(p.fatturazione || {}), modo: d.fmodo, importo: d.fimporto, tariffa: d.ftariffa };
     if (fase === "Conclusa" && fatt.modo !== "Non fatturare" && fatt.stato !== "Fatturata") fatt.stato = "Da fatturare";
-    await D.salvaPratica({ ...(nuova ? { apertaIl: oggi, solleciti: 0, creatoDa: u.uid } : { id: p.id }),
+    const idP = await D.salvaPratica({ ...(nuova ? { apertaIl: oggi, solleciti: 0, creatoDa: u.uid, compitoId: p.compitoId || null, compitoTitolo: p.compitoTitolo || null } : { id: p.id }),
       clienteId: d.clienteId, tipo: d.tipo, ente: d.ente, titolo: d.titolo || d.tipo, responsabileUid: d.responsabileUid, responsabileNome: d.responsabileNome,
       attesa: d.attesa, prossimoControllo: d.prossimoControllo || (nuova ? aggiungiGiorni(oggi, 3) : null), concludereEntro: d.concludereEntro,
       fase, passi: lista, fatturazione: fatt, ...cambi });
-    chiudi(); avviso(nuova ? "Pratica aperta" : "Pratica aggiornata"); ricarica();
+    chiudi(); avviso(nuova ? "Pratica aperta" : "Pratica aggiornata"); ricarica(idP, { fase, titolo: d.titolo || d.tipo });
   };
   const att = () => Number(form.attesa.value) || 21;
   const AZ = {
@@ -224,4 +229,17 @@ function cassetto(p, clienti, nomeCli, persone, minPer, importo, ricarica) {
 export async function praticheAperteCliente(clienteId) {
   if (!clienteId) return [];
   return (await D.listaPratiche(clienteId).catch(() => [])).filter(praticaAperta);
+}
+
+/** Apre il modulo "Nuova pratica" già compilato (es. da un compito). dopo(id, {fase, titolo}) viene chiamata quando è salvata. */
+export async function nuovaPraticaDa(pref, dopo) {
+  const u = D.utenteCorrente();
+  const [clienti, utenti] = await Promise.all([D.listaClienti(), D.listaUtenti().catch(() => [])]);
+  const cliPer = Object.fromEntries(clienti.map(c => [c.id, c]));
+  const nomeCli = id => cliPer[id] ? `${cliPer[id].codice} · ${cliPer[id].ragioneSociale}` : "–";
+  const persone = utenti.filter(x => x.attivo !== false && x.ruolo).map(x => ({ uid: x.id, nome: x.nome || x.id }));
+  if (!persone.some(p => p.uid === u.uid)) persone.push({ uid: u.uid, nome: u.nome });
+  const tipo = pref.tipo || "";
+  const p = { fase: "In preparazione", fatturazione: { modo: "Forfait" }, ente: ENTE_TIPO[tipo] || "", attesa: ATTESA_TIPO[tipo], responsabileUid: u.uid, responsabileNome: u.nome, ...pref };
+  cassetto(p, clienti, nomeCli, persone, {}, () => 0, dopo);
 }

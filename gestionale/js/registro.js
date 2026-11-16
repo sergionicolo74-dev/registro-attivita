@@ -284,11 +284,12 @@ export async function vistaRegistro(el) {
     mandatoPrinc = att.includes("contabilita") ? "contabilita" : att[0] || null;
     // Solo tre scelte: compreso nel mandato, consulenza extra, ore interne non fatturabili.
     // (una vecchia registrazione su una pratica, in modifica, resta visibile)
-    const prat = scelto && scelto.startsWith("pratica:") ? pratiche.filter(p => "pratica:" + p.id === scelto) : [];
+    // pratiche aperte del cliente: ore separate, da fatturare a parte con la pratica
+    const prat = pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto));
     const voci = cli.interno ? [["non", "Non fatturabile", "ore interne dello studio", "c-non"]] : [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
       ["mandato", mandatoPrinc ? NOME_MANDATO[mandatoPrinc] : "Contabilità", "nel mandato", "c-mand"],
       ["non", "Non fatturabile", "ore interne", "c-non"],
-      ...prat.map(p => ["pratica:" + p.id, p.titolo || p.tipo, "pratica", "c-prat"])];
+      ...prat.map(p => ["pratica:" + p.id, "📁 " + (p.titolo || p.tipo), `pratica · ${p.fatturazione?.modo === "A ore" ? "a ore" : p.fatturazione?.modo === "Non fatturare" ? "non fatturata" : "forfait"}`, "c-prat"])];
     box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");
     box.querySelectorAll("[data-sc]").forEach(x => x.addEventListener("click", () => scegli(x.dataset.sc)));
     // proposta: la scelta della registrazione in modifica, altrimenti l'ultima usata per questo cliente

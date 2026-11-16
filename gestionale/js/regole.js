@@ -498,7 +498,7 @@ export const TIPI_PRATICA = [
   ["Affiliazione AVS", "Cassa AVS", 30], ["Rateizzazione imposte", "Ufficio esazione e condoni", 20],
   ["Richiesta di proroga", "Ufficio di tassazione", 20], ["Reclamo / ricorso", "Ufficio di tassazione", 60],
   ["Permesso di lavoro / dimora", "Ufficio della migrazione", 45], ["Iscrizione / modifica a Registro di commercio", "Registro di commercio", 15],
-  ["Rimborso imposta preventiva", "AFC", 45], ["Certificato / estratto", "", 15], ["Altro", "", 21]
+  ["Rimborso imposta preventiva", "AFC", 45], ["Stipendi / salari", "", 30], ["Certificato / estratto", "", 15], ["Altro", "", 21]
 ];
 export const ATTESA_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, , g]) => [t, g]));
 export const ENTE_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, en]) => [t, en]));
@@ -619,4 +619,21 @@ export function totaliSpese(l) {
   l.forEach(x => { const v = Number(x.importo) || 0; t.tot += v; t[fuoriIva(x) ? "fuoriIva" : "iva"] += v; });
   for (const k in t) t[k] = Math.round(t[k] * 100) / 100;
   return t;
+}
+
+// ---------- richieste in sospeso di un compito (documenti o informazioni chiesti a terzi) ----------
+export const GIORNI_RICHIESTA = 7;
+export const CONTROPARTI = ["Cliente", "Banca", "Ufficio di tassazione", "Cassa AVS", "Assicurazione", "Altro"];
+/** { tot, aperte, ricevute, daSollecitare } — da sollecitare = aperta con data di sollecito oggi o passata. */
+export function statoRichieste(k, oggi = oggiISO()) {
+  const l = k.richieste || [], aperte = l.filter(r => !r.ricevutaIl);
+  return { tot: l.length, aperte: aperte.length, ricevute: l.length - aperte.length, daSollecitare: aperte.filter(r => r.sollecitareIl && r.sollecitareIl <= oggi).length };
+}
+/** Tipo di pratica suggerito dal testo del compito. */
+export function tipoPraticaDa(testo) {
+  const t = normNome(testo || "");
+  const regole = [["reclam", "Reclamo / ricorso"], ["ricors", "Reclamo / ricorso"], ["assegn", "Assegni familiari"], ["rateizz", "Rateizzazione imposte"],
+    ["proroga", "Richiesta di proroga"], ["permess", "Permesso di lavoro / dimora"], ["registro di commercio", "Iscrizione / modifica a Registro di commercio"],
+    ["imposta preventiva", "Rimborso imposta preventiva"], ["stipend", "Stipendi / salari"], ["salari", "Stipendi / salari"], ["estratto", "Estratto conto individuale AVS"], ["affiliaz", "Affiliazione AVS"]];
+  return regole.find(([k]) => t.includes(k))?.[1] || "Altro";
 }

@@ -471,7 +471,7 @@ export function statoCopertura(reg, pres) {
 
 // ---------- Colori dei collaboratori ----------
 // Otto colori in ordine fisso (verificati per il daltonismo); il colore segue la persona, non la posizione in elenco.
-export const COLORI_PERSONA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+export const COLORI_PERSONA = ["#3F78B5", "#C4683A", "#36A07A", "#B88A20", "#C26F8E", "#5E8A3A", "#6F62B8", "#C25550"];
 /** id utente -> colore. Usa il colore scelto (utente.colore = 1..8) o l'ordine di creazione. */
 export function coloriUtenti(utenti) {
   const out = {}, usati = new Set();

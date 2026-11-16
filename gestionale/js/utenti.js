@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm } from "./ui.js";
 import { fmtData, coloriUtenti, COLORI_PERSONA } from "./regole.js";
 
-const NOMI_COLORE = ["Blu", "Arancio", "Turchese", "Giallo", "Rosa", "Verde", "Viola", "Rosso"];
+const NOMI_COLORE = ["Blu", "Arancio", "Verde acqua", "Ocra", "Rosa", "Verde", "Viola", "Rosso"];
 
 const RUOLI = [["utente", "Utente (vede solo i propri dati)"], ["admin", "Amministratore (vede tutto)"]];
 const ERRORI = {

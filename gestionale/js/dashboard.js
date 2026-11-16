@@ -19,8 +19,8 @@ const chf = n => fmtNum(n || 0, 0);
 // Composizione del tempo: chiave, nome, classe colore
 const TEMPO = [["M", "Nel mandato", "c-mand"], ["X", "Extra da fatturare", "c-extra"], ["PR", "Pratiche", "c-prat"], ["N", "Non fatturabile", "c-non"], ["NR", "Non registrato", "c-nr"]];
 // Composizione dei ricavi: ordine dei colori verificato anche tra primo e ultimo spicchio
-const RICAVI = [["contabilita", "Contabilità e Tax", "#2a78d6"], ["funzione", "Funzione societaria", "#eb6834"], ["domiciliazione", "Domiciliazione", "#1baf7a"],
-  ["intestazione", "Intestazione fiduciaria", "#6250d6"], ["extra", "Ore extra e a tariffa", "#eda100"], ["pratiche", "Pratiche", "#e87ba4"]];
+const RICAVI = [["contabilita", "Contabilità e Tax", "#3F78B5"], ["funzione", "Funzione societaria", "#C4683A"], ["domiciliazione", "Domiciliazione", "#36A07A"],
+  ["intestazione", "Intestazione fiduciaria", "#6F62B8"], ["extra", "Ore extra e a tariffa", "#B88A20"], ["pratiche", "Pratiche", "#C26F8E"]];
 
 export async function vistaDashboard(el) {
   const admin = D.isAdmin(), fatt = D.puoFatturare(), u = D.utenteCorrente(), oggi = oggiISO();

@@ -188,7 +188,7 @@ console.log("Test compiti superati");
   const R = await import("../js/regole.js");
   const c = R.coloriUtenti([{ id: "b", creato: "2026-02" }, { id: "a", creato: "2026-01" }, { id: "c", colore: 1 }]);
   const ok = (a, b, n) => { if (JSON.stringify(a) !== JSON.stringify(b)) { console.error("FALLITO", n, a, b); process.exitCode = 1; } else console.log("ok", n); };
-  ok([c.c, c.a, c.b], ["#2a78d6", "#eb6834", "#1baf7a"], "colori: scelto e poi ordine di creazione");
+  ok([c.c, c.a, c.b], ["#3F78B5", "#C4683A", "#36A07A"], "colori: scelto e poi ordine di creazione");
 }
 
 // ---------- Pratiche ----------

@@ -160,9 +160,10 @@ export async function vistaRegistro(el) {
     || clientiOrd.find(c => normNome(c.ragioneSociale) === normNome(t) || normNome(c.codice) === normNome(t));
   let ultimoCli;
   // Scelta unica "Che lavoro è?": decide insieme mandato e fatturazione (un clic)
-  const sceltaDi = r => !r?.id ? "" : r.praticaId ? "pratica:" + r.praticaId : r.fatturabile === false ? "non" : r.extra ? "consulenza" : (r.mandato || "contabilita");
+  const sceltaDi = r => !r?.id ? "" : r.praticaId ? "pratica:" + r.praticaId : r.fatturabile === false ? "non" : r.extra ? "consulenza" : "mandato";
+  let mandatoPrinc = null; // mandato a cui vanno le ore "nel mandato" del cliente scelto
   const memo = { get: id => { try { return localStorage.getItem("scelta_" + id) || ""; } catch { return ""; } }, set: (id, v) => { try { localStorage.setItem("scelta_" + id, v); } catch {} } };
-  const nomeScelta = v => v === "consulenza" ? "Consulenza (extra)" : v === "non" ? "Non fatturabile" : v.startsWith("pratica:") ? "Pratica" : (NOME_MANDATO[v] || "");
+  const nomeScelta = v => v === "consulenza" ? "Consulenza (extra)" : v === "non" ? "Non fatturabile" : v.startsWith("pratica:") ? "Pratica" : "nel mandato";
   const aggiornaInvia = () => {
     if (form.tipo.value !== "lavoro" || modifica) return;
     const min = Number(form.minuti.value || 0), sc = form.scelta.value;
@@ -180,12 +181,15 @@ export async function vistaRegistro(el) {
     const box = el.querySelector("#scelte");
     if (!cli) { box.innerHTML = '<span class="tenue">Scegli prima il cliente</span>'; form.scelta.value = ""; aggiornaInvia(); return; }
     const mm = mandatiDi(cli);
-    const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo);
-    const prat = pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto));
+    const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo).map(([k]) => k);
+    mandatoPrinc = att.includes("contabilita") ? "contabilita" : att[0] || null;
+    // Solo tre scelte: compreso nel mandato, consulenza extra, ore interne non fatturabili.
+    // (una vecchia registrazione su una pratica, in modifica, resta visibile)
+    const prat = scelto && scelto.startsWith("pratica:") ? pratiche.filter(p => "pratica:" + p.id === scelto) : [];
     const voci = [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
-      ...att.map(([k, n]) => [k, n, "nel mandato", "c-mand"]),
-      ...prat.map(p => ["pratica:" + p.id, p.titolo || p.tipo, "pratica", "c-prat"]),
-      ["non", "Non fatturabile", "", "c-non"]];
+      ["mandato", mandatoPrinc ? NOME_MANDATO[mandatoPrinc] : "Contabilità", "nel mandato", "c-mand"],
+      ["non", "Non fatturabile", "ore interne", "c-non"],
+      ...prat.map(p => ["pratica:" + p.id, p.titolo || p.tipo, "pratica", "c-prat"])];
     box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");
     box.querySelectorAll("[data-sc]").forEach(x => x.addEventListener("click", () => scegli(x.dataset.sc)));
     // proposta: la scelta della registrazione in modifica, altrimenti l'ultima usata per questo cliente
@@ -252,7 +256,7 @@ export async function vistaRegistro(el) {
     const prat = sc.startsWith("pratica:");
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
       clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? sc !== "non" : false, extra: t === "lavoro" && sc === "consulenza", tipo: t, descrizione,
-      mandato: t === "lavoro" ? (prat ? "pratica" : sc === "consulenza" || sc === "non" ? (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : null) : sc) : null,
+      mandato: t === "lavoro" ? (prat ? "pratica" : (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : sc === "mandato" ? mandatoPrinc : null)) : null,
       praticaId: t === "lavoro" && prat ? sc.slice(8) : null };
     if (t === "lavoro") memo.set(cli.id, sc);
     const id = await D.salvaRegistrazione(dati);

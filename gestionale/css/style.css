@@ -438,3 +438,5 @@ tr.chiusa td { color: var(--tenue); }
 .scelte i.pt { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
 .lbl-riga { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .lbl-riga label { margin: 0; }
+.c-bo { background: #CFCABF; }
+.legenda i.c-bo, .voce-t i.c-bo { background: #CFCABF; }

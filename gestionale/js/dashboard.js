@@ -17,7 +17,8 @@ const h = (min) => fmtDurata(Math.round(min || 0));
 const perc = (a, b) => b ? Math.round(a / b * 100) : 0;
 const chf = n => fmtNum(n || 0, 0);
 // Composizione del tempo: chiave, nome, classe colore
-const TEMPO = [["M", "Nel mandato", "c-mand"], ["X", "Extra da fatturare", "c-extra"], ["PR", "Pratiche", "c-prat"], ["N", "Non fatturabile", "c-non"], ["NR", "Non registrato", "c-nr"]];
+const TEMPO_TUTTI = [["M", "Nel mandato", "c-mand"], ["X", "Extra da fatturare", "c-extra"], ["PR", "Pratiche", "c-prat"], ["N", "Non fatturabile", "c-non"], ["BO", "Back office", "c-bo"], ["NR", "Non registrato", "c-nr"]];
+let TEMPO = TEMPO_TUTTI.filter(([k]) => k !== "BO"); // "Back office" compare solo se c'è chi lavora in back office
 // Composizione dei ricavi: ordine dei colori verificato anche tra primo e ultimo spicchio
 const RICAVI = [["contabilita", "Contabilità e Tax", "#3F78B5"], ["funzione", "Funzione societaria", "#C4683A"], ["domiciliazione", "Domiciliazione", "#36A07A"],
   ["intestazione", "Intestazione fiduciaria", "#6F62B8"], ["extra", "Ore extra e a tariffa", "#B88A20"], ["pratiche", "Pratiche", "#C26F8E"]];
@@ -58,19 +59,24 @@ export async function vistaDashboard(el) {
     rr.forEach(r => { t[r.tf === "mandato" ? "M" : r.tf === "extra" ? "X" : r.tf === "pratica" ? "PR" : "N"] += r.minuti; });
     const P_ = pres.filter(p => p.data <= finora).reduce((s, p) => s + (p.minuti || 0), 0);
     const regTot = t.M + t.X + t.PR + t.N;
-    t.NR = Math.max(0, P_ - regTot);
     const prof = profili[x.id] || {};
+    // Back office: registra le ore solo per i lavori particolari; il resto della presenza è lavoro di back office, non "non registrato"
+    const bo = !!(prof.backoffice || x.backoffice);
+    t.BO = bo ? Math.max(0, P_ - regTot) : 0;
+    t.NR = bo ? 0 : Math.max(0, P_ - regTot);
     const presMap = conVacanze(Object.fromEntries(pres.map(p => [p.data, p])), vacanze, x.id);
     const dal = prof.inizioPresenze || pres.map(p => p.data).sort()[0] || "9999-12-31";
     const rp = finora >= da ? riepilogoPresenze(presMap, prof, da, finora, dal) : { daCompilare: 0 };
     const regGiorno = {}; rr.forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + r.minuti; });
-    const incompleti = pres.filter(p => p.data <= finora && p.minuti > 0 && (regGiorno[p.data] || 0) < p.minuti * 0.9)
+    const incompleti = bo ? [] : pres.filter(p => p.data <= finora && p.minuti > 0 && (regGiorno[p.data] || 0) < p.minuti * 0.9)
       .map(p => ({ data: p.data, pres: p.minuti, reg: regGiorno[p.data] || 0 })).sort((p, q) => p.data.localeCompare(q.data));
-    return { x, t, pres: P_, reg: regTot, base: Math.max(P_, regTot), resa: perc(t.M + t.X + t.PR, Math.max(P_, regTot)), daCompilare: rp.daCompilare, incompleti, haPresenze: pres.length > 0 };
+    return { x, t, pres: P_, reg: regTot, base: Math.max(P_, regTot), resa: perc(t.M + t.X + t.PR, Math.max(P_, regTot) - t.BO), bo, daCompilare: rp.daCompilare, incompleti, haPresenze: pres.length > 0 };
   });
   const tot = perPersona.reduce((s, p) => { TEMPO.forEach(([k]) => { s.t[k] += p.t[k]; }); s.pres += p.pres; s.reg += p.reg; s.base += p.base; return s; },
-    { t: { M: 0, X: 0, PR: 0, N: 0, NR: 0 }, pres: 0, reg: 0, base: 0 });
-  const resaTot = perc(tot.t.M + tot.t.X + tot.t.PR, tot.base);
+    { t: { M: 0, X: 0, PR: 0, N: 0, BO: 0, NR: 0 }, pres: 0, reg: 0, base: 0 });
+  TEMPO = TEMPO_TUTTI.filter(([k]) => k !== "BO" || perPersona.some(p => p.bo));
+  // la resa si misura sulle ore di chi lavora sui clienti: il back office non la abbassa
+  const resaTot = perc(tot.t.M + tot.t.X + tot.t.PR, tot.base - tot.t.BO);
   const nonReso = tot.t.N + tot.t.NR;
 
   // --- ricavi del periodo (solo chi può fatturare) ---
@@ -134,7 +140,7 @@ export async function vistaDashboard(el) {
         : `<section class="pannello sez-d"><div class="testa-d"><h2>Ore per mandato</h2></div>${barreMandato()}</section>`}
     </div>
     ${chi === "tutti" && perPersona.length > 1 ? `<section class="pannello sez-d"><div class="testa-d"><h2>Collaboratori</h2><button type="button" class="link-btn" data-s="persone">Dettaglio →</button></div>
-      ${perPersona.map(p => `<button type="button" class="riga-mini" data-chi="${e(p.x.id)}"><span class="nome-p">${e(p.x.nome)}</span>${barraTempo(p.t, p.base, false)}<span class="val-p">${resaChip(p.resa, p.base)}</span></button>`).join("")}
+      ${perPersona.map(p => `<button type="button" class="riga-mini" data-chi="${e(p.x.id)}"><span class="nome-p">${e(p.x.nome)}</span>${barraTempo(p.t, p.base, false)}<span class="val-p">${resaChip(p.resa, p.base, p.bo)}</span></button>`).join("")}
       ${legendaTempo()}</section>` : ""}`;
   }
 
@@ -143,11 +149,11 @@ export async function vistaDashboard(el) {
     return `<section class="pannello sez-d"><div class="testa-d"><h2>Ore lavorate e come sono state usate</h2>${legendaTempo()}</div>
       <p class="tenue nota-d">Ore lavorate = scheda presenze (o le ore registrate, se sono di più). Ogni barra è lunga quanto le ore lavorate; le percentuali sono sul totale della persona.</p>
       <div class="persone-d">${perPersona.map(p => `<div class="riga-pd" ${admin && chi === "tutti" ? `data-chi="${e(p.x.id)}" role="button" tabindex="0"` : ""}>
-        <div class="testa-pd"><strong>${e(p.x.nome || p.x.id)}</strong><span class="tenue">${p.base ? h(p.base) : "nessuna ora"}${p.pres && p.reg > p.pres ? " (registrate più della presenza)" : ""}</span>${resaChip(p.resa, p.base)}
+        <div class="testa-pd"><strong>${e(p.x.nome || p.x.id)}</strong><span class="tenue">${p.base ? h(p.base) : "nessuna ora"}${p.pres && p.reg > p.pres ? " (registrate più della presenza)" : ""}</span>${resaChip(p.resa, p.base, p.bo)}
           ${p.daCompilare ? stato("urgente", `${p.daCompilare} gg senza presenza`) : ""}${!p.haPresenze && p.reg ? stato("neutro", "Presenze non compilate") : ""}</div>
         <div style="width:${(p.base / max * 100).toFixed(1)}%;min-width:120px">${barraTempo(p.t, p.base, true)}</div></div>`).join("")}</div></section>
     <section class="pannello sez-d"><table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Ore lavorate</th>${TEMPO.map(([, n]) => `<th class="num">${e(n)}</th>`).join("")}<th class="num">Resa</th></tr></thead><tbody>
-      ${perPersona.map(p => `<tr><td>${e(p.x.nome)}</td><td class="num">${h(p.base)}</td>${TEMPO.map(([k]) => `<td class="num">${h(p.t[k])}<div class="tenue">${perc(p.t[k], p.base)}%</div></td>`).join("")}<td class="num"><strong>${p.base ? p.resa + "%" : "–"}</strong></td></tr>`).join("")}
+      ${perPersona.map(p => `<tr><td>${e(p.x.nome)}</td><td class="num">${h(p.base)}</td>${TEMPO.map(([k]) => `<td class="num">${h(p.t[k])}<div class="tenue">${perc(p.t[k], p.base)}%</div></td>`).join("")}<td class="num"><strong>${p.bo ? "BO" : p.base ? p.resa + "%" : "–"}</strong></td></tr>`).join("")}
       ${perPersona.length > 1 ? `<tr class="totale"><td><strong>Totale</strong></td><td class="num"><strong>${h(tot.base)}</strong></td>${TEMPO.map(([k]) => `<td class="num">${h(tot.t[k])}<div class="tenue">${perc(tot.t[k], tot.base)}%</div></td>`).join("")}<td class="num"><strong>${resaTot}%</strong></td></tr>` : ""}
     </tbody></table><p class="tenue nota-d" style="margin-top:8px">Resa = ore nel mandato + extra + pratiche, sul totale delle ore lavorate.</p></section>
     ${chi !== "tutti" ? sezioneGiorni(perPersona[0]) : ""}`;
@@ -214,7 +220,8 @@ export async function vistaDashboard(el) {
 function tile(cl, ic, titolo, valore, sotto) {
   return `<div class="tile-d ${cl}"><span class="tile-ic" aria-hidden="true">${ic}</span><div><div class="tile-t">${e(titolo)}</div><div class="tile-v">${e(valore)}</div><div class="tile-s">${e(sotto || "")}</div></div></div>`;
 }
-function resaChip(resa, base) {
+function resaChip(resa, base, bo) {
+  if (bo) return stato("neutro", "Back office");
   if (!base) return stato("neutro", "Nessuna ora");
   return stato(resa >= 85 ? "ok" : resa >= 70 ? "urgente" : "scaduto", `Resa ${resa}%`);
 }

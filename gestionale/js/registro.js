@@ -94,7 +94,7 @@ export async function vistaRegistro(el) {
     </div>
   </div>
 
-  ${admin && !soloMie ? `<div class="pannello" style="margin-bottom:14px"><strong>${fmtDurata(minTot)}</strong> registrate dallo studio oggi · ${fmtDurata(minFat)} fatturabili</div>` : obiettivo ? barraGiornata(minTot, minFat, obiettivo, fonte) : `<div class="pannello tenue" style="margin-bottom:14px">Giorno non lavorativo: nessuna ora prevista.</div>`}
+  ${admin && !soloMie ? `<div class="pannello" style="margin-bottom:14px"><strong>${fmtDurata(minTot)}</strong> registrate dallo studio oggi · ${fmtDurata(minFat)} fatturabili</div>` : profilo?.backoffice ? `<div class="pannello" style="margin-bottom:14px">${stato("neutro", "Back office")} Registra qui solo i lavori particolari. Oggi: <strong>${fmtDurata(minTot)}</strong> registrate · ${fmtDurata(minFat)} fatturabili</div>` : obiettivo ? barraGiornata(minTot, minFat, obiettivo, fonte) : `<div class="pannello tenue" style="margin-bottom:14px">Giorno non lavorativo: nessuna ora prevista.</div>`}
 
   <form class="pannello" id="nuova" style="margin-bottom:14px">
     <div class="testata" style="margin-bottom:12px"><h2 style="font-size:16px">${modifica ? "Modifica registrazione" : "Nuova registrazione"}</h2>

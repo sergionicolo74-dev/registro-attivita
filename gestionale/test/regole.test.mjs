@@ -260,3 +260,14 @@ console.log("Test compiti superati");
   const es = R.esitoMandato(550, 300, 150 * 3 + 190 * 2, R.minutiPrevisti(550));
   ok([es.valore, es.margine, es.minutiPreventivati, es.esito], [830, -280, 220, "scaduto"], "trimestre 550: 3h a 150 + 2h a 190 = 830, in perdita");
 }
+
+// spese
+{
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  const R = await import("../js/regole.js");
+  tst(R.importoKm(56) === 42, "56 km × 0.75 = 42.00");
+  tst(R.importoKm(13) === 9.75, "13 km × 0.75 = 9.75");
+  tst(R.importoKm(7) === 5.25, "7 km × 0.75 = 5.25");
+  const t = R.totaliSpese([{ categoria: "pasto", importo: 86.5 }, { categoria: "emolumenti", importo: 50 }, { categoria: "posta", importo: 6.5 }]);
+  tst(t.tot === 143 && t.iva === 93 && t.fuoriIva === 50, "totali spese con e senza IVA");
+}

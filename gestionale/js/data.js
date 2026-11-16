@@ -171,6 +171,19 @@ export async function aggiornaRegistrazioni(ids, campi) {
   await scriviMolti(ids.map(id => ({ col: "registrazioni", id, ...campi })));
 }
 
+// ---------- spese (da riaddebitare ai clienti o a carico dello studio) ----------
+// La ricevuta (immagine compressa) sta in "ricevute/{id spesa}" e si legge solo quando la si apre.
+export async function listaSpese(da = "2000-01-01", a = "2999-12-31") {
+  const l = puoFatturare() ? await lista("spese") : await lista("spese", [["autoreUid", "==", utente.uid]]);
+  return l.filter(x => x.data >= da && x.data <= a);
+}
+export const salvaSpesa = (x) => scrivi("spese", { autoreUid: utente.uid, autoreNome: utente.nome, ...x });
+export async function eliminaSpesa(id) { await elimina("ricevute", id).catch(() => {}); await elimina("spese", id); }
+export async function aggiornaSpese(ids, campi) { await scriviMolti(ids.map(id => ({ col: "spese", id, ...campi }))); }
+export const leggiRicevuta = (id) => leggi("ricevute", id);
+export const salvaRicevuta = (id, r) => scrivi("ricevute", { ...r, id });
+export const eliminaRicevuta = (id) => elimina("ricevute", id);
+
 // ---------- fatture dei forfait (stato per cliente, mandato e periodo) ----------
 export const listaFatture = () => lista("fatture");
 export const salvaFattura = (f) => scrivi("fatture", f);
@@ -296,6 +309,12 @@ function creaDemo() {
         passi: [{ quando: oggiPiu(-20) + "T09:00:00Z", nome: "Anna", testo: "Pratica aperta", fase: "In preparazione" }, { quando: oggiPiu(-3) + "T09:00:00Z", nome: "Anna", testo: "Chiesti estratti conto degli ultimi 3 mesi", fase: "Documenti richiesti" }] },
       pr3: { id: "pr3", clienteId: "d3", titolo: "Estratto conto individuale AVS", tipo: "Estratto conto individuale AVS", ente: "Cassa AVS", fase: "Conclusa", apertaIl: oggiPiu(-60), conclusaIl: oggiPiu(-5),
         solleciti: 1, responsabileUid: "demo", responsabileNome: "Utente demo", fatturazione: { modo: "Forfait", importo: 120, stato: "Da fatturare" }, passi: [] }
+    },
+    spese: {
+      s1: { id: "s1", clienteId: "d1", data: oggiPiu(-3), categoria: "pasto", descrizione: "Pranzo di lavoro con il CdA", importo: 86.5, riaddebito: true, autoreUid: "demo", autoreNome: "Utente demo" },
+      s2: { id: "s2", clienteId: "d1", data: oggiPiu(-2), categoria: "posta", descrizione: "Raccomandata all'Ufficio di tassazione", importo: 6.5, riaddebito: true, autoreUid: "u2", autoreNome: "Anna", anticipataDa: "u2", anticipataNome: "Anna" },
+      s3: { id: "s3", clienteId: "d2", data: oggiPiu(-6), categoria: "trasferta", descrizione: "Lugano – Bellinzona e ritorno, riunione", km: 56, importo: 42, riaddebito: true, autoreUid: "demo", autoreNome: "Utente demo" },
+      s4: { id: "s4", clienteId: "d2", data: oggiPiu(-6), categoria: "emolumenti", descrizione: "Estratto del registro di commercio", importo: 50, riaddebito: true, autoreUid: "demo", autoreNome: "Utente demo" }
     },
     vacanze: {
       v1: { id: "v1", uid: "u2", nome: "Anna", dal: oggiPiu(8), al: oggiPiu(15), tipo: "Vacanza", stato: "Approvata", creato: "2026-11-01T09:00:00Z" },

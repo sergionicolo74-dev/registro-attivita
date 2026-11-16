@@ -43,6 +43,19 @@ service cloud.firestore {
     }
 
     // Compiti: ognuno vede quelli creati da sé o assegnati a sé
+    // Spese: ognuno vede e scrive le proprie; chi fattura le vede tutte e le segna come riaddebitate o rimborsate.
+    // Una spesa già riaddebitata (fatturataIl) è chiusa per chi l'ha registrata.
+    match /spese/{id} {
+      allow read: if fatt() || (attivo() && mio("autoreUid"));
+      allow create: if attivo() && request.resource.data.autoreUid == request.auth.uid;
+      allow update: if fatt() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid && aperta());
+      allow delete: if admin() || (attivo() && mio("autoreUid") && aperta());
+    }
+    // Ricevuta della spesa (immagine): stesso id della spesa, stesse persone.
+    match /ricevute/{id} {
+      allow read, write: if fatt() || (attivo() && get(/databases/$(database)/documents/spese/$(id)).data.autoreUid == request.auth.uid);
+    }
+
     match /compiti/{id} {
       allow read: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
       allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);

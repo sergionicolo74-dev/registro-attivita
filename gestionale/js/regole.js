@@ -591,3 +591,27 @@ export function tipoFatturazione(r) {
   if (r.fatturabile === false) return "non";
   return r.extra ? "extra" : "mandato";
 }
+
+// ---------- spese ----------
+/** Tariffa per i km in auto (CHF/km). */
+export const TARIFFA_KM = 0.75;
+/** [chiave, nome, fuori IVA]. Le tasse e gli emolumenti anticipati a nome e per conto del cliente non entrano nella base IVA (art. 24 cpv. 6 lett. b LIVA). */
+export const CATEGORIE_SPESA = [
+  ["pasto", "Pasto / rappresentanza", false],
+  ["posta", "Posta / raccomandata", false],
+  ["trasferta", "Trasferta in auto (km)", false],
+  ["viaggio", "Viaggio / parcheggio", false],
+  ["emolumenti", "Tasse ed emolumenti anticipati", true],
+  ["altro", "Altro", false]
+];
+export const NOME_CATEGORIA = Object.fromEntries(CATEGORIE_SPESA.map(([k, n]) => [k, n]));
+export const fuoriIva = x => !!CATEGORIE_SPESA.find(([k]) => k === x.categoria)?.[2];
+/** Importo di una trasferta: km × tariffa, arrotondato ai 5 centesimi. */
+export const importoKm = km => Math.round((Number(km) || 0) * TARIFFA_KM * 20) / 20;
+/** Totali delle spese: { tot, iva, fuoriIva } */
+export function totaliSpese(l) {
+  const t = { tot: 0, iva: 0, fuoriIva: 0 };
+  l.forEach(x => { const v = Number(x.importo) || 0; t.tot += v; t[fuoriIva(x) ? "fuoriIva" : "iva"] += v; });
+  for (const k in t) t[k] = Math.round(t[k] * 100) / 100;
+  return t;
+}

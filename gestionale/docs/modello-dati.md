@@ -94,3 +94,13 @@ importo = budget ÷ numero di periodi. Redditività: ore nel mandato (anche non 
 (redditizio se entro il forfait, al limite fino al 15% oltre, in perdita oltre). Ore preventivate: budget ore (contabilità) oppure forfait ÷ tariffa.
 Da fatturare a parte: ore extra, ore su mandati senza forfait e su clienti occasionali, più le pratiche concluse.
 `fatture` {`clienteId`, `mandato`, `periodo`, `importo`, `minuti`, `valoreOre`, `stato`, `fatturataIl`, `fatturataDa`}.
+
+## spese/{id}
+Spesa registrata dal Registro ore (scheda "Spesa").
+`clienteId`, `data`, `categoria` (pasto, posta, trasferta, viaggio, emolumenti, altro), `importo` (CHF), `km` (solo trasferte, CHF 0.75/km),
+`riaddebito` (true = da riaddebitare al cliente), `descrizione`, `anticipataDa`/`anticipataNome` (pagata di tasca propria dal collaboratore),
+`rimborsataIl`, `fatturataIl`/`fatturaRif` (chiusa dopo la fattura), `haRicevuta`, `autoreUid`, `autoreNome`.
+Le tasse e gli emolumenti anticipati per il cliente sono fuori IVA (art. 24 cpv. 6 lett. b LIVA).
+
+## ricevute/{id spesa}
+`img` (immagine JPEG compressa in data URL, max ~700 KB), `nome`. Si legge solo quando si apre la ricevuta.

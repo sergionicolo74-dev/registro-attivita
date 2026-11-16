@@ -440,3 +440,11 @@ tr.chiusa td { color: var(--tenue); }
 .lbl-riga label { margin: 0; }
 .c-bo { background: #CFCABF; }
 .legenda i.c-bo, .voce-t i.c-bo { background: #CFCABF; }
+.zona-ric { border: 1.5px dashed #B9B5AA; border-radius: 10px; padding: 14px; background: #FBFAF7; cursor: pointer; display: flex; align-items: center; gap: 14px; color: var(--tenue); font-size: 14px; }
+.zona-ric.sopra, .zona-ric:hover, .zona-ric:focus { border-color: var(--inchiostro); background: #F4F2EC; outline: none; }
+.zona-ric img { max-height: 90px; max-width: 120px; border-radius: 6px; box-shadow: 0 0 0 1px #DDD9CF; margin-left: auto; }
+.dlg-ricevuta { border: none; border-radius: 12px; padding: 0; max-width: min(900px, 94vw); max-height: 92vh; }
+.dlg-ricevuta::backdrop { background: rgba(20, 20, 18, .55); }
+.dlg-ricevuta .testa-r { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #E6E3DB; position: sticky; top: 0; background: #fff; }
+.dlg-ricevuta .testa-r .tenue { margin-right: auto; font-size: 13px; }
+.dlg-ricevuta img { display: block; max-width: 100%; height: auto; }

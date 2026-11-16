@@ -1,10 +1,12 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
+import { CATEGORIE_SPESA, NOME_CATEGORIA, TARIFFA_KM, importoKm, fuoriIva, fmtNum } from "./regole.js";
+import { preparaRicevuta, mostraRicevuta } from "./ricevute.js";
 import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta, ID_INTERNO, CLIENTE_INTERNO } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
-const TIPI = [["lavoro", "Lavoro svolto"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
+const TIPI = [["lavoro", "Lavoro svolto"], ["spesa", "Spesa"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
 
 let giorno = oggiISO();
 let soloMie = true;
@@ -13,15 +15,17 @@ let modifica = null; // registrazione in modifica
 let ePeriodo = "anno", eCli = "", eMand = "", eFatt = "", eCerca = "", eQuante = 50;
 const PERIODI_E = [["mese", "Questo mese"], ["tre", "Ultimi 3 mesi"], ["anno", "Quest'anno"], ["tutto", "Dall'inizio"]];
 const chiusa = r => !!r.fatturataIl;
+let sQuante = 20;
+let tipoDopo = null; // dopo aver salvato una spesa si resta sulla scheda Spesa
 
 export async function vistaRegistro(el) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
   const lun = lunedi(giorno), dom = aggiungiGiorni(lun, 6);
   const oggiE = oggiISO();
   const daE = ePeriodo === "mese" ? oggiE.slice(0, 8) + "01" : ePeriodo === "tre" ? aggiungiGiorni(oggiE, -92) : ePeriodo === "anno" ? oggiE.slice(0, 4) + "-01-01" : "2000-01-01";
-  const [clienti, reg, profilo, presOggi, pratiche, tutte] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
+  const [clienti, reg, profilo, presOggi, pratiche, tutte, spese] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
     D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => []), D.listaPratiche().catch(() => []),
-    D.listaRegistrazioniPeriodo(daE, "2999-12-31").catch(() => [])]);
+    D.listaRegistrazioniPeriodo(daE, "2999-12-31").catch(() => []), D.listaSpese(daE).catch(() => [])]);
   // Cliente fisso per le ore interne dello studio: lo crea l'amministratore la prima volta
   if (admin && !clienti.some(c => c.interno)) {
     try { await D.salvaCliente({ id: ID_INTERNO, ...CLIENTE_INTERNO }); clienti.push({ id: ID_INTERNO, ...CLIENTE_INTERNO }); } catch {}
@@ -39,7 +43,7 @@ export async function vistaRegistro(el) {
   const obiettivo = admin && !soloMie ? null : (presenza ?? dovuti) || (minTot ? minTot : null);
   const fonte = presenza != null ? "di presenza" : dovuti ? "previste dall'orario" : "(giorno non lavorativo)";
   const m = modifica || {};
-  const tipo = m.tipo || "lavoro";
+  const tipo = m.tipo || tipoDopo || "lavoro"; tipoDopo = null;
   const clientiOrd = [...clienti].sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
 
   const pratPer = Object.fromEntries(pratiche.map(p => [p.id, p]));
@@ -56,6 +60,36 @@ export async function vistaRegistro(el) {
     && (!eFatt || (eFatt === "aperte" ? !chiusa(r) : eFatt === "chiuse" ? chiusa(r) : tipoF(r) === eFatt))
     && (!q || normNome(`${r.descrizione} ${nomeCli[r.clienteId] || ""} ${r.autoreNome || ""}`).includes(q)))
     .sort((a, b) => b.data.localeCompare(a.data) || String(b.creato || "").localeCompare(String(a.creato || "")));
+  const speseVis = spese.filter(x => !admin || !soloMie || x.autoreUid === u.uid)
+    .sort((a, b) => b.data.localeCompare(a.data) || String(b.aggiornato || "").localeCompare(String(a.aggiornato || "")));
+  function statoSpesa(x) {
+    const st = x.riaddebito ? (x.fatturataIl ? stato("ok", "Riaddebitata " + fmtData(x.fatturataIl)) : stato("urgente", "Da riaddebitare")) : stato("neutro", "A carico dello studio");
+    const rb = x.anticipataDa ? (x.rimborsataIl ? `<div class="tenue">rimborsata a ${e(x.anticipataNome || "")} il ${e(fmtData(x.rimborsataIl))}</div>` : `<div class="tenue">da rimborsare a ${e(x.anticipataNome || "")}</div>`) : "";
+    return st + rb;
+  }
+  function azioniSpesa(x) {
+    if (x.fatturataIl) return `<span class="lucchetto" title="Spesa già riaddebitata: non si può modificare">🔒</span>`;
+    return puo(x) ? `<button class="btn piccolo" data-mods="${e(x.id)}">Modifica</button> <button class="btn piccolo" data-dels="${e(x.id)}" aria-label="Elimina spesa">✕</button>` : "";
+  }
+  function sezioneSpese() {
+    const tot = speseVis.reduce((s, x) => s + (Number(x.importo) || 0), 0);
+    const daRiadd = speseVis.filter(x => x.riaddebito && !x.fatturataIl).reduce((s, x) => s + (Number(x.importo) || 0), 0);
+    return `<section class="pannello" id="elenco-spese" style="margin-top:14px">
+    <div class="testa-d"><h2 style="font-size:16px">Spese${admin && !soloMie ? " dello studio" : ""}</h2>
+      <span class="tenue" style="font-size:13px">${e(PERIODI_E.find(([k]) => k === ePeriodo)[1])} · ${speseVis.length} spese · CHF ${fmtNum(tot)} · da riaddebitare CHF ${fmtNum(daRiadd)}</span></div>
+    ${speseVis.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Spesa</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Stato</th><th class="num">CHF</th><th></th><th></th></tr></thead><tbody>
+      ${speseVis.slice(0, sQuante).map(x => `<tr${x.fatturataIl ? ' class="chiusa"' : ""}><td style="white-space:nowrap">${e(fmtData(x.data))}</td><td style="white-space:nowrap">${e(nomeCli[x.clienteId] || "–")}</td>
+        <td style="font-size:13px">${e(NOME_CATEGORIA[x.categoria] || "")}${x.km ? `<div class="tenue">${e(String(x.km))} km × ${fmtNum(TARIFFA_KM)}</div>` : ""}${fuoriIva(x) ? '<div class="tenue">fuori IVA</div>' : ""}</td>
+        <td class="desc-r">${e(x.descrizione || "")}</td>${admin && !soloMie ? `<td>${e(x.autoreNome || "")}</td>` : ""}
+        <td>${statoSpesa(x)}</td><td class="num">${fmtNum(x.importo)}</td>
+        <td>${x.haRicevuta ? `<button class="btn piccolo" data-ric="${e(x.id)}" title="Vedi la ricevuta" aria-label="Vedi la ricevuta">📎</button>` : ""}</td>
+        <td style="white-space:nowrap">${azioniSpesa(x)}</td></tr>`).join("")}</tbody></table></div>
+      ${speseVis.length > sQuante ? `<div class="azioni"><button class="btn" id="s-altre">Mostra tutte (${speseVis.length})</button></div>` : ""}`
+      : '<div class="vuoto">Nessuna spesa nel periodo. Per registrarne una scegli "Spesa" in alto.</div>'}
+    <p class="tenue" style="font-size:13px;margin-top:8px">Il periodo è quello scelto in "Tutte le registrazioni" qui sotto. Le spese già riaddebitate (🔒) non si possono più modificare.</p>
+  </section>`;
+  }
+
   function elencoCompleto() {
     const lav = elenco.filter(r => r.tipo !== "nota"), tot = lav.reduce((s, r) => s + (r.minuti || 0), 0);
     const somma = t => lav.filter(r => tipoF(r) === t).reduce((s, r) => s + (r.minuti || 0), 0);
@@ -98,7 +132,7 @@ export async function vistaRegistro(el) {
 
   <form class="pannello" id="nuova" style="margin-bottom:14px">
     <div class="testata" style="margin-bottom:12px"><h2 style="font-size:16px">${modifica ? "Modifica registrazione" : "Nuova registrazione"}</h2>
-      <div class="segmenti" role="radiogroup" aria-label="Tipo">${TIPI.map(([k, n]) => `<button type="button" role="radio" aria-checked="${k === tipo}" data-tipo="${k}"${modifica && k === "dafare" ? " disabled" : ""}>${e(n)}</button>`).join("")}</div>
+      <div class="segmenti" role="radiogroup" aria-label="Tipo">${TIPI.map(([k, n]) => `<button type="button" role="radio" aria-checked="${k === tipo}" data-tipo="${k}"${modifica && (k === "dafare" || (modifica.tipo === "spesa") !== (k === "spesa")) ? " disabled" : ""}>${e(n)}</button>`).join("")}</div>
     </div>
     <input type="hidden" name="tipo" value="${tipo}">
     <div class="griglia">
@@ -107,6 +141,23 @@ export async function vistaRegistro(el) {
         <datalist id="lista-clienti">${clientiOrd.map(c => `<option value="${e(nomeCli[c.id])}"></option>`).join("")}</datalist></div>
       <div class="solo-lavoro largo"><label id="lbl-scelta">Che lavoro è?</label>
         <input type="hidden" name="scelta" value=""><div class="chips scelte" id="scelte" role="radiogroup" aria-labelledby="lbl-scelta"><span class="tenue">Scegli prima il cliente</span></div></div>
+      <div class="solo-spesa largo"><label id="lbl-cat">Che spesa è?</label>
+        <input type="hidden" name="categoria" value="${e(m.categoria || "")}">
+        <div class="chips scelte" role="radiogroup" aria-labelledby="lbl-cat">${CATEGORIE_SPESA.map(([k, n]) => `<button type="button" role="radio" data-cat="${k}" aria-checked="${m.categoria === k}">${e(n)}</button>`).join("")}</div></div>
+      <div class="solo-spesa solo-km"><label for="f_km">Chilometri</label><input id="f_km" name="km" type="number" min="0" step="1" value="${e(m.km ?? "")}" placeholder="km andata e ritorno">
+        <div class="tenue" style="font-size:12px;margin-top:4px">CHF ${fmtNum(TARIFFA_KM)} al km</div></div>
+      <div class="solo-spesa"><label for="f_importo">Importo CHF</label><input id="f_importo" name="importo" type="number" min="0" step="0.05" value="${e(m.importo ?? "")}" placeholder="0.00"></div>
+      <div class="solo-spesa largo"><label id="lbl-riadd">A chi va?</label><input type="hidden" name="riaddebito" value="${m.tipo === "spesa" ? (m.riaddebito ? "si" : "no") : ""}">
+        <div class="chips scelte" role="radiogroup" aria-labelledby="lbl-riadd">
+          <button type="button" role="radio" data-riadd="si" aria-checked="${m.tipo === "spesa" && !!m.riaddebito}"><i class="pt c-extra"></i>Da riaddebitare al cliente</button>
+          <button type="button" role="radio" data-riadd="no" aria-checked="${m.tipo === "spesa" && !m.riaddebito}"><i class="pt c-non"></i>A carico dello studio</button></div></div>
+      <div class="solo-spesa largo">${campo("anticipata", "Pagata da me con i miei soldi (da rimborsare)", !!m.anticipataDa, "checkbox")}</div>
+      <div class="solo-spesa largo"><label>Ricevuta</label>
+        <div class="zona-ric" id="zona-ric" tabindex="0" role="button" aria-label="Aggiungi la ricevuta">
+          <input type="file" id="f_ric" accept="image/*,application/pdf" hidden>
+          <span id="ric-testo">${m.haRicevuta ? "📎 Ricevuta allegata · trascina qui un altro file o clicca per sostituirla" : "Trascina qui la foto o il PDF della ricevuta, oppure clicca per sceglierla (dal telefono si apre la fotocamera)"}</span>
+          <img id="ric-ante" alt="" hidden></div>
+        ${m.haRicevuta ? `<div style="margin-top:6px"><button type="button" class="btn piccolo" data-ric="${e(m.id)}">Vedi la ricevuta attuale</button> <button type="button" class="btn piccolo" id="ric-togli">Togli la ricevuta</button></div>` : ""}</div>
       <div class="largo"><label for="f_descrizione" id="lbl-desc">Descrizione</label>
         <div style="display:flex;gap:8px;align-items:flex-start"><textarea id="f_descrizione" name="descrizione" rows="3" style="flex:1">${e(m.descrizione || "")}</textarea>
         <button type="button" class="btn" id="detta" title="Detta a voce" aria-label="Detta a voce">🎤</button></div></div>
@@ -140,6 +191,8 @@ export async function vistaRegistro(el) {
       return `<button type="button" class="giorno${d === giorno ? " attivo" : ""}" data-g="${d}"><span>${g} ${e(fmtData(d).slice(0, 5))}</span><strong>${t ? fmtDurata(t) : "–"}</strong><span class="tenue">${f ? fmtDurata(f) + " fatt." : ""}</span></button>`;
     }).join("")}</div></section>
 
+  ${sezioneSpese()}
+
   ${elencoCompleto()}`;
 
   const form = el.querySelector("#nuova");
@@ -149,9 +202,50 @@ export async function vistaRegistro(el) {
     form.querySelectorAll(".solo-lavoro").forEach(x => x.hidden = t !== "lavoro");
     form.querySelectorAll(".solo-nuova").forEach(x => x.hidden = t !== "lavoro" || !!modifica);
     form.querySelectorAll(".solo-dafare").forEach(x => x.hidden = t !== "dafare");
+    form.querySelectorAll(".solo-spesa").forEach(x => x.hidden = t !== "spesa" || (x.classList.contains("solo-km") && form.categoria.value !== "trasferta"));
+    aggiornaInviaSpesa();
     form.querySelector(".solo-riscontro").hidden = !(t === "lavoro" && form.riscontro?.checked && !modifica);
-    el.querySelector("#lbl-desc").textContent = t === "dafare" ? "Cosa c'è da fare" : t === "nota" ? "Nota o decisione" : "Descrizione del lavoro";
+    el.querySelector("#lbl-desc").textContent = t === "dafare" ? "Cosa c'è da fare" : t === "nota" ? "Nota o decisione" : t === "spesa" ? "Descrizione (per esempio: con chi, dove, per cosa)" : "Descrizione del lavoro";
   };
+  // --- spesa ---
+  let ricNuova = null, ricTogli = false;
+  function aggiornaInviaSpesa() {
+    if (form.tipo.value !== "spesa") return;
+    const v = Number(form.importo.value || 0);
+    el.querySelector("#invia").textContent = modifica ? "Salva spesa" : v ? `Registra spesa CHF ${fmtNum(v)}` : "Registra spesa";
+  }
+  form.querySelectorAll("[data-cat]").forEach(b => b.addEventListener("click", () => {
+    form.categoria.value = b.dataset.cat;
+    form.querySelectorAll("[data-cat]").forEach(x => x.setAttribute("aria-checked", x === b));
+    form.querySelector(".solo-km").hidden = b.dataset.cat !== "trasferta";
+    if (b.dataset.cat === "trasferta") form.km.focus(); else form.importo.focus();
+    // tasse ed emolumenti: si anticipano sempre per il cliente
+    if (b.dataset.cat === "emolumenti" && !form.riaddebito.value) form.querySelector('[data-riadd="si"]').click();
+  }));
+  form.querySelectorAll("[data-riadd]").forEach(b => b.addEventListener("click", () => {
+    form.riaddebito.value = b.dataset.riadd;
+    form.querySelectorAll("[data-riadd]").forEach(x => x.setAttribute("aria-checked", x === b));
+  }));
+  form.km.addEventListener("input", () => { form.importo.value = form.km.value ? importoKm(form.km.value).toFixed(2) : ""; aggiornaInviaSpesa(); });
+  form.importo.addEventListener("input", aggiornaInviaSpesa);
+  const zona = el.querySelector("#zona-ric"), fileIn = el.querySelector("#f_ric");
+  async function prendiFile(f) {
+    if (!f) return;
+    el.querySelector("#ric-testo").textContent = "Preparo la ricevuta…";
+    try {
+      ricNuova = await preparaRicevuta(f); ricTogli = false;
+      const img = el.querySelector("#ric-ante"); img.src = ricNuova.img; img.hidden = false;
+      el.querySelector("#ric-testo").textContent = `📎 ${f.name} · ${ricNuova.kb} KB · clicca o trascina per cambiarla`;
+    } catch (err) { ricNuova = null; el.querySelector("#ric-testo").textContent = "Non riuscito: " + (err.message || err); }
+  }
+  zona.addEventListener("click", () => fileIn.click());
+  zona.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); fileIn.click(); } });
+  fileIn.addEventListener("change", () => prendiFile(fileIn.files[0]));
+  zona.addEventListener("dragover", ev => { ev.preventDefault(); zona.classList.add("sopra"); });
+  zona.addEventListener("dragleave", () => zona.classList.remove("sopra"));
+  zona.addEventListener("drop", ev => { ev.preventDefault(); zona.classList.remove("sopra"); prendiFile(ev.dataTransfer.files[0]); });
+  el.querySelector("#ric-togli")?.addEventListener("click", ev => { ricTogli = true; ricNuova = null; ev.target.closest("div").hidden = true; el.querySelector("#ric-testo").textContent = "La ricevuta verrà tolta quando salvi"; });
+  el.querySelectorAll("[data-ric]").forEach(b => b.addEventListener("click", ev => { ev.stopPropagation(); mostraRicevuta(b.dataset.ric); }));
   aggiornaTipo(tipo);
   form.querySelectorAll("[data-tipo]").forEach(b => b.addEventListener("click", () => aggiornaTipo(b.dataset.tipo)));
   form.riscontro?.addEventListener("change", () => aggiornaTipo(form.tipo.value));
@@ -239,6 +333,43 @@ export async function vistaRegistro(el) {
     await D.eliminaRegistrazione(b.dataset.del); avviso("Registrazione eliminata"); ricarica();
   }));
 
+  async function salvaSpesaForm(cli) {
+    const cat = form.categoria.value, imp = Math.round(Number(form.importo.value || 0) * 100) / 100, ria = form.riaddebito.value;
+    if (!cat) { avviso("Scegli che spesa è"); return; }
+    if (!(imp > 0)) { form.importo.focus(); avviso("Indica l'importo"); return; }
+    if (!ria) { avviso("Scegli se la spesa va riaddebitata al cliente o è a carico dello studio"); return; }
+    if (ria === "si" && (!cli || cli.interno)) { el.querySelector("#f_cliente").focus(); avviso("Per riaddebitarla scegli il cliente"); return; }
+    const data = parseData(form.data.value) || giorno;
+    const ms = modifica?.tipo === "spesa" ? modifica : null;
+    const ant = form.anticipata.checked;
+    const dati = { ...(ms ? { id: ms.id, autoreUid: ms.autoreUid, autoreNome: ms.autoreNome } : { creato: new Date().toISOString() }),
+      clienteId: cli?.id || interno?.id || null, data, categoria: cat, importo: imp, km: cat === "trasferta" ? Number(form.km.value) || null : null,
+      riaddebito: ria === "si", descrizione: form.descrizione.value.trim() || NOME_CATEGORIA[cat],
+      anticipataDa: ant ? (ms?.anticipataDa || u.uid) : null, anticipataNome: ant ? (ms?.anticipataNome || u.nome) : null,
+      haRicevuta: ricNuova ? true : ricTogli ? false : !!ms?.haRicevuta };
+    const btn = el.querySelector("#invia"); btn.disabled = true;
+    try {
+      const id = await D.salvaSpesa(dati);
+      if (ricNuova) {
+        try { await D.salvaRicevuta(id, { img: ricNuova.img, nome: ricNuova.nome }); }
+        catch { await D.salvaSpesa({ id, haRicevuta: !!ms?.haRicevuta }); avviso("Spesa salvata, ma la ricevuta non è stata caricata: riprova"); }
+      } else if (ricTogli) await D.eliminaRicevuta(id).catch(() => {});
+      avviso(ms ? "Spesa aggiornata" : `Spesa registrata: CHF ${fmtNum(imp)}`);
+      modifica = null; tipoDopo = "spesa"; ricarica();
+    } catch (err) { btn.disabled = false; avviso("Salvataggio non riuscito: " + (err.message || err)); }
+  }
+  el.querySelectorAll("[data-mods]").forEach(b => b.addEventListener("click", () => {
+    const x = spese.find(y => y.id === b.dataset.mods); if (!x || x.fatturataIl) return;
+    modifica = { ...x, tipo: "spesa" };
+    ricarica().then(() => el.querySelector("#nuova")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }));
+  el.querySelectorAll("[data-dels]").forEach(b => b.addEventListener("click", async () => {
+    const x = spese.find(y => y.id === b.dataset.dels); if (!x || x.fatturataIl) return;
+    if (!confirm(`Eliminare la spesa di CHF ${fmtNum(x.importo)}?`)) return;
+    await D.eliminaSpesa(x.id); avviso("Spesa eliminata"); ricarica();
+  }));
+  el.querySelector("#s-altre")?.addEventListener("click", () => { sQuante = 100000; const y = window.scrollY; ricarica().then(() => window.scrollTo(0, y)); });
+
   form.addEventListener("submit", async ev => {
     ev.preventDefault();
     const bad = dataNonValida(form); if (bad) { bad.focus(); avviso("Data non valida: usa gg.mm.aaaa"); return; }
@@ -246,6 +377,7 @@ export async function vistaRegistro(el) {
     if (modifica && chiusa(modifica)) { avviso("Ore già fatturate: non si possono modificare"); return; }
     const testoCli = el.querySelector("#f_cliente").value.trim();
     const cli = trovaCliente(testoCli);
+    if (t === "spesa") return salvaSpesaForm(cli);
     if (!cli && t !== "dafare") { el.querySelector("#f_cliente").focus(); avviso("Scegli un cliente dall'elenco"); return; }
     const descrizione = form.descrizione.value.trim();
     if (!descrizione) { form.descrizione.focus(); avviso("Scrivi una descrizione"); return; }

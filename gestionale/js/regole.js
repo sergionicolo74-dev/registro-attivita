@@ -75,8 +75,12 @@ export const RUOLI_PERSONA = ["Socio", "Amministratore", "Socio e amministratore
   "Membro CdA", "Direttore", "Avente diritto economico", "Procuratore", "Contatto contabilità", "Contatto salari", "Altro"];
 
 /** Dati mancanti di un cliente, per la tabella "Da completare". kyc = null se l'utente non è amministratore. */
+/** Cliente "speciale": clienti occasionali (C000) o lavori interni dello studio. Niente scadenze, mandati, dati mancanti. */
+export const clienteSpeciale = c => c?.codice === "C000" || !!c?.interno;
+export const ID_INTERNO = "_interno";
+export const CLIENTE_INTERNO = { codice: "S000", ragioneSociale: "Lavori interni dello studio", forma: "Altro", stato: "Attivo", interno: true, servizi: {}, mandati: {} };
 export function campiMancanti(c, nPersone, kyc) {
-  if (c.codice === "C000") return [];
+  if (clienteSpeciale(c)) return [];
   const m = [];
   const vuoto = v => v == null || String(v).trim() === "";
   const pf = c.forma === "Persona fisica";
@@ -248,7 +252,7 @@ const ANNUALI = new Set(["ivaRiconciliazione", "ifAnnuale", "avsLainfIpg", "lpp"
  * kyc: dati KYC del cliente (solo amministratori), per la revisione KYC.
  */
 export function scadenzeCliente(c, anno, kyc = null) {
-  if (!c || c.codice === "C000" || (c.stato && c.stato !== "Attivo")) return [];
+  if (!c || clienteSpeciale(c) || (c.stato && c.stato !== "Attivo")) return [];
   const s = { ...(c.servizi || {}) }, out = [];
   if (c.revisione) s.revisione = true;
   const mm = mandatiDi(c), ch = chiusuraDi(c), pf = c.forma === "Persona fisica";

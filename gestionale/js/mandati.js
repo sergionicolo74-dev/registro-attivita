@@ -1,7 +1,7 @@
 // Riepilogo dei mandati: quanti, a che punto, budget e ore lavorate per tipo.
 import * as D from "./data.js";
 import { e, stato } from "./ui.js";
-import { fmtNum, fmtOre, TIPI_MANDATO, mandatiDi, statoMandato, daAggiornare, budgetTotale, valoreOra } from "./regole.js";
+import { fmtNum, fmtOre, TIPI_MANDATO, mandatiDi, statoMandato, daAggiornare, budgetTotale, valoreOra, clienteSpeciale } from "./regole.js";
 
 const TARIFFA_STUDIO = 150;
 let filtro = "";
@@ -22,7 +22,7 @@ export async function vistaMandati(el) {
   const [clienti, reg, utenti] = await Promise.all([D.listaClienti(),
     admin ? D.listaRegistrazioniPeriodo(`${anno}-01-01`, `${anno}-12-31`) : Promise.resolve([]), admin ? D.listaUtenti().catch(() => []) : Promise.resolve([])]);
   const tariffeUt = Object.fromEntries(utenti.filter(x => x.tariffa).map(x => [x.id, Number(x.tariffa)]));
-  const veri = clienti.filter(c => c.codice !== "C000").sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
+  const veri = clienti.filter(c => !clienteSpeciale(c)).sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
 
   // Totali per tipo

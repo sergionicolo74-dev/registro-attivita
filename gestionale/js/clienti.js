@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
   TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
-  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, TARIFFA_BASE, minutiPrevisti, fmtDurata } from "./regole.js";
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, TARIFFA_BASE, minutiPrevisti, fmtDurata, clienteSpeciale } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -16,7 +16,7 @@ function bloccaDate(form) {
 
 /** Un'etichetta per ogni mandato attivo: verde se firmato e aggiornato, altrimenti da aggiornare (ambra/rosso se la data si avvicina o è passata). */
 function segnaliMandati(c, breve = false) {
-  if (c.codice === "C000") return "";
+  if (clienteSpeciale(c)) return "";
   const mm = mandatiDi(c);
   const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo);
   if (!att.length) return stato("neutro", "Nessun mandato");
@@ -28,7 +28,7 @@ function segnaliMandati(c, breve = false) {
     return stato(st, st === "ok" ? nome + extra : `${nome}${extra}: ${mm[k].stato === "Mancante" ? "mancante" : "da aggiornare"}`);
   }).join("");
 }
-const haDaAggiornare = c => c.codice !== "C000" && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]));
+const haDaAggiornare = c => !clienteSpeciale(c) && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]));
 
 // ======================= ELENCO =======================
 export async function vistaClienti(el) {
@@ -72,7 +72,7 @@ export async function vistaClienti(el) {
       if (f === "doc") return !!docPerCliente[c.id];
       if (f === "funzione" || f === "domiciliazione" || f === "intestazione") return mandatiDi(c)[f].attivo;
       if (f === "pf") return c.forma === "Persona fisica";
-      if (f === "soc") return c.forma !== "Persona fisica" && c.codice !== "C000";
+      if (f === "soc") return c.forma !== "Persona fisica" && !clienteSpeciale(c);
       return true;
     });
     const vediManca = f === "incompleti";

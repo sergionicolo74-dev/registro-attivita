@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, periodoDi, spostaPeriodo, mandatiDi, TIPI_MANDATO, NOME_MANDATO,
-  freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE } from "./regole.js";
+  freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE, clienteSpeciale } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 
 let periodo = "trimestre", rif = oggiISO(), vista = "fatturare", fCli = "", fMand = "", fChi = "";
@@ -31,7 +31,7 @@ export async function vistaReport(el) {
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r), mand: r.praticaId ? "pratica" : mmDi[r.clienteId] ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
   const filtra = r => (!fCli || r.clienteId === fCli) && (!fMand || r.mand === fMand) && (!fChi || r.autoreUid === fChi);
   const nelPeriodo = lavoro.filter(r => r.data >= da && r.data <= a && filtra(r));
-  const clientiVeri = clienti.filter(c => c.codice !== "C000" && (!fCli || c.id === fCli)).sort((x, y) => (x.codice || "").localeCompare(y.codice || ""));
+  const clientiVeri = clienti.filter(c => !clienteSpeciale(c) && (!fCli || c.id === fCli)).sort((x, y) => (x.codice || "").localeCompare(y.codice || ""));
 
   // --- forfait: periodi chiusi che terminano nel periodo scelto ---
   const forfait = [];
@@ -76,7 +76,7 @@ export async function vistaReport(el) {
   </div>
   <div class="barra" style="margin-bottom:14px">
     <div class="segmenti" role="radiogroup" aria-label="Report">${[["fatturare", "Da fatturare"], ["redditivita", "Redditività mandati"], ["dettaglio", "Dettaglio ore"]].map(([k, n]) => `<button type="button" role="radio" data-v="${k}" aria-checked="${k === vista}">${n}</button>`).join("")}</div>
-    <select id="f-cli" aria-label="Cliente"><option value="">Tutti i clienti</option>${clientiVeri.length || fCli ? clienti.filter(c => c.codice !== "C000").sort((x, y) => (x.codice || "").localeCompare(y.codice || "")).map(c => `<option value="${e(c.id)}"${c.id === fCli ? " selected" : ""}>${e(nomeCli(c.id))}</option>`).join("") : ""}</select>
+    <select id="f-cli" aria-label="Cliente"><option value="">Tutti i clienti</option>${clientiVeri.length || fCli ? clienti.filter(c => !clienteSpeciale(c)).sort((x, y) => (x.codice || "").localeCompare(y.codice || "")).map(c => `<option value="${e(c.id)}"${c.id === fCli ? " selected" : ""}>${e(nomeCli(c.id))}</option>`).join("") : ""}</select>
     <select id="f-mand" aria-label="Mandato"><option value="">Tutti i mandati</option>${TIPI_MANDATO.map(([k, n]) => `<option value="${k}"${k === fMand ? " selected" : ""}>${e(n)}</option>`).join("")}<option value="pratica"${fMand === "pratica" ? " selected" : ""}>Pratiche</option></select>
     <select id="f-chi" aria-label="Collaboratore"><option value="">Tutti i collaboratori</option>${utenti.filter(x => x.ruolo).map(x => `<option value="${e(x.id)}"${x.id === fChi ? " selected" : ""}>${e(x.nome || x.id)}</option>`).join("")}</select>
   </div>

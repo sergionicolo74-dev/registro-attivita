@@ -436,3 +436,5 @@ tr.chiusa td { color: var(--tenue); }
 .scelte button[aria-checked="true"] { background: var(--inchiostro); color: #fff; border-color: var(--inchiostro); }
 .scelte button[aria-checked="true"] small { color: #D9D7CF; }
 .scelte i.pt { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+.lbl-riga { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.lbl-riga label { margin: 0; }

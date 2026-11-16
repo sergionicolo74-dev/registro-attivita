@@ -6,7 +6,7 @@ import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
   riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
-  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, valoreOra } from "./regole.js";
+  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, valoreOra, clienteSpeciale } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
@@ -47,7 +47,7 @@ export async function vistaDashboard(el) {
   const valR = r => valoreOra(r, mmDi[r.clienteId], tariffeUt);
   const scelti = chi === "tutti" ? utenti.map(x => x.id) : [chi];
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r),
-    mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && cliPer[r.clienteId]?.codice !== "C000" ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+    mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
   const miei = lavoro.filter(r => scelti.includes(r.autoreUid));
 
   // --- composizione del tempo per persona (fino a ieri, confronto con la presenza) ---
@@ -299,7 +299,7 @@ async function caricaSemafori() {
     entro5: sca.filter(o => urgenzaScadenza(o) === "urgente").length,
     compitiScaduti: compiti.filter(k => aperto(k) && urgenzaCompito(k) === "scaduto").length,
     compitiFermi: compiti.filter(k => aperto(k) && urgenzaCompito(k) === "fermo").length,
-    mandati: clienti.filter(c => c.codice !== "C000" && (!c.stato || c.stato === "Attivo") && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]))).length,
+    mandati: clienti.filter(c => !clienteSpeciale(c) && (!c.stato || c.stato === "Attivo") && TIPI_MANDATO.some(([k]) => daAggiornare(mandatiDi(c)[k]))).length,
     richieste: vacanze.filter(v => v.stato === "Richiesta").length,
     praticheSoll: pratiche.filter(p => urgenzaPratica(p) === "sollecitare").length,
     praticheFatt: pratiche.filter(p => p.fase === "Conclusa" && p.fatturazione?.modo !== "Non fatturare" && p.fatturazione?.stato !== "Fatturata").length,

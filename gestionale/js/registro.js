@@ -1,7 +1,7 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
-import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta } from "./regole.js";
+import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta, ID_INTERNO, CLIENTE_INTERNO } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
 const TIPI = [["lavoro", "Lavoro svolto"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
@@ -22,6 +22,11 @@ export async function vistaRegistro(el) {
   const [clienti, reg, profilo, presOggi, pratiche, tutte] = await Promise.all([D.listaClienti(), D.listaRegistrazioniPeriodo(lun, dom),
     D.leggiProfilo(u.uid).catch(() => null), D.listaPresenze(u.uid, giorno, giorno).catch(() => []), D.listaPratiche().catch(() => []),
     D.listaRegistrazioniPeriodo(daE, "2999-12-31").catch(() => [])]);
+  // Cliente fisso per le ore interne dello studio: lo crea l'amministratore la prima volta
+  if (admin && !clienti.some(c => c.interno)) {
+    try { await D.salvaCliente({ id: ID_INTERNO, ...CLIENTE_INTERNO }); clienti.push({ id: ID_INTERNO, ...CLIENTE_INTERNO }); } catch {}
+  }
+  const interno = clienti.find(c => c.interno);
   const nomeCli = Object.fromEntries(clienti.map(c => [c.id, `${c.codice} · ${c.ragioneSociale}`]));
   const settimana = reg.filter(r => !admin || !soloMie || r.autoreUid === u.uid);
   const delGiorno = settimana.filter(r => r.data === giorno).sort((a, b) => String(b.creato || b.aggiornato || "").localeCompare(String(a.creato || a.aggiornato || "")));
@@ -97,7 +102,7 @@ export async function vistaRegistro(el) {
     </div>
     <input type="hidden" name="tipo" value="${tipo}">
     <div class="griglia">
-      <div class="largo"><label for="f_cliente">Cliente</label>
+      <div class="largo"><div class="lbl-riga"><label for="f_cliente">Cliente</label>${interno ? '<button type="button" class="btn piccolo" id="interni">🏢 Lavori interni</button>' : ""}</div>
         <input id="f_cliente" list="lista-clienti" autocomplete="off" placeholder="Scrivi nome o codice" value="${e(m.clienteId ? nomeCli[m.clienteId] || "" : "")}">
         <datalist id="lista-clienti">${clientiOrd.map(c => `<option value="${e(nomeCli[c.id])}"></option>`).join("")}</datalist></div>
       <div class="solo-lavoro largo"><label id="lbl-scelta">Che lavoro è?</label>
@@ -186,17 +191,20 @@ export async function vistaRegistro(el) {
     // Solo tre scelte: compreso nel mandato, consulenza extra, ore interne non fatturabili.
     // (una vecchia registrazione su una pratica, in modifica, resta visibile)
     const prat = scelto && scelto.startsWith("pratica:") ? pratiche.filter(p => "pratica:" + p.id === scelto) : [];
-    const voci = [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
+    const voci = cli.interno ? [["non", "Non fatturabile", "ore interne dello studio", "c-non"]] : [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
       ["mandato", mandatoPrinc ? NOME_MANDATO[mandatoPrinc] : "Contabilità", "nel mandato", "c-mand"],
       ["non", "Non fatturabile", "ore interne", "c-non"],
       ...prat.map(p => ["pratica:" + p.id, p.titolo || p.tipo, "pratica", "c-prat"])];
     box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");
     box.querySelectorAll("[data-sc]").forEach(x => x.addEventListener("click", () => scegli(x.dataset.sc)));
     // proposta: la scelta della registrazione in modifica, altrimenti l'ultima usata per questo cliente
-    const prop = scelto !== undefined ? scelto : memo.get(cli.id);
+    const prop = cli.interno ? "non" : scelto !== undefined ? scelto : memo.get(cli.id);
     scegli(voci.some(([k]) => k === prop) ? prop : "");
   };
   aggiornaMandati(m.id ? sceltaDi(m) : undefined);
+  el.querySelector("#interni")?.addEventListener("click", () => {
+    el.querySelector("#f_cliente").value = nomeCli[interno.id]; aggiornaMandati(); form.descrizione.focus();
+  });
   el.querySelector("#f_cliente").addEventListener("change", () => aggiornaMandati());
   el.querySelector("#f_cliente").addEventListener("input", () => aggiornaMandati());
   form.minuti.addEventListener("input", aggiornaInvia);

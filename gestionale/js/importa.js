@@ -102,7 +102,7 @@ async function anteprimaBackup(file, box) {
     clienti.sort((a, b) => (a.codice || "").localeCompare(b.codice || "")).map(c => `<option value="${e(c.id)}"${c.id === sel ? " selected" : ""}>${e(c.codice)} · ${e(c.ragioneSociale)}</option>`).join("");
   const proposta = n => { const c = abbinaNome(n, clienti); if (c) return c.id; return occasionali(n) ? (clienti.find(x => x.codice === "C000")?.id || "__nuovo_occasionali") : "__crea"; };
   // Clienti già presenti che non corrispondono a nessun nome del registro (es. prove): spostano la numerazione dei codici
-  const estranei = clienti.filter(c => c.codice !== "C000" && !nomi.some(n => abbinaNome(n, [c])));
+  const estranei = clienti.filter(c => c.codice !== "C000" && !c.interno && !nomi.some(n => abbinaNome(n, [c])));
   box.innerHTML = `${estranei.length ? `<div class="pannello allerta" style="margin-bottom:12px">${stato("urgente", "Prima di importare")}
     <p style="margin:8px 0 0">Nel gestionale ci sono già ${estranei.length === 1 ? "un cliente che non è" : estranei.length + " clienti che non sono"} nel registro: ${estranei.map(c => `<a href="#/clienti/${encodeURIComponent(c.id)}">${e(c.codice)} · ${e(c.ragioneSociale)}</a>`).join(", ")}.
     Se ${estranei.length === 1 ? "è una prova, eliminalo" : "sono prove, eliminali"} (apri il cliente → <strong>Elimina cliente</strong>) e poi ricarica questa pagina: così i nuovi clienti avranno i codici C001… come nel file Excel dell'anagrafica.</p></div>` : ""}

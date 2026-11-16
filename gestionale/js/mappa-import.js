@@ -24,10 +24,11 @@ export function figliDaTesto(t) {
 
 /** Modello completo (versione 3): mandati separati, persone fisiche, documenti DF. */
 function clientiDaExcelV3(righe) {
-  const clienti = [], kyc = [], errori = [];
+  const clienti = [], kyc = [], errori = [], senzaCodice = [];
   righe.forEach((r, i) => {
     const codice = T(r["Codice cliente"]);
-    if (!codice || codice.toUpperCase() === "ESEMPIO") return;
+    if (!codice) { const rs0 = T(r["Ragione sociale"]); if (rs0 && !rs0.startsWith("*")) senzaCodice.push(rs0); return; }
+    if (codice.toUpperCase() === "ESEMPIO") return;
     const rs = T(r["Ragione sociale"]);
     if (!rs) { errori.push(`Riga ${i + 3}: manca la ragione sociale (codice ${codice})`); return; }
     const servizi = {};
@@ -70,7 +71,7 @@ function clientiDaExcelV3(righe) {
     kyc.push({ codice, stato: T(r["Stato KYC"]), rischio: T(r["Rischio"]), ultimaVerifica: parseData(r["Ultima verifica KYC"]), prossimaRevisione: parseData(r["Prossima revisione KYC"]),
       ...(fid ? { intestazione: { fiduciante: fid } } : {}) });
   });
-  return { clienti, kyc, errori };
+  return { clienti, kyc, errori, senzaCodice };
 }
 
 /** Righe del foglio "Clienti" (oggetti con le intestazioni come chiavi) -> { clienti, kyc, errori }. Riconosce il modello completo e quello precedente. */
@@ -80,10 +81,11 @@ export function clientiDaExcel(righe) {
     for (const c of out.clienti) { if (visti.has(c.codice)) out.errori.push(`Codice ${c.codice} ripetuto`); visti.add(c.codice); }
     return out;
   }
-  const clienti = [], kyc = [], errori = [];
+  const clienti = [], kyc = [], errori = [], senzaCodice = [];
   righe.forEach((r, i) => {
     const codice = T(r["Codice cliente"]);
-    if (!codice || codice.toUpperCase() === "ESEMPIO") return;
+    if (!codice) { const rs0 = T(r["Ragione sociale"]); if (rs0 && !rs0.startsWith("*")) senzaCodice.push(rs0); return; }
+    if (codice.toUpperCase() === "ESEMPIO") return;
     const rs = T(r["Ragione sociale"]);
     if (!rs) { errori.push(`Riga ${i + 2}: manca la ragione sociale (codice ${codice})`); return; }
     const servizi = {};
@@ -111,15 +113,17 @@ export function clientiDaExcel(righe) {
   });
   const visti = new Set();
   for (const c of clienti) { if (visti.has(c.codice)) errori.push(`Codice ${c.codice} ripetuto`); visti.add(c.codice); }
-  return { clienti, kyc, errori };
+  return { clienti, kyc, errori, senzaCodice };
 }
 
 /** Righe del foglio "Persone" -> { persone: [{codice, dati, kyc}], errori } */
 export function personeDaExcel(righe, codiciValidi) {
   const persone = [], errori = [];
+  let senzaCodice = 0;
   righe.forEach((r, i) => {
     const codice = T(r["Codice cliente"]);
-    if (!codice || codice.toUpperCase() === "ESEMPIO") return;
+    if (!codice) { if (T(r["Cognome"]) || T(r["Nome"])) senzaCodice++; return; }
+    if (codice.toUpperCase() === "ESEMPIO") return;
     if (!T(r["Cognome"]) && !T(r["Nome"])) return;
     if (codiciValidi && !codiciValidi.has(codice)) { errori.push(`Persone, riga ${i + 2}: codice cliente ${codice} non trovato`); return; }
     persone.push({
@@ -130,7 +134,7 @@ export function personeDaExcel(righe, codiciValidi) {
         scadenzaDocumento: parseData(r["Scadenza documento"]), copiaArchivio: X(r["Copia documento in archivio"]) }
     });
   });
-  return { persone, errori };
+  return { persone, errori, senzaCodice };
 }
 
 /** Trova il cliente per nome (ragione sociale o nomi precedenti). */
@@ -176,4 +180,10 @@ export function unisciCliente(esistente, nuovo) {
     else out[k] = v;
   }
   return out;
+}
+
+/** Stesso cliente con il nome scritto un po' diverso? (es. "T&MC Industri SA" / "T&MC INDUSTRY SA") */
+export function nomiSimili(a, b) {
+  const x = normNome(a).replace(/\s+/g, ""), y = normNome(b).replace(/\s+/g, "");
+  return !!x && !!y && (x.slice(0, 6) === y.slice(0, 6) || x.includes(y) || y.includes(x));
 }

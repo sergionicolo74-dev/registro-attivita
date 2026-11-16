@@ -2,7 +2,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
 import { fmtOre, normNome } from "./regole.js";
-import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup, unisciCliente } from "./mappa-import.js";
+import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup, unisciCliente, nomiSimili } from "./mappa-import.js";
 
 // SheetJS (licenza Apache 2.0) incluso nel progetto, così non dipende da siti esterni
 const SHEETJS = new URL("../lib/xlsx.full.min.js", import.meta.url).href;
@@ -39,7 +39,7 @@ async function anteprimaExcel(file, box) {
     return XLSX.utils.sheet_to_json(sh, { defval: "", range: a1 === "Codice cliente" ? 0 : 1 });
   };
   if (!wb.Sheets["Clienti"]) { box.innerHTML = stato("scaduto", "Nel file manca il foglio Clienti"); return; }
-  const { clienti, kyc, errori } = clientiDaExcel(foglio("Clienti"));
+  const { clienti, kyc, errori, senzaCodice = [] } = clientiDaExcel(foglio("Clienti"));
   const esistenti = await D.listaClienti();
   const perCodice = Object.fromEntries(esistenti.map(c => [c.codice, c]));
   // Abbinamento: prima per nome (es. clienti creati dal vecchio registro), poi per codice
@@ -50,18 +50,23 @@ async function anteprimaExcel(file, box) {
     if (exNome && exNome !== exCod) {
       if (exCod) conflitti.push(`Il codice ${c.codice} (${c.ragioneSociale}) è già usato da «${exCod.ragioneSociale}» nel gestionale`);
       perCodice[c.codice] = exNome; perNome++;
-    } else if (exCod && normNome(exCod.ragioneSociale) !== normNome(c.ragioneSociale) && !(exCod.aliasNomi || []).length) {
+    } else if (exCod && normNome(exCod.ragioneSociale) !== normNome(c.ragioneSociale) && !(exCod.aliasNomi || []).length && !nomiSimili(exCod.ragioneSociale, c.ragioneSociale)) {
       conflitti.push(`Il codice ${c.codice} è «${exCod.ragioneSociale}» nel gestionale ma «${c.ragioneSociale}» nel file`);
     }
   }
   errori.push(...conflitti);
   const codici = new Set([...clienti.map(c => c.codice), ...esistenti.map(c => c.codice)]);
-  const { persone, errori: errP } = personeDaExcel(foglio("Persone"), codici);
+  const { persone, errori: errP, senzaCodice: persSenza = 0 } = personeDaExcel(foglio("Persone"), codici);
+  const rinomina = clienti.filter(c => perCodice[c.codice] && normNome(perCodice[c.codice].ragioneSociale) !== normNome(c.ragioneSociale) && nomiSimili(perCodice[c.codice].ragioneSociale, c.ragioneSociale))
+    .map(c => `${c.codice}: «${perCodice[c.codice].ragioneSociale}» diventa «${c.ragioneSociale}»`);
   const nuovi = clienti.filter(c => !perCodice[c.codice]).length;
   const tuttiErr = [...errori, ...errP];
   box.innerHTML = `<div class="segnali">${stato("info", `${clienti.length} clienti: ${nuovi} nuovi, ${clienti.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} abbinati per nome`) : ""}
     ${tuttiErr.length ? stato("scaduto", `${tuttiErr.length} problemi`) : stato("ok", "Nessun problema")}</div>
     ${tuttiErr.length ? `<ul>${tuttiErr.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
+    ${rinomina.length ? `<p style="margin-top:8px">${stato("info", `${rinomina.length} nomi aggiornati`)} <span class="tenue" style="font-size:13px">il nome vecchio resta come alias, le ore già registrate restano collegate</span></p><ul style="font-size:13px">${rinomina.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
+    ${senzaCodice.length ? `<p style="margin-top:8px">${stato("urgente", `${senzaCodice.length} righe senza codice cliente: non vengono importate`)}</p><details style="font-size:13px"><summary>Vedi quali</summary>${senzaCodice.map(e).join(" · ")}</details><p class="tenue" style="font-size:13px">Per importarle dai loro un codice nel file (C035, C036…).</p>` : ""}
+    ${persSenza ? `<p style="margin-top:8px">${stato("urgente", `${persSenza} persone senza codice cliente: non vengono importate`)} <span class="tenue" style="font-size:13px">nel foglio Persone scrivi in colonna A il codice del cliente a cui appartengono</span></p>` : ""}
     ${conflitti.length ? `<p>${stato("scaduto", "Codici in conflitto: correggi il file o i codici nel gestionale prima di importare")}</p>` : ""}
     <div class="azioni"><button class="btn primario" id="vai-xlsx" ${clienti.length && !conflitti.length ? "" : "disabled"}>Importa</button></div><div class="avanzamento" hidden><div></div></div>`;
   box.querySelector("#vai-xlsx").addEventListener("click", async () => {

@@ -72,9 +72,17 @@ async function leggi(col, id) {
   const s = await fb.getDoc(fb.doc(db, col, id));
   return s.exists() ? { id: s.id, ...s.data() } : null;
 }
+/** Toglie i campi "undefined" (anche annidati): Firestore li rifiuta e il salvataggio fallirebbe. */
+function pulisci(v) {
+  if (Array.isArray(v)) return v.map(pulisci);
+  if (v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+    const o = {}; for (const [k, x] of Object.entries(v)) if (x !== undefined) o[k] = pulisci(x); return o;
+  }
+  return v;
+}
 async function scrivi(col, obj) {
   const id = obj.id || nuovoId();
-  const { id: _, ...dati } = obj;
+  const { id: _, ...dati } = pulisci(obj);
   dati.aggiornato = ora();
   dati.aggiornatoDa = utente?.uid || null;
   if (demo) { demo[col] = demo[col] || {}; demo[col][id] = { ...(demo[col][id] || {}), ...dati, id }; return id; }
@@ -94,7 +102,7 @@ export async function scriviMolti(docs, avanzamento = () => {}) {
     else {
       const b = fb.writeBatch(db);
       for (const d of parte) {
-        const { col, id, ...r } = d;
+        const { col, id, ...r } = pulisci(d);
         b.set(fb.doc(db, col, id || nuovoId()), { ...r, aggiornato: ora(), aggiornatoDa: utente.uid }, { merge: true });
       }
       await b.commit();

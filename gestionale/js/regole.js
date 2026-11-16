@@ -192,6 +192,11 @@ export const STATI_COMPITO = ["Da fare", "Preso in carico", "In attesa", "In att
 export const CATEGORIE_COMPITO = ["Promemoria", "Delega", "Reclamo fiscale", "Richiesta documenti", "Pratica amministrativa",
   "Apertura conto", "Presentazione", "Attesa riscontro", "Richiesta interna", "Da fare", "Altro"];
 export const GIORNI_FERMO = 5;
+/** Priorità di un compito: [chiave, nome]. Ordine = importanza. */
+export const PRIORITA = [["urgente", "Urgente"], ["importante", "Importante"], ["normale", "Normale"]];
+export const rangoPriorita = k => ({ urgente: 0, importante: 1 }[k.priorita] ?? 2);
+/** Colonna del compito nella vista a colonne: assegnato → preso in carico → in attesa. */
+export const colonnaCompito = k => k.stato === "Preso in carico" ? "carico" : (k.stato === "In attesa" || k.stato === "In attesa riscontro") ? "attesa" : "assegnato";
 export const aperto = (k) => k.stato !== "Fatto" && !k.completatoIl;
 
 /** Giorni da un istante ISO (data e ora) a oggi. */

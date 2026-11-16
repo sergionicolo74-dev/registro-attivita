@@ -280,6 +280,5 @@ console.log("Test compiti superati");
   const s = R.statoRichieste(k, "2026-11-16");
   tst(s.tot === 3 && s.aperte === 2 && s.ricevute === 1 && s.daSollecitare === 1, "stato richieste: 3 totali, 2 aperte, 1 da sollecitare");
   tst(R.tipoPraticaDa("Fare il reclamo delle tasse del cliente X") === "Reclamo / ricorso", "tipo pratica dal testo: reclamo");
-  tst(R.tipoPraticaDa("Stipendi novembre") === "Stipendi / salari", "tipo pratica dal testo: stipendi");
   tst(R.tipoPraticaDa("Telefonare") === "Altro", "tipo pratica dal testo: altro");
 }

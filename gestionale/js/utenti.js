@@ -26,15 +26,15 @@ export async function vistaUtenti(el) {
   const utenti = tutti.sort((a, b) => (b.attivo !== false) - (a.attivo !== false) || String(a.nome || "").localeCompare(String(b.nome || "")));
   el.innerHTML = `<div class="testata"><div><h1>Utenti</h1><div class="tenue">Chi può accedere al gestionale</div></div>
       <div class="barra"><button class="btn primario" id="nuovo-u">Nuovo collaboratore</button></div></div>
-    <table class="tabella"><thead><tr><th>Nome</th><th>Colore</th><th>Email</th><th>Ruolo</th><th>Accesso</th><th>Accordo 73b</th><th>Orario</th><th class="num">Tariffa</th></tr></thead><tbody>
+    <table class="tabella"><thead><tr><th>Nome</th><th>Colore</th><th>Email</th><th>Ruolo</th><th>Accesso</th><th>Accordo 73b</th><th>Orario</th><th class="num">Vacanze</th><th class="num">Tariffa</th></tr></thead><tbody>
     ${utenti.map(u => `<tr class="cliccabile" data-id="${e(u.id)}" tabindex="0">
       <td><strong>${e(u.nome || "(senza nome)")}</strong>${u.id === me.uid ? ' <span class="tenue">· tu</span>' : ""}</td>
       <td>${col[u.id] ? `<span class="leg-p"><i style="background:${col[u.id]}"></i>${e(NOMI_COLORE[COLORI_PERSONA.indexOf(col[u.id])])}</span>` : "–"}</td><td>${e(u.email || "")}</td>
       <td>${u.ruolo === "admin" ? stato("info", "Amministratore") : u.ruolo === "utente" ? stato("neutro", "Utente") : stato("urgente", "Nessun ruolo")}${u.ruolo === "utente" && u.fatturazione ? " " + stato("info", "Report e fatture") : ""}${u.backoffice ? " " + stato("neutro", "Back office") : ""}</td>
       <td>${u.attivo === false ? stato("scaduto", "Disattivato") : stato("ok", "Attivo")}</td>
       <td>${u.accordo73b ? e(fmtData(u.accordo73b)) : '<span class="tenue">–</span>'}</td>
-      <td>${e(u.oreSettimanali || 42)} h · ${e(u.percentuale ?? 100)}%</td><td class="num">CHF ${e(u.tariffa || 150)}/h</td></tr>`).join("")}</tbody></table>
-    <p class="tenue" style="margin-top:10px">La tariffa serve a valutare le ore lavorate e le ore extra (es. titolare CHF 190, collaboratori CHF 150), salvo una tariffa concordata con il cliente. Il nome deve essere scritto come nel campo "Responsabile" dei clienti: così lo Scadenziario sa di chi sono le scadenze. Orario, accordo 73b e saldo ore si impostano in Presenze → Orario e accordo.</p>`;
+      <td>${e(u.oreSettimanali || 42)} h · ${e(u.percentuale ?? 100)}%</td><td class="num">${u.giorniVacanza ? e(u.giorniVacanza) + " giorni" : '<span class="tenue">da impostare</span>'}</td><td class="num">CHF ${e(u.tariffa || 150)}/h</td></tr>`).join("")}</tbody></table>
+    <p class="tenue" style="margin-top:10px">La tariffa serve a valutare le ore lavorate e le ore extra (es. titolare CHF 190, collaboratori CHF 150), salvo una tariffa concordata con il cliente. Il nome deve essere scritto come nel campo "Responsabile" dei clienti: così lo Scadenziario sa di chi sono le scadenze. I giorni di vacanza si impostano qui (clic sulla persona); orario, accordo 73b e saldo ore in Presenze → Orario e accordo.</p>`;
   const ricarica = () => vistaUtenti(el);
   el.querySelector("#nuovo-u").addEventListener("click", () => cassetto(null, ricarica, col));
   el.querySelectorAll("tr[data-id]").forEach(tr => {
@@ -56,6 +56,7 @@ function cassetto(u, ricarica, col = {}) {
         ${COLORI_PERSONA.map((c, i) => { const scelto = u?.colore ? u.colore === i + 1 : col[u?.id] === c;
           return `<label class="leg-p"><input type="radio" name="colore" value="${i + 1}"${scelto ? " checked" : ""}><i style="background:${c}"></i>${NOMI_COLORE[i]}</label>`; }).join("")}</div></div>
       ${campo("tariffa", "Tariffa oraria CHF (vuoto = 150)", u?.tariffa, "number")}
+      ${campo("giorniVacanza", "Giorni di vacanza all'anno (es. 20 o 25; a tempo pieno)", u?.giorniVacanza, "number")}
       <div class="largo">${campo("backoffice", "Back office: registra le ore solo per i lavori particolari (il resto della presenza conta come back office, non come ore mancanti)", !!u?.backoffice, "checkbox", [], true)}</div>
       <div class="largo" id="box-fatt"${(u?.ruolo || "utente") === "admin" ? " hidden" : ""}>${campo("fatturazione", "Può vedere i Report e fatturare (ore di tutti, fatture, redditività)", !!u?.fatturazione, "checkbox", [], true)}</div>
       ${nuovo ? "" : `<div><label for="f_att">Accesso</label><select id="f_att" name="attivo"${io ? " disabled" : ""}><option value="si"${u.attivo !== false ? " selected" : ""}>Attivo</option><option value="no"${u.attivo === false ? " selected" : ""}>Disattivato</option></select></div>`}
@@ -85,7 +86,7 @@ function cassetto(u, ricarica, col = {}) {
       try {
         const id = await D.creaCollaboratore({ nome: d.nome, email: d.email.toLowerCase(), ruolo: d.ruolo });
         const scelto = form.querySelector("input[name=colore]:checked");
-        await D.salvaUtente({ id, tariffa: d.tariffa || null, ...(scelto ? { colore: +scelto.value } : {}), fatturazione: d.ruolo === "utente" && !!d.fatturazione, backoffice: !!d.backoffice });
+        await D.salvaUtente({ id, tariffa: d.tariffa || null, giorniVacanza: d.giorniVacanza ?? null, ...(scelto ? { colore: +scelto.value } : {}), fatturazione: d.ruolo === "utente" && !!d.fatturazione, backoffice: !!d.backoffice });
         chiudi(); avviso(`Account creato: email inviata a ${d.email}`); ricarica();
       } catch (x) {
         console.error(x); btn.disabled = false; btn.textContent = "Crea e invia email";
@@ -94,7 +95,7 @@ function cassetto(u, ricarica, col = {}) {
       return;
     }
     const scelto = form.querySelector("input[name=colore]:checked");
-    await D.salvaUtente({ id: u.id, nome: d.nome, tariffa: d.tariffa || null, ...(scelto ? { colore: +scelto.value } : {}), backoffice: !!d.backoffice, ...(io ? {} : { ruolo: d.ruolo, attivo: d.attivo !== "no", fatturazione: d.ruolo === "utente" && !!d.fatturazione }) });
+    await D.salvaUtente({ id: u.id, nome: d.nome, tariffa: d.tariffa || null, giorniVacanza: d.giorniVacanza ?? null, ...(scelto ? { colore: +scelto.value } : {}), backoffice: !!d.backoffice, ...(io ? {} : { ruolo: d.ruolo, attivo: d.attivo !== "no", fatturazione: d.ruolo === "utente" && !!d.fatturazione }) });
     chiudi(); avviso("Utente aggiornato"); ricarica();
   });
   form.nome.focus();

@@ -106,7 +106,7 @@ export async function vistaRegistro(el) {
     ${elenco.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Mandato / pratica</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Fatturazione</th><th class="num">Durata</th><th></th></tr></thead><tbody>
       ${elenco.slice(0, eQuante).map(r => `<tr${chiusa(r) ? ' class="chiusa"' : ""}><td style="white-space:nowrap"><a href="#" data-vai="${e(r.data)}">${e(fmtData(r.data))}</a></td>
         <td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
-        <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}</td>
+        <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}${r.attivita === "stipendi" ? " · Stipendi" : ""}</td>
         <td class="desc-r">${e(r.descrizione).replace(/\n/g, "<br>")}</td>${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td>${stato(...ETI_F[tipoF(r)])}</td><td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}</td>
         <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}</tbody></table></div>
@@ -177,7 +177,7 @@ export async function vistaRegistro(el) {
     <h2 style="font-size:16px;margin-bottom:10px">${e(fmtData(giorno))}</h2>
     ${delGiorno.length ? `<table class="tabella"><thead><tr><th>Cliente</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th class="num">Durata</th><th></th></tr></thead><tbody>
       ${delGiorno.map(r => `<tr><td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
-        <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
+        <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.attivita === "stipendi" ? '<div class="tenue" style="font-size:12px">Stipendi (nel forfait)</div>' : r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
         ${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : r.extra ? '<div class="tenue">extra</div>' : ""}</td>
         <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}
@@ -259,10 +259,11 @@ export async function vistaRegistro(el) {
     || clientiOrd.find(c => normNome(c.ragioneSociale) === normNome(t) || normNome(c.codice) === normNome(t));
   let ultimoCli;
   // Scelta unica "Che lavoro è?": decide insieme mandato e fatturazione (un clic)
-  const sceltaDi = r => !r?.id ? "" : r.praticaId ? "pratica:" + r.praticaId : r.fatturabile === false ? "non" : r.extra ? "consulenza" : "mandato";
-  let mandatoPrinc = null; // mandato a cui vanno le ore "nel mandato" del cliente scelto
+  const sceltaDi = r => !r?.id ? "" : r.praticaId ? "pratica:" + r.praticaId : r.fatturabile === false ? "non" : r.extra ? "consulenza" : r.attivita === "stipendi" ? "stipendi" : "mandato";
+  let mandatoPrinc = null;
+  const mm0 = c => mandatiDi(c);
   const memo = { get: id => { try { return localStorage.getItem("scelta_" + id) || ""; } catch { return ""; } }, set: (id, v) => { try { localStorage.setItem("scelta_" + id, v); } catch {} } };
-  const nomeScelta = v => v === "consulenza" ? "Consulenza (extra)" : v === "non" ? "Non fatturabile" : v.startsWith("pratica:") ? "Pratica" : "nel mandato";
+  const nomeScelta = v => v === "consulenza" ? "Consulenza (extra)" : v === "non" ? "Non fatturabile" : v === "stipendi" ? "Stipendi (nel forfait)" : v.startsWith("pratica:") ? "Pratica" : "nel mandato";
   const aggiornaInvia = () => {
     if (form.tipo.value !== "lavoro" || modifica) return;
     const min = Number(form.minuti.value || 0), sc = form.scelta.value;
@@ -288,6 +289,7 @@ export async function vistaRegistro(el) {
     const prat = pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto));
     const voci = cli.interno ? [["non", "Non fatturabile", "ore interne dello studio", "c-non"]] : [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
       ["mandato", mandatoPrinc ? NOME_MANDATO[mandatoPrinc] : "Contabilità", "nel mandato", "c-mand"],
+      ["stipendi", "Stipendi", "nel forfait", "c-mand"],
       ["non", "Non fatturabile", "ore interne", "c-non"],
       ...prat.map(p => ["pratica:" + p.id, "📁 " + (p.titolo || p.tipo), `pratica · ${p.fatturazione?.modo === "A ore" ? "a ore" : p.fatturazione?.modo === "Non fatturare" ? "non fatturata" : "forfait"}`, "c-prat"])];
     box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");
@@ -397,7 +399,8 @@ export async function vistaRegistro(el) {
     const prat = sc.startsWith("pratica:");
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
       clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? sc !== "non" : false, extra: t === "lavoro" && sc === "consulenza", tipo: t, descrizione,
-      mandato: t === "lavoro" ? (prat ? "pratica" : (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : sc === "mandato" ? mandatoPrinc : null)) : null,
+      mandato: t === "lavoro" ? (prat ? "pratica" : sc === "stipendi" ? (mm0(cli).contabilita.attivo ? "contabilita" : mandatoPrinc) : (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : sc === "mandato" ? mandatoPrinc : null)) : null,
+      attivita: t === "lavoro" && sc === "stipendi" ? "stipendi" : null,
       praticaId: t === "lavoro" && prat ? sc.slice(8) : null };
     if (t === "lavoro") memo.set(cli.id, sc);
     const id = await D.salvaRegistrazione(dati);

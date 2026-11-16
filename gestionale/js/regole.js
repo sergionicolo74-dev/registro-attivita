@@ -498,7 +498,7 @@ export const TIPI_PRATICA = [
   ["Affiliazione AVS", "Cassa AVS", 30], ["Rateizzazione imposte", "Ufficio esazione e condoni", 20],
   ["Richiesta di proroga", "Ufficio di tassazione", 20], ["Reclamo / ricorso", "Ufficio di tassazione", 60],
   ["Permesso di lavoro / dimora", "Ufficio della migrazione", 45], ["Iscrizione / modifica a Registro di commercio", "Registro di commercio", 15],
-  ["Rimborso imposta preventiva", "AFC", 45], ["Stipendi / salari", "", 30], ["Certificato / estratto", "", 15], ["Altro", "", 21]
+  ["Rimborso imposta preventiva", "AFC", 45], ["Certificato / estratto", "", 15], ["Altro", "", 21]
 ];
 export const ATTESA_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, , g]) => [t, g]));
 export const ENTE_TIPO = Object.fromEntries(TIPI_PRATICA.map(([t, en]) => [t, en]));
@@ -634,6 +634,6 @@ export function tipoPraticaDa(testo) {
   const t = normNome(testo || "");
   const regole = [["reclam", "Reclamo / ricorso"], ["ricors", "Reclamo / ricorso"], ["assegn", "Assegni familiari"], ["rateizz", "Rateizzazione imposte"],
     ["proroga", "Richiesta di proroga"], ["permess", "Permesso di lavoro / dimora"], ["registro di commercio", "Iscrizione / modifica a Registro di commercio"],
-    ["imposta preventiva", "Rimborso imposta preventiva"], ["stipend", "Stipendi / salari"], ["salari", "Stipendi / salari"], ["estratto", "Estratto conto individuale AVS"], ["affiliaz", "Affiliazione AVS"]];
+    ["imposta preventiva", "Rimborso imposta preventiva"], ["estratto", "Estratto conto individuale AVS"], ["affiliaz", "Affiliazione AVS"]];
   return regole.find(([k]) => t.includes(k))?.[1] || "Altro";
 }

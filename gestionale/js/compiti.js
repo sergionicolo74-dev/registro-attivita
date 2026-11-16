@@ -249,7 +249,7 @@ function cassettoCompito(k, clienti, nomeCli, persone, ricarica, opz = {}) {
     </div>
     <div class="sezione"><h3>Pratica collegata</h3>
       ${k.praticaId ? `<p>📁 <a href="#" id="vai-prat">${e(k.praticaTitolo || "Apri la pratica")}</a> <span class="tenue">· il rapporto con l'ente e la fatturazione si seguono nella pratica</span></p>`
-        : `<p class="tenue" style="font-size:13px;margin-bottom:8px">Se il lavoro è una procedura con un ente (reclamo, assegni, rateizzazione, stipendi…) o va fatturato a parte, crea la pratica: resta collegata a questo compito.</p>
+        : `<p class="tenue" style="font-size:13px;margin-bottom:8px">Se il lavoro è una procedura con un ente (reclamo, assegni, rateizzazione…) o va fatturato a parte, crea la pratica: resta collegata a questo compito.</p>
         <button type="button" class="btn" id="crea-prat"${k.clienteId ? "" : " disabled title=\"Indica prima il cliente\""}>📁 Crea pratica collegata</button>`}
     </div>` : ""}
     <div class="sezione"><h3>Aggiornamenti</h3>

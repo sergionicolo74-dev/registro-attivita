@@ -83,7 +83,7 @@ export async function vistaVacanze(el) {
         <td class="num">${dir ? (rest < 0 ? stato("scaduto", f(rest)) : f(rest)) : "–"}</td>
         <td>${dir ? `<div class="barra-v" role="img" aria-label="${f(usate)} approvate, ${f(chieste)} in attesa su ${f(dir)}"><div class="usate" style="width:${p(usate)}%"></div><div class="chieste" style="width:${Math.max(0, Math.min(100 - p(usate), p(chieste)))}%"></div></div>` : ""}</td></tr>`;
     }).join("")}</tbody></table>
-    <p class="tenue" style="font-size:13px;margin-top:8px">Si contano i giorni lavorativi (lunedì–venerdì, esclusi i festivi ticinesi). Il diritto annuo si imposta in Presenze → Orario e accordo. Le vacanze approvate compaiono da sole nelle Presenze.</p>
+    <p class="tenue" style="font-size:13px;margin-top:8px">Si contano i giorni lavorativi (lunedì–venerdì, esclusi i festivi ticinesi). Il diritto annuo si imposta in Utenti (clic sulla persona → Giorni di vacanza all'anno). Le vacanze approvate compaiono da sole nelle Presenze.</p>
     ${mie.length ? `<h3 style="font-size:14px;margin:14px 0 6px">Le tue assenze ${anno}</h3><ul class="richieste">${mie.map(v => `<li class="richiesta"><div style="flex:1">${e(v.tipo)} · ${e(fmtData(v.dal))}${v.mezza || v.al === v.dal ? "" : ` – ${e(fmtData(v.al))}`}</div>${stato(v.stato === "Approvata" ? "ok" : "scaduto", v.stato)}</li>`).join("")}</ul>` : ""}
   </section>`;
 

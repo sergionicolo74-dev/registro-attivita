@@ -37,8 +37,9 @@ service cloud.firestore {
     match /registrazioni/{id} {
       allow read: if fatt() || (attivo() && mio("autoreUid"));
       allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
-      allow update: if fatt() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid);
-      allow delete: if admin() || (attivo() && mio("autoreUid"));
+      // le ore già fatturate (fatturataIl) sono chiuse: solo l'amministratore o chi fattura può modificarle
+      allow update: if fatt() || (attivo() && mio("autoreUid") && request.resource.data.autoreUid == request.auth.uid && aperta());
+      allow delete: if admin() || (attivo() && mio("autoreUid") && aperta());
     }
 
     // Compiti: ognuno vede quelli creati da sé o assegnati a sé

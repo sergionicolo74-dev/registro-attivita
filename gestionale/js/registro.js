@@ -100,7 +100,8 @@ export async function vistaRegistro(el) {
       <div class="largo"><label for="f_cliente">Cliente</label>
         <input id="f_cliente" list="lista-clienti" autocomplete="off" placeholder="Scrivi nome o codice" value="${e(m.clienteId ? nomeCli[m.clienteId] || "" : "")}">
         <datalist id="lista-clienti">${clientiOrd.map(c => `<option value="${e(nomeCli[c.id])}"></option>`).join("")}</datalist></div>
-      <div class="solo-lavoro"><label for="f_mandato">Mandato o pratica</label><select id="f_mandato" name="mandato"></select></div>
+      <div class="solo-lavoro largo"><label id="lbl-scelta">Che lavoro è?</label>
+        <input type="hidden" name="scelta" value=""><div class="chips scelte" id="scelte" role="radiogroup" aria-labelledby="lbl-scelta"><span class="tenue">Scegli prima il cliente</span></div></div>
       <div class="largo"><label for="f_descrizione" id="lbl-desc">Descrizione</label>
         <div style="display:flex;gap:8px;align-items:flex-start"><textarea id="f_descrizione" name="descrizione" rows="3" style="flex:1">${e(m.descrizione || "")}</textarea>
         <button type="button" class="btn" id="detta" title="Detta a voce" aria-label="Detta a voce">🎤</button></div></div>
@@ -108,14 +109,12 @@ export async function vistaRegistro(el) {
         <div class="chips">${DURATE.map(d => `<button type="button" data-min="${d}" aria-pressed="${m.minuti === d}">${d < 60 ? d + " min" : fmtDurata(d)}</button>`).join("")}
           <input name="minuti" id="f_minuti" type="number" min="0" step="5" value="${e(m.minuti ?? "")}" placeholder="minuti" aria-label="Minuti" style="width:100px"></div></div>
       ${campo("data", "Data", m.data || giorno, "date")}
-      <div class="solo-lavoro"><label for="f_fatt">Fatturazione</label><select id="f_fatt" name="fatt">
-        ${[["mandato", "Compreso nel mandato"], ["extra", "Extra: da fatturare a parte"], ["non", "Non fatturabile"]].map(([k, n]) => `<option value="${k}"${k === (m.id ? (m.fatturabile === false ? "non" : m.extra ? "extra" : "mandato") : "mandato") ? " selected" : ""}>${n}</option>`).join("")}</select></div>
       <div class="solo-lavoro solo-nuova">${campo("riscontro", "Attende riscontro (crea un compito in attesa)", false, "checkbox")}</div>
       <div class="solo-riscontro">${campo("attesaEntro", "Risposta attesa entro", aggiungiGiorni(giorno, 30), "date")}</div>
       <div class="solo-dafare">${campo("scadenza", "Scadenza", "", "date")}</div>
       <div class="solo-dafare">${campo("visibilita", "Visibile a", "Solo a me", "select", ["Solo a me", "Tutto lo studio"])}</div>
     </div>
-    <div class="azioni">${modifica ? '<button type="button" class="btn" id="annulla-mod">Annulla modifica</button>' : ""}<button class="btn primario">${modifica ? "Salva modifiche" : "Registra"}</button></div>
+    <div class="azioni">${modifica ? '<button type="button" class="btn" id="annulla-mod">Annulla modifica</button>' : ""}<button class="btn primario" id="invia">${modifica ? "Salva modifiche" : "Registra"}</button></div>
   </form>
 
   <section class="pannello" style="margin-bottom:14px">
@@ -160,21 +159,44 @@ export async function vistaRegistro(el) {
   const trovaCliente = (t) => clientiOrd.find(c => nomeCli[c.id] === t)
     || clientiOrd.find(c => normNome(c.ragioneSociale) === normNome(t) || normNome(c.codice) === normNome(t));
   let ultimoCli;
+  // Scelta unica "Che lavoro è?": decide insieme mandato e fatturazione (un clic)
+  const sceltaDi = r => !r?.id ? "" : r.praticaId ? "pratica:" + r.praticaId : r.fatturabile === false ? "non" : r.extra ? "consulenza" : (r.mandato || "contabilita");
+  const memo = { get: id => { try { return localStorage.getItem("scelta_" + id) || ""; } catch { return ""; } }, set: (id, v) => { try { localStorage.setItem("scelta_" + id, v); } catch {} } };
+  const nomeScelta = v => v === "consulenza" ? "Consulenza (extra)" : v === "non" ? "Non fatturabile" : v.startsWith("pratica:") ? "Pratica" : (NOME_MANDATO[v] || "");
+  const aggiornaInvia = () => {
+    if (form.tipo.value !== "lavoro" || modifica) return;
+    const min = Number(form.minuti.value || 0), sc = form.scelta.value;
+    el.querySelector("#invia").textContent = min && sc ? `Registra ${min < 60 ? min + " min" : fmtDurata(min)} · ${nomeScelta(sc)}` : "Registra";
+  };
+  const scegli = v => {
+    form.scelta.value = v;
+    form.querySelectorAll("[data-sc]").forEach(x => x.setAttribute("aria-checked", x.dataset.sc === v));
+    aggiornaInvia();
+  };
   const aggiornaMandati = (scelto) => {
     const cli = trovaCliente(el.querySelector("#f_cliente").value.trim());
     if (scelto === undefined && cli?.id === ultimoCli) return; // stesso cliente: non toccare la scelta
     ultimoCli = cli?.id;
-    const mm = cli ? mandatiDi(cli) : null;
-    const att = mm ? TIPI_MANDATO.filter(([k]) => mm[k].attivo) : [];
-    const opz = att.length ? att : TIPI_MANDATO;
-    // Pratiche amministrative aperte del cliente (fuori mandato); in modifica anche quella già scelta
-    const prat = cli ? pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto)) : [];
-    form.mandato.innerHTML = opz.map(([k, n]) => `<option value="${k}"${k === scelto ? " selected" : ""}>${e(n)}</option>`).join("")
-      + (prat.length ? `<optgroup label="Pratiche (fuori mandato)">${prat.map(p => `<option value="pratica:${e(p.id)}"${"pratica:" + p.id === scelto ? " selected" : ""}>${e(p.titolo || p.tipo)}</option>`).join("")}</optgroup>` : "");
+    const box = el.querySelector("#scelte");
+    if (!cli) { box.innerHTML = '<span class="tenue">Scegli prima il cliente</span>'; form.scelta.value = ""; aggiornaInvia(); return; }
+    const mm = mandatiDi(cli);
+    const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo);
+    const prat = pratiche.filter(p => p.clienteId === cli.id && (praticaAperta(p) || "pratica:" + p.id === scelto));
+    const voci = [["consulenza", "Consulenza", "extra, a ore", "c-extra"],
+      ...att.map(([k, n]) => [k, n, "nel mandato", "c-mand"]),
+      ...prat.map(p => ["pratica:" + p.id, p.titolo || p.tipo, "pratica", "c-prat"]),
+      ["non", "Non fatturabile", "", "c-non"]];
+    box.innerHTML = voci.map(([k, n, sotto, cl]) => `<button type="button" role="radio" data-sc="${e(k)}" aria-checked="false"><i class="pt ${cl}"></i>${e(n)}${sotto ? `<small>${e(sotto)}</small>` : ""}</button>`).join("");
+    box.querySelectorAll("[data-sc]").forEach(x => x.addEventListener("click", () => scegli(x.dataset.sc)));
+    // proposta: la scelta della registrazione in modifica, altrimenti l'ultima usata per questo cliente
+    const prop = scelto !== undefined ? scelto : memo.get(cli.id);
+    scegli(voci.some(([k]) => k === prop) ? prop : "");
   };
-  aggiornaMandati(m.praticaId ? "pratica:" + m.praticaId : m.mandato);
+  aggiornaMandati(m.id ? sceltaDi(m) : undefined);
   el.querySelector("#f_cliente").addEventListener("change", () => aggiornaMandati());
   el.querySelector("#f_cliente").addEventListener("input", () => aggiornaMandati());
+  form.minuti.addEventListener("input", aggiornaInvia);
+  form.querySelectorAll("[data-min]").forEach(b => b.addEventListener("click", aggiornaInvia));
 
   const ricarica = () => vistaRegistro(el);
   const vai = (d) => { giorno = d; modifica = null; ricarica(); };
@@ -225,10 +247,14 @@ export async function vistaRegistro(el) {
     }
     const minuti = t === "nota" ? 0 : Number(form.minuti.value || 0);
     if (t === "lavoro" && !minuti) { form.minuti.focus(); avviso("Indica la durata"); return; }
+    const sc = form.scelta.value;
+    if (t === "lavoro" && !sc) { el.querySelector("#scelte").scrollIntoView({ block: "center" }); avviso("Scegli che lavoro è: consulenza, mandato, pratica o non fatturabile"); return; }
+    const prat = sc.startsWith("pratica:");
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
-      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? form.fatt.value !== "non" : false, extra: t === "lavoro" && form.fatt.value === "extra" && !form.mandato.value.startsWith("pratica:"), tipo: t, descrizione,
-      mandato: t === "lavoro" ? (form.mandato.value.startsWith("pratica:") ? "pratica" : form.mandato.value || null) : null,
-      praticaId: t === "lavoro" && form.mandato.value.startsWith("pratica:") ? form.mandato.value.slice(8) : null };
+      clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? sc !== "non" : false, extra: t === "lavoro" && sc === "consulenza", tipo: t, descrizione,
+      mandato: t === "lavoro" ? (prat ? "pratica" : sc === "consulenza" || sc === "non" ? (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : null) : sc) : null,
+      praticaId: t === "lavoro" && prat ? sc.slice(8) : null };
+    if (t === "lavoro") memo.set(cli.id, sc);
     const id = await D.salvaRegistrazione(dati);
     if (t === "lavoro" && !modifica && form.riscontro.checked) {
       await D.salvaCompito({ clienteId: cli.id, titolo: descrizione, tipo: "Attesa riscontro", stato: "In attesa riscontro",

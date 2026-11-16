@@ -431,3 +431,8 @@ strong.neg { color: var(--rosso); }
 .ore-prev strong { font-size: 16px; }
 tr.chiusa td { color: var(--tenue); }
 .lucchetto { font-size: 12px; color: var(--tenue); }
+.scelte button { display: inline-flex; align-items: center; gap: 7px; }
+.scelte button small { color: var(--tenue); font-size: 12px; }
+.scelte button[aria-checked="true"] { background: var(--inchiostro); color: #fff; border-color: var(--inchiostro); }
+.scelte button[aria-checked="true"] small { color: #D9D7CF; }
+.scelte i.pt { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }

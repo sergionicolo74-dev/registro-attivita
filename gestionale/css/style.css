@@ -484,3 +484,8 @@ ul.richieste li.ok { opacity: .7; }
 .chip-g { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--linea); border-radius: 999px; background: #fff; font-size: 14px; cursor: pointer; margin: 0; }
 .chip-g:has(input:checked) { background: var(--inchiostro); color: #fff; border-color: var(--inchiostro); }
 .chip-g input { margin: 0; }
+.seg.prorogata { background: #E6E1F7; color: #4B3C9E; font-weight: 800; border: 1.5px solid #6F62B8; }
+.seg.prorogata.p-urg { border-color: var(--ambra); }
+.seg.prorogata.p-scad { border-color: var(--rosso); color: var(--rosso); }
+.seg.lavoro { background: #E8EFF7; color: #2C5D8F; font-size: 11px; }
+.legenda i.prorogata, .legenda .prorogata { background: #E6E1F7; color: #4B3C9E; font-weight: 800; }

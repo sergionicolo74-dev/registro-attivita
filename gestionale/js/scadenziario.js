@@ -136,8 +136,11 @@ export async function vistaScadenziario(el, clienteFiltro) {
       const g = urgenzaScadenza(o);
       const cl = o.stato === "Fatto" ? "ok" : o.stato === "Non dovuto" ? "nd" : o.data < INIZIO_SCADENZIARIO && !o.salvato ? "prima" : g === "scaduto" ? "scaduto" : g === "urgente" ? "urgente" : g === "preavviso" ? "info"
         : o.stato === "Da fare" ? "futuro" : "corso";
-      const sim = { ok: "✓", nd: "–", scaduto: "!", urgente: "⏰", info: "i", futuro: "○", corso: "…", prima: "·" }[cl];
-      return `<button type="button" class="seg ${cl}" data-id="${e(o.id)}" title="${e(`${o.etichetta} · ${fmtData(o.data)} · ${o.stato}`)}" aria-label="${e(`${o.etichetta}, ${fmtData(o.data)}, ${o.stato}`)}">${sim}</button>`;
+      // Prorogata: "P" sempre ben visibile (rossa se scaduta anche la proroga, arancio se entro 5 giorni)
+      const pro = o.stato === "Prorogato" && cl !== "prima";
+      const cls = pro ? `prorogata${g === "scaduto" ? " p-scad" : g === "urgente" ? " p-urg" : ""}` : cl === "corso" ? (o.stato === "In corso" ? "lavoro" : "corso") : cl;
+      const sim = pro ? "P" : { ok: "✓", nd: "–", scaduto: "!", urgente: "⏰", info: "i", futuro: "○", corso: "…", lavoro: "▶", prima: "·" }[cls];
+      return `<button type="button" class="seg ${cls}" data-id="${e(o.id)}" title="${e(`${o.etichetta} · ${fmtData(o.data)} · ${o.stato}`)}" aria-label="${e(`${o.etichetta}, ${fmtData(o.data)}, ${o.stato}`)}">${sim}</button>`;
     };
     corpo.innerHTML = `<div class="barra" style="margin-bottom:10px"><label for="anno-s" class="tenue">Anno</label>
         <select id="anno-s">${[anno - 1, anno, anno + 1].map(a => `<option${a === annoGriglia ? " selected" : ""}>${a}</option>`).join("")}</select>
@@ -147,7 +150,7 @@ export async function vistaScadenziario(el, clienteFiltro) {
         const l = filtrate.filter(o => o.clienteId === c.id && o.servizio === k).sort((a, b) => a.scadenza.localeCompare(b.scadenza));
         return `<td>${l.map(segno).join("")}</td>`;
       }).join("")}</tr>`).join("")}</tbody></table></div>
-      <p class="legenda">${[["ok", "✓", "Fatta"], ["scaduto", "!", "Scaduta"], ["urgente", "⏰", "Entro 5 giorni"], ["info", "i", "Preavviso"], ["corso", "…", "In corso / in attesa / prorogata"], ["futuro", "○", "Da fare"], ["nd", "–", "Non dovuta"], ["prima", "·", "Prima dell'avvio dello scadenziario"]]
+      <p class="legenda">${[["ok", "✓", "Fatta"], ["scaduto", "!", "Scaduta"], ["urgente", "⏰", "Entro 5 giorni"], ["info", "i", "Preavviso"], ["prorogata", "P", "Prorogata"], ["corso", "…", "In attesa / da depositare"], ["lavoro", "▶", "In corso"], ["futuro", "○", "Da fare"], ["nd", "–", "Non dovuta"], ["prima", "·", "Prima dell'avvio dello scadenziario"]]
         .map(([c, s, n]) => `<span><span class="seg ${c}" aria-hidden="true">${s}</span> ${n}</span>`).join("")}</p>`
       : `<div class="pannello vuoto">Nessuna scadenza per l'anno ${annoGriglia}.</div>`}`;
     corpo.querySelector("#anno-s")?.addEventListener("change", ev => { annoGriglia = +ev.target.value; ricarica(); });

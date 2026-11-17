@@ -227,7 +227,7 @@ export const SERVIZI_SCADENZE = [
   ["dichiarazione", "Dichiarazione fiscale"], ["assemblea", "Assemblea ordinaria"], ["revisione", "Revisione"], ["kyc", "Revisione KYC"]
 ];
 export const NOME_SCADENZA = Object.fromEntries(SERVIZI_SCADENZE);
-export const STATI_SCADENZA = ["Da fare", "In corso", "In attesa cliente", "Prorogato", "Fatto", "Non dovuto"];
+export const STATI_SCADENZA = ["Da fare", "In corso", "In attesa cliente", "Da depositare", "Prorogato", "Fatto", "Non dovuto"];
 export const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 /** Le scadenze precedenti a questa data non vengono mostrate come arretrate (avvio dello scadenziario). */
 export const INIZIO_SCADENZIARIO = "2026-11-15";

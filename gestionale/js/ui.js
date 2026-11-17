@@ -35,7 +35,7 @@ export function campo(nome, etichetta, valore, tipo = "text", opzioni = [], larg
     return `<div${largo ? ' class="largo"' : ""}><label style="display:flex;gap:8px;align-items:center;color:var(--inchiostro);font-weight:400;font-size:14px;margin-top:22px"><input type="checkbox" id="${id}" name="${e(nome)}" style="width:auto"${valore ? " checked" : ""}> ${e(etichetta)}</label></div>`;
   } else if (tipo === "date") {
     // Testo con formato gg.mm.aaaa: così le date sono sempre con i punti, indipendentemente dal browser
-    input = `<input id="${id}" name="${e(nome)}" type="text" data-data="1" inputmode="numeric" placeholder="gg.mm.aaaa" value="${e(fmtData(valore))}">`;
+    input = `<input id="${id}" name="${e(nome)}" type="text" data-data="1" inputmode="decimal" autocomplete="off" placeholder="gg.mm.aaaa" value="${e(fmtData(valore))}">`;
   } else {
     input = `<input id="${id}" name="${e(nome)}" type="${tipo}" value="${e(valore)}"${tipo === "number" ? ' step="any"' : ""}>`;
   }
@@ -45,8 +45,20 @@ export function campo(nome, etichetta, valore, tipo = "text", opzioni = [], larg
 /** Legge un form in un oggetto; i nomi con il punto ("mandato.tipo") diventano oggetti annidati. */
 /** Controlla i campi data prima del salvataggio: ritorna il primo campo non valido o null. */
 export function dataNonValida(form) {
-  return [...form.querySelectorAll("[data-data]")].find(el => el.value.trim() && !parseData(el.value)) || null;
+  const el = [...form.querySelectorAll("[data-data]")].find(x => x.value.trim() && !parseData(x.value)) || null;
+  if (el) {
+    // il messaggio generico viene sostituito da uno che dice quale campo correggere
+    const nome = form.querySelector(`label[for="${el.id}"]`)?.textContent || "Data";
+    el.focus(); el.select?.();
+    setTimeout(() => avviso(`${nome}: «${el.value}» non è una data valida. Scrivi per esempio ${fmtData(new Date().toISOString().slice(0, 10))}`), 0);
+  }
+  return el;
 }
+// Le date scritte in un altro modo (17-11-26, 17112026…) vengono riscritte come gg.mm.aaaa appena si esce dal campo
+document.addEventListener("focusout", ev => {
+  const el = ev.target;
+  if (el?.dataset?.data && el.value.trim()) { const iso = parseData(el.value); if (iso) el.value = fmtData(iso); }
+});
 
 export function leggiForm(form) {
   const out = {};

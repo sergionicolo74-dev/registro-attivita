@@ -18,9 +18,11 @@ export function parseData(v) {
   const s = String(v).trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/.exec(s);
+  // accetta anche 17-11-2026, 17 11 2026, 17,11,26 (tastiera del telefono), 17112026, 171126 e 17.11 (anno in corso)
+  m = /^(\d{1,2})\s*[.\/\-, ]\s*(\d{1,2})(?:\s*[.\/\-, ]\s*(\d{2}|\d{4}))?\.?$/.exec(s)
+    || /^(\d{2})(\d{2})(\d{4}|\d{2})$/.exec(s);
   if (!m) return null;
-  let y = +m[3]; if (y < 100) y += 2000;
+  let y = m[3] ? +m[3] : new Date().getFullYear(); if (y < 100) y += 2000;
   const d = +m[1], mo = +m[2];
   const dt = new Date(Date.UTC(y, mo - 1, d));
   if (dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;

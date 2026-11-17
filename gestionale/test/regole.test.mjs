@@ -298,3 +298,14 @@ console.log("Test compiti superati");
   tst(R.giorniRichiesta({ dal: "2026-11-16", al: "2026-11-22" }, laura) === 4, "una settimana di vacanza consuma 4 giorni a Laura");
   tst(R.fmtGiorniLavoro(laura) === "lu–gi" && R.fmtGiorniLavoro({}) === "lu–ve", "etichetta giorni di lavoro");
 }
+
+// date scritte in modi diversi
+{
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  const R = await import("../js/regole.js");
+  const y = new Date().getFullYear();
+  for (const [s, atteso] of [["20.11.2026", "2026-11-20"], ["20/11/26", "2026-11-20"], ["20-11-2026", "2026-11-20"], ["20 11 2026", "2026-11-20"], ["20,11,2026", "2026-11-20"],
+    ["20112026", "2026-11-20"], ["201126", "2026-11-20"], ["3.2.2027", "2027-02-03"], ["20.11.", `${y}-11-20`], ["20.11", `${y}-11-20`], ["2026-11-20", "2026-11-20"]])
+    tst(R.parseData(s) === atteso, `data «${s}» → ${atteso}`);
+  for (const s of ["31.02.2026", "abc", "2026", "20.13.2026", "1.2.3"]) tst(R.parseData(s) === null, `data non valida «${s}»`);
+}

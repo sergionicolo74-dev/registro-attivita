@@ -25,7 +25,6 @@ export async function vistaCompiti(el, clienteFiltro) {
   const persone = utenti.filter(x => x.attivo !== false && x.ruolo).map(x => ({ uid: x.id, nome: x.nome || x.id }));
   if (!persone.some(p => p.uid === u.uid)) persone.push({ uid: u.uid, nome: u.nome });
   const nomeDi = uid => persone.find(p => p.uid === uid)?.nome || "";
-  if (ambito === "studio" && !admin) ambito = "miei";
 
   const visibile = k => !(k.visibilita === "privato" && k.autoreUid !== u.uid && k.assegnatoUid !== u.uid);
   const mio = k => k.assegnatoUid === u.uid || (!k.assegnatoUid && k.autoreUid === u.uid);
@@ -57,7 +56,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     <div class="segmenti grandi" role="radiogroup" aria-label="Quali compiti">
       <button type="button" role="radio" data-a="miei" aria-checked="${ambito === "miei"}">Assegnati a me <span class="conta">${conta("miei")}</span></button>
       <button type="button" role="radio" data-a="delegati" aria-checked="${ambito === "delegati"}">Delegati da me <span class="conta">${conta("delegati")}</span></button>
-      ${admin ? `<button type="button" role="radio" data-a="studio" aria-checked="${ambito === "studio"}">Tutto lo studio <span class="conta">${conta("studio")}</span></button>` : ""}
+      <button type="button" role="radio" data-a="studio" aria-checked="${ambito === "studio"}">Tutto lo studio <span class="conta">${conta("studio")}</span></button>
     </div>
     ${ambito === "studio" ? `<select id="chi-k" aria-label="Collaboratore"><option value="">Tutti</option>${persone.map(p => `<option value="${e(p.uid)}"${filtroChi === p.uid ? " selected" : ""}>${e(p.nome)}</option>`).join("")}</select>` : ""}
     <div class="segnali" style="margin-left:auto">

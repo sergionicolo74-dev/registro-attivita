@@ -15,7 +15,7 @@ const TIPO_STATO = { sollecitare: "scaduto", oggi: "urgente", ritardo: "urgente"
 const PASSI = ["In preparazione", "In attesa dell'ente", "Conclusa"];
 
 export async function vistaPratiche(el, clienteFiltro) {
-  const admin = D.isAdmin(), u = D.utenteCorrente(), oggi = oggiISO();
+  const admin = D.isAdmin(), u = D.utenteCorrente(), oggi = oggiISO(), vedeImporti = D.puoFatturare();
   const [pratiche, clienti, utenti, reg] = await Promise.all([D.listaPratiche(clienteFiltro || null), D.listaClienti(), D.listaUtenti().catch(() => []),
     D.listaRegistrazioniPeriodo("2000-01-01", "2999-12-31").catch(() => [])]);
   const cliPer = Object.fromEntries(clienti.map(c => [c.id, c]));
@@ -52,7 +52,7 @@ export async function vistaPratiche(el, clienteFiltro) {
   </div>
   <div class="kpi-s" role="group" aria-label="Riepilogo">
     ${[["sollecitare", "Da controllare / sollecitare", "scaduto", kpi.sollecitare.length], ["attesa", "In attesa dell'ente", "info", kpi.attesa.length],
-       ["nostre", "Da fare da noi", "neutro", kpi.nostre.length], ["fatturare", "Concluse da fatturare", "ok", `${kpi.fatturare.length}${totFatt ? ` · CHF ${fmtNum(totFatt, 0)}` : ""}`]]
+       ["nostre", "Da fare da noi", "neutro", kpi.nostre.length], ["fatturare", "Concluse da fatturare", "ok", `${kpi.fatturare.length}${totFatt && vedeImporti ? ` · CHF ${fmtNum(totFatt, 0)}` : ""}`]]
       .map(([k, n, t, v]) => `<button type="button" class="kpi-b${filtroKpi === k ? " scelto" : ""}" data-kpi="${k}" aria-pressed="${filtroKpi === k}"><span class="stato ${t}">${e(n)}</span><strong>${e(String(v))}</strong></button>`).join("")}
   </div>
   <div id="corpo-pr"></div>`;
@@ -69,7 +69,7 @@ export async function vistaPratiche(el, clienteFiltro) {
         ${p.prossimoControllo ? `<span>Controllo: <strong>${e(fmtData(p.prossimoControllo))}</strong> (${c < 0 ? `${-c} giorni fa` : c === 0 ? "oggi" : `tra ${c} giorni`})</span>` : ""}
         ${p.solleciti ? `<span>${p.solleciti} ${p.solleciti === 1 ? "sollecito" : "solleciti"}</span>` : ""}`
         : `<span>Conclusa il ${e(fmtData(p.conclusaIl))}</span>${p.fatturazione?.modo === "Non fatturare" ? '<span class="tenue">Non si fattura</span>'
-          : p.fatturazione?.stato === "Fatturata" ? stato("ok", `Fatturata ${fmtData(p.fatturazione.fatturataIl)}`) : stato("urgente", `Da fatturare CHF ${fmtNum(importo(p))}`)}`}
+          : p.fatturazione?.stato === "Fatturata" ? stato("ok", `Fatturata ${fmtData(p.fatturazione.fatturataIl)}`) : stato("urgente", vedeImporti ? `Da fatturare CHF ${fmtNum(importo(p))}` : "Da fatturare")}`}
         ${minPer[p.id] ? `<span>${fmtDurata(minPer[p.id])} registrate</span>` : ""}</div>
     </article>`;
   };
@@ -80,9 +80,9 @@ export async function vistaPratiche(el, clienteFiltro) {
     corpo.innerHTML = daFatt.length ? `<div class="pannello"><div class="testa-d"><h2 style="font-size:15px">Pratiche concluse da fatturare</h2><button class="btn" id="esporta-pr">Esporta per la fatturazione (CSV)</button></div>
       <table class="tabella"><thead><tr><th>Cliente</th><th>Pratica</th><th>Conclusa</th><th>Modo</th><th class="num">Ore</th><th class="num">CHF</th><th></th></tr></thead><tbody>
       ${daFatt.sort((a, b) => nomeCli(a.clienteId).localeCompare(nomeCli(b.clienteId))).map(p => `<tr><td>${e(nomeCli(p.clienteId))}</td><td><a href="#" data-apri="${e(p.id)}">${e(p.titolo || p.tipo)}</a></td>
-        <td>${e(fmtData(p.conclusaIl))}</td><td>${e(p.fatturazione?.modo || "A ore")}</td><td class="num">${minPer[p.id] ? fmtDurata(minPer[p.id]) : "–"}</td><td class="num">${fmtNum(importo(p))}</td>
-        <td class="num"><button class="btn piccolo" data-fatturata="${e(p.id)}">✓ Fatturata</button></td></tr>`).join("")}
-      <tr class="totale"><td colspan="5"><strong>Totale</strong></td><td class="num"><strong>${fmtNum(totFatt)}</strong></td><td></td></tr></tbody></table></div>`
+        <td>${e(fmtData(p.conclusaIl))}</td><td>${e(p.fatturazione?.modo || "A ore")}</td><td class="num">${minPer[p.id] ? fmtDurata(minPer[p.id]) : "–"}</td><td class="num">${vedeImporti ? fmtNum(importo(p)) : ""}</td>
+        <td class="num">${vedeImporti ? `<button class="btn piccolo" data-fatturata="${e(p.id)}">✓ Fatturata</button>` : ""}</td></tr>`).join("")}
+      <tr class="totale"><td colspan="5"><strong>Totale</strong></td><td class="num"><strong>${vedeImporti ? fmtNum(totFatt) : ""}</strong></td><td></td></tr></tbody></table></div>`
       : `<div class="pannello vuoto">Nessuna pratica da fatturare.</div>`;
   } else if (filtroKpi) {
     const nomi = { sollecitare: "Da controllare o sollecitare", attesa: "In attesa dell'ente", nostre: "Da fare da noi (preparazione o documenti richiesti)" };
@@ -159,9 +159,9 @@ function cassetto(p, clienti, nomeCli, persone, minPer, importo, ricarica) {
     </div>
     <div class="sezione"><h3>Fatturazione</h3><div class="griglia">
       ${campo("fmodo", "Come si fattura", f.modo || "Forfait", "select", ["Forfait", "A ore", "Non fatturare"])}
-      ${campo("fimporto", "Forfait CHF", f.importo, "number")}
-      ${campo("ftariffa", "Tariffa oraria CHF (vuoto = quella del cliente o 150)", f.tariffa, "number")}
-      <div><label>Ore registrate sulla pratica</label><div style="padding:8px 0">${minPer[p.id] ? fmtDurata(minPer[p.id]) : "nessuna"} · da fatturare <strong>CHF ${fmtNum(importo(p))}</strong></div></div>
+      ${D.puoFatturare() ? `${campo("fimporto", "Forfait CHF", f.importo, "number")}
+      ${campo("ftariffa", "Tariffa oraria CHF (vuoto = quella del cliente o 150)", f.tariffa, "number")}` : ""}
+      <div><label>Ore registrate sulla pratica</label><div style="padding:8px 0">${minPer[p.id] ? fmtDurata(minPer[p.id]) : "nessuna"}${D.puoFatturare() ? ` · da fatturare <strong>CHF ${fmtNum(importo(p))}</strong>` : ""}</div></div>
     </div>
     <p class="tenue" style="font-size:13px">Le ore si registrano nel Registro ore scegliendo il cliente e poi questa pratica: non entrano nel budget dei mandati.</p></div>
     <div class="azioni">${!nuova && admin ? '<button type="button" class="btn" id="elimina-pr" style="margin-right:auto">Elimina</button>' : ""}

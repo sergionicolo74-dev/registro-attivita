@@ -57,7 +57,7 @@ service cloud.firestore {
     }
 
     match /compiti/{id} {
-      allow read: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
+      allow read: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid") || resource.data.get("visibilita", "studio") != "privato"));
       allow create: if admin() || (attivo() && request.resource.data.autoreUid == request.auth.uid);
       allow update: if admin() || (attivo() && (mio("autoreUid") || mio("assegnatoUid")));
       allow delete: if admin() || (attivo() && mio("autoreUid"));

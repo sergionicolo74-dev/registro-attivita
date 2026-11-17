@@ -41,7 +41,10 @@ export function onAuth(cb) {
 
 export async function login(email, password) {
   // Demo: un indirizzo che inizia con "anna" entra come utente normale (per provare i permessi)
-  if (demo) { utente = /^anna/i.test(email) ? { uid: "u2", email, nome: "Anna", ruolo: "utente", attivo: true, fatturazione: true } : { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
+  // "marco…" entra come utente normale senza fatturazione
+  if (demo) { utente = /^anna/i.test(email) ? { uid: "u2", email, nome: "Anna", ruolo: "utente", attivo: true, fatturazione: true }
+    : /^marco/i.test(email) ? { uid: "u3", email, nome: "Marco", ruolo: "utente", attivo: true }
+    : { uid: "demo", email, nome: "Utente demo", ruolo: "admin", attivo: true }; authListeners.forEach(cb => cb(utente)); return; }
   await fb.signInWithEmailAndPassword(auth, email, password);
 }
 export async function logout() {
@@ -204,15 +207,17 @@ export const salvaRegistrazione = (r) => scrivi("registrazioni", { autoreUid: ut
 export async function listaCompiti(clienteId) {
   const base = clienteId ? [["clienteId", "==", clienteId]] : [];
   if (ADMIN()) return lista("compiti", base);
-  const [a, b] = await Promise.all([
+  // i propri + tutti quelli visibili allo studio (le deleghe di tutti); i privati degli altri no
+  const [a, b, c] = await Promise.all([
     lista("compiti", [...base, ["assegnatoUid", "==", utente.uid]]),
-    lista("compiti", [...base, ["autoreUid", "==", utente.uid]])
+    lista("compiti", [...base, ["autoreUid", "==", utente.uid]]),
+    lista("compiti", [...base, ["visibilita", "==", "studio"]]).catch(() => [])
   ]);
-  const m = new Map([...a, ...b].map(x => [x.id, x]));
+  const m = new Map([...a, ...b, ...c].map(x => [x.id, x]));
   return [...m.values()];
 }
 export const eliminaCompito = (id) => elimina("compiti", id);
-export const salvaCompito = (c) => scrivi("compiti", { autoreUid: utente.uid, ...c });
+export const salvaCompito = (c) => scrivi("compiti", { ...(c.id ? {} : { visibilita: "studio" }), autoreUid: utente.uid, ...c });
 
 // ---------- scadenze (solo lo stato: le scadenze si calcolano dalle regole) ----------
 /** Stati salvati delle scadenze con data originale negli anni indicati. Visibili a tutti gli utenti attivi. */

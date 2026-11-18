@@ -37,6 +37,10 @@ export async function vistaDashboard(el) {
     D.listaVacanze().catch(() => []), D.listaClienti(), D.listaPratiche().catch(() => []),
     admin ? caricaSemafori() : Promise.resolve(null)
   ]);
+  // Budget annuo (scheda Ricavi): fatture degli onorari, ore e pratiche di tutto l'anno del periodo scelto
+  const annoB = +da.slice(0, 4);
+  const [fattureAnno, regAnno] = fatt && scheda === "ricavi" ? await Promise.all([D.listaFatture().catch(() => []),
+    D.listaRegistrazioniPeriodo(`${annoB}-01-01`, `${annoB}-12-31`, true).catch(() => [])]) : [[], []];
   const utenti = admin ? utentiTutti.filter(x => x.ruolo && (x.attivo !== false || reg.some(r => r.autoreUid === x.id))) : [{ id: u.uid, nome: u.nome }];
   if (!utenti.some(x => x.id === u.uid)) utenti.unshift({ id: u.uid, nome: u.nome });
   utenti.sort((x, y) => (x.id === u.uid ? -1 : y.id === u.uid ? 1 : String(x.nome).localeCompare(String(y.nome))));
@@ -95,7 +99,23 @@ export async function vistaDashboard(el) {
     const pratConcluse = pratiche.filter(p => p.fase === "Conclusa" && p.conclusaIl >= da && p.conclusaIl <= a && p.fatturazione?.modo !== "Non fatturare");
     const pratCHF = pratConcluse.reduce((s, p) => s + importoPratica({ ...p, fatturazione: { ...p.fatturazione, tariffa: Number(p.fatturazione?.tariffa) || tariffaDi(p.clienteId) } }, minPrat[p.id] || 0), 0);
     const voci = RICAVI.map(([k, n, col]) => ({ k, n, col, v: k === "extra" ? extraCHF : k === "pratiche" ? pratCHF : (forf[k] || 0) }));
-    ricavi = { voci, totale: voci.reduce((s, x) => s + x.v, 0), forf, valore, extraCHF, extraFatt, aTariffaMin: aTariffa.reduce((s, r) => s + r.minuti, 0), pratConcluse: pratConcluse.length };
+    // --- budget annuo: previsto, fatturato, mancante; ore extra e pratiche fatturate oltre il budget ---
+    const bud = {};
+    for (const c of clienti) {
+      if (clienteSpeciale(c) || c.stato === "Cessato") continue;
+      for (const [k] of TIPI_MANDATO) { const m = mmDi[c.id][k]; if (m.attivo && aForfait(m)) (bud[k] = bud[k] || { previsto: 0, fatturato: 0 }).previsto += Number(m.budget); }
+    }
+    fattureAnno.filter(f => f.stato === "Fatturata" && String(f.periodo || "").startsWith(String(annoB)) && f.mandato)
+      .forEach(f => { (bud[f.mandato] = bud[f.mandato] || { previsto: 0, fatturato: 0 }).fatturato += Number(f.importo) || 0; });
+    const lavAnno = regAnno.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0 && !r.praticaId).map(r => ({ ...r, tf: tipoFatturazione(r),
+      mand: mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+    const extraAnno = lavAnno.filter(r => r.tf === "extra" || (r.tf === "mandato" && (r.mand === "nonAttribuito" || !aForfait(mmDi[r.clienteId]?.[r.mand]))));
+    const exF = extraAnno.filter(r => r.fatturataIl).reduce((s, r) => s + valR(r), 0), exA = extraAnno.filter(r => !r.fatturataIl).reduce((s, r) => s + valR(r), 0);
+    const prF = pratiche.filter(p => p.fatturazione?.stato === "Fatturata" && String(p.fatturazione.fatturataIl || "").startsWith(String(annoB)))
+      .reduce((s, p) => s + (Number(p.fatturazione.importoFatturato) || 0), 0);
+    const budget = { anno: annoB, tipi: bud, exF, exA, prF,
+      previsto: Object.values(bud).reduce((s, x) => s + x.previsto, 0), fatturato: Object.values(bud).reduce((s, x) => s + x.fatturato, 0) };
+    ricavi = { budget, voci, totale: voci.reduce((s, x) => s + x.v, 0), forf, valore, extraCHF, extraFatt, aTariffaMin: aTariffa.reduce((s, r) => s + r.minuti, 0), pratConcluse: pratConcluse.length };
   }
 
   const nomeChi = chi === "tutti" ? "Tutto lo studio" : (utenti.find(x => x.id === chi)?.nome || u.nome);
@@ -159,10 +179,38 @@ export async function vistaDashboard(el) {
     ${chi !== "tutti" ? sezioneGiorni(perPersona[0]) : ""}`;
   }
 
+  function htmlBudget() {
+    const chf2 = n => fmtNum(n || 0, 2); // al centesimo: i totali tornano esatti
+    const B = ricavi.budget, manca = Math.max(0, B.previsto - B.fatturato), oltre = B.exF + B.prF;
+    const scala = Math.max(B.previsto, B.fatturato) + oltre + B.exA || 1, pc = v => (v / scala * 100).toFixed(2) + "%";
+    const seg = (v, cl, t) => v > 0 ? `<span class="${cl}" style="width:${pc(v)}" title="${e(t)}: CHF ${chf2(v)}"></span>` : "";
+    const righe = TIPI_MANDATO.map(([k, n]) => ({ k, n, ...(B.tipi[k] || { previsto: 0, fatturato: 0 }) })).filter(x => x.previsto || x.fatturato);
+    return `<section class="pannello sez-d"><div class="testa-d"><h2>Budget ${B.anno}: fatturato e da fatturare</h2>
+        <span class="tenue" style="font-size:13px">onorari annui dei mandati attivi e quanto è già stato segnato "Fatturato" nel Report</span></div>
+      <div class="bud-kpi">
+        <div><span class="tenue">Budget annuo</span><strong>CHF ${chf2(B.previsto)}</strong></div>
+        <div><span class="tenue"><i class="q b-fatt"></i>Fatturato sul budget</span><strong>CHF ${chf2(B.fatturato)}</strong><span class="tenue">${perc(B.fatturato, B.previsto)}%</span></div>
+        <div><span class="tenue"><i class="q b-manca"></i>Manca da fatturare</span><strong>CHF ${chf2(manca)}</strong><span class="tenue">${perc(manca, B.previsto)}%</span></div>
+        <div><span class="tenue"><i class="q b-extra"></i>Fatturato oltre il budget</span><strong>CHF ${chf2(oltre)}</strong><span class="tenue">ore extra ${chf2(B.exF)} · pratiche ${chf2(B.prF)}</span></div>
+      </div>
+      <div class="bud-barra" role="img" aria-label="Budget CHF ${chf2(B.previsto)}: fatturato ${chf2(B.fatturato)}, manca ${chf2(manca)}, oltre il budget ${chf2(oltre)}">
+        ${seg(B.fatturato, "b-fatt", "Fatturato sul budget")}${seg(manca, "b-manca", "Manca da fatturare")}${seg(B.exF, "b-extra", "Ore extra fatturate")}${seg(B.prF, "b-prat", "Pratiche fatturate")}${seg(B.exA, "b-extra-a", "Ore extra non ancora fatturate")}
+        ${B.previsto ? `<i class="b-lim" style="left:${pc(B.previsto)}" title="Fine del budget"></i>` : ""}</div>
+      <div class="bud-leg"><span><i class="b-fatt"></i>Fatturato sul budget</span><span><i class="b-manca"></i>Manca</span><span><i class="b-extra"></i>Ore extra fatturate</span><span><i class="b-prat"></i>Pratiche fatturate</span><span><i class="b-extra-a"></i>Ore extra da fatturare (CHF ${chf2(B.exA)})</span><span><i class="b-lim-l"></i>fine del budget</span></div>
+      ${righe.length ? `<table class="tabella" style="margin-top:12px"><thead><tr><th>Tipologia</th><th class="num">Budget</th><th class="num">Fatturato</th><th class="num">Manca</th><th style="width:34%"></th></tr></thead><tbody>
+        ${righe.map(x => `<tr><td>${e(x.n)}</td><td class="num">${chf2(x.previsto)}</td><td class="num">${chf2(x.fatturato)}</td><td class="num">${chf2(Math.max(0, x.previsto - x.fatturato))}</td>
+          <td><div class="meter-b" title="${perc(x.fatturato, x.previsto)}% fatturato"><span class="b-fatt" style="width:${Math.min(100, perc(x.fatturato, x.previsto))}%"></span></div></td></tr>`).join("")}
+        <tr><td>Ore extra e a ore <span class="tenue">(oltre il budget)</span></td><td class="num">–</td><td class="num">${chf2(B.exF)}</td><td class="num">${chf2(B.exA)}</td><td class="tenue" style="font-size:12px">"Manca" = ore extra registrate non ancora fatturate</td></tr>
+        <tr><td>Pratiche <span class="tenue">(oltre il budget)</span></td><td class="num">–</td><td class="num">${chf2(B.prF)}</td><td class="num"></td><td></td></tr>
+        <tr class="totale"><td><strong>Totale</strong></td><td class="num"><strong>${chf2(B.previsto)}</strong></td><td class="num"><strong>${chf2(B.fatturato + oltre)}</strong></td><td class="num"><strong>${chf2(manca + B.exA)}</strong></td><td></td></tr>
+        </tbody></table>` : '<div class="vuoto">Nessun mandato con onorario annuo: impostalo nei mandati dei clienti.</div>'}
+    </section>`;
+  }
+
   function htmlRicavi() {
     const q = QUOTA[periodo];
     const righe = TIPI_MANDATO.map(([k, n]) => ({ k, n, forf: ricavi.forf[k] || 0, val: ricavi.valore[k] || 0 })).filter(r => r.forf || r.val);
-    return `<div class="griglia-d">
+    return `${htmlBudget()}<div class="griglia-d">
       <section class="pannello sez-d"><div class="testa-d"><h2>Composizione dei ricavi</h2></div>${ciambella(ricavi.voci, ricavi.totale)}
         <p class="tenue nota-d">Onorari = onorario annuo dei mandati attivi × ${periodo === "anno" ? "1" : periodo === "trimestre" ? "¼" : periodo === "mese" ? "1/12" : "7/365"}. Ore extra e a tariffa: registrate nel periodo. Pratiche: concluse nel periodo.</p></section>
       <section class="pannello sez-d"><div class="testa-d"><h2>Onorari dei mandati: quanto è stato consumato</h2></div>

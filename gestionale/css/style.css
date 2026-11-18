@@ -490,3 +490,19 @@ ul.richieste li.ok { opacity: .7; }
 .seg.lavoro { background: #E8EFF7; color: #2C5D8F; font-size: 11px; }
 .legenda i.prorogata, .legenda .prorogata { background: #E6E1F7; color: #4B3C9E; font-weight: 800; }
 .percorso { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: #F1EFE9; padding: 2px 6px; border-radius: 4px; user-select: all; }
+/* Budget annuo */
+.bud-kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 6px 0 14px; }
+.bud-kpi > div { display: grid; gap: 2px; }
+.bud-kpi strong { font-size: 22px; white-space: nowrap; }
+.bud-kpi i.q { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.bud-barra { position: relative; display: flex; height: 26px; border-radius: 7px; overflow: visible; background: var(--grigio-tinta); gap: 2px; }
+.bud-barra > span { display: block; height: 100%; }
+.bud-barra > span:first-child { border-radius: 7px 0 0 7px; } .bud-barra > span:last-of-type { border-radius: 0 7px 7px 0; }
+.b-fatt { background: #3F78B5; } .b-manca { background: #CFDCEC; } .b-extra { background: #C4683A; } .b-prat { background: #36A07A; }
+.b-extra-a { background: repeating-linear-gradient(45deg, #EBCFBF, #EBCFBF 4px, #F7EAE2 4px, #F7EAE2 8px); }
+.bud-barra .b-lim { position: absolute; top: -5px; bottom: -5px; width: 0; border-left: 2px dashed var(--inchiostro); }
+.bud-leg { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 13px; }
+.bud-leg i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
+.bud-leg i.b-lim-l { border-left: 2px dashed var(--inchiostro); width: 0; border-radius: 0; height: 14px; }
+.meter-b .b-fatt { background: #3F78B5; }
+@media (max-width: 800px) { .bud-kpi { grid-template-columns: repeat(2, 1fr); } }

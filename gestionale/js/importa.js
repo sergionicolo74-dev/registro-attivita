@@ -1,7 +1,7 @@
 // Importazione dati (solo amministratori): anagrafica da Excel e backup del vecchio registro.
 import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
-import { fmtOre, normNome } from "./regole.js";
+import { fmtOre, normNome, clienteSpeciale } from "./regole.js";
 import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup, unisciCliente, nomiSimili } from "./mappa-import.js";
 
 // SheetJS (licenza Apache 2.0) incluso nel progetto, così non dipende da siti esterni
@@ -57,6 +57,20 @@ async function anteprimaExcel(file, box) {
     if (ex) presi.set(ex.id, c.ragioneSociale);
     piano.push({ c, ex, cod: null });
   }
+  // 2° giro: nomi scritti un po' diversi ("Janson Bridging" / "Janson Bridging Italia S.r.l.", "Tokenance OÜ" / "Tokenance OÜ, Tallinn, succursale…").
+  // Si abbinano solo coppie univoche: un cliente del gestionale non ancora abbinato e una sola riga del file non abbinata simile a lui (e viceversa).
+  const simili = [];
+  const libE = esistenti.filter(c => !presi.has(c.id) && !clienteSpeciale(c));
+  const libF = piano.filter(x => !x.ex);
+  const sim = (a, b) => nomiSimili(a.ragioneSociale, b.ragioneSociale) || (b.nomePrecedente && nomiSimili(a.ragioneSociale, b.nomePrecedente))
+    || (a.aliasNomi || []).some(n => nomiSimili(n, b.ragioneSociale));
+  for (const ex of libE) {
+    const cand = libF.filter(x => !x.ex && sim(ex, x.c));
+    if (cand.length !== 1) continue;
+    const x = cand[0];
+    if (libE.filter(e2 => e2 !== ex && sim(e2, x.c)).length) continue;
+    x.ex = ex; presi.set(ex.id, x.c.ragioneSociale); simili.push(`${ex.codice} «${ex.ragioneSociale}» = «${x.c.ragioneSociale}»`);
+  }
   const fissi = new Set(esistenti.filter(c => !presi.has(c.id)).map(c => c.codice)); // clienti che non sono nel file: tengono il loro codice
   const usati = new Set([...fissi, ...clienti.map(c => c.codice)]);
   let prossimo = Math.max(0, ...[...usati].map(k => /^C\d+$/.test(k || "") ? +k.slice(1) : 0));
@@ -77,6 +91,7 @@ async function anteprimaExcel(file, box) {
   box.innerHTML = `<div class="segnali">${stato("info", `${piano.length} clienti: ${nuovi} nuovi, ${piano.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} codici aggiornati`) : ""}
     ${tuttiErr.length ? stato("scaduto", `${tuttiErr.length} problemi`) : stato("ok", "Nessun problema")}</div>
     ${tuttiErr.length ? `<ul>${tuttiErr.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
+    ${simili.length ? `<p style="margin-top:8px">${stato("info", `${simili.length} clienti riconosciuti con il nome scritto diversamente`)} <span class="tenue" style="font-size:13px">controlla che siano davvero gli stessi</span></p><ul style="font-size:13px">${simili.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
     ${riassegnati.length ? `<p style="margin-top:8px">${stato("urgente", `${riassegnati.length} codici cambiati per evitare doppioni`)}</p><ul style="font-size:13px">${riassegnati.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
     ${perNomeL.length ? `<details style="font-size:13px;margin-top:8px"><summary>${perNomeL.length} clienti già presenti prendono il codice del file (le ore restano collegate)</summary><ul>${perNomeL.map(x => `<li>${e(x)}</li>`).join("")}</ul></details>` : ""}
     ${rinomina.length ? `<p style="margin-top:8px">${stato("info", `${rinomina.length} nomi aggiornati`)} <span class="tenue" style="font-size:13px">il nome vecchio resta come alias, le ore già registrate restano collegate</span></p><ul style="font-size:13px">${rinomina.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}

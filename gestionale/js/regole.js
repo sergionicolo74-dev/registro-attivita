@@ -566,8 +566,8 @@ export const DOCUMENTI_DF = [
 export const documentiDF = (c) => DOCUMENTI_DF.map(([k]) => k).filter(k => c.df?.documenti?.[k]);
 
 // ---------- Fatturazione e redditività dei mandati ----------
-export const FREQ_FATTURAZIONE = ["Mensile", "Trimestrale", "Semestrale", "Annuale"];
-const N_FREQ = { Mensile: 12, Trimestrale: 4, Semestrale: 2, Annuale: 1 };
+export const FREQ_FATTURAZIONE = ["Mensile", "Bimestrale", "Trimestrale", "Semestrale", "Annuale"];
+const N_FREQ = { Mensile: 12, Bimestrale: 6, Trimestrale: 4, Semestrale: 2, Annuale: 1 };
 /** Frequenza di fatturazione di un mandato (contabilità: trimestrale se non indicata; gli altri: annuale). */
 export const freqMandato = (k, m) => m.fatturazione || (k === "contabilita" ? "Trimestrale" : "Annuale");
 /** Periodi di fatturazione di un anno: [{periodo, da, a, etichetta, quota}] */
@@ -575,8 +575,8 @@ export function periodiFatturazione(freq, anno) {
   const n = N_FREQ[freq] || 1, mesi = 12 / n, out = [];
   for (let i = 1; i <= n; i++) {
     const da = dataISO(anno, (i - 1) * mesi + 1, 1), a = fineMese(anno, i * mesi);
-    const etichetta = n === 12 ? `${MESI[i - 1]} ${anno}` : n === 4 ? `${i}° trimestre ${anno}` : n === 2 ? `${i}° semestre ${anno}` : String(anno);
-    out.push({ periodo: n === 1 ? String(anno) : `${anno}-${n === 12 ? String(i).padStart(2, "0") : (n === 4 ? "T" : "S") + i}`, da, a, etichetta, quota: 1 / n });
+    const etichetta = n === 12 ? `${MESI[i - 1]} ${anno}` : n === 6 ? `${MESI[(i - 1) * 2][0].toUpperCase()}${MESI[(i - 1) * 2].slice(1)}–${MESI[i * 2 - 1]} ${anno}` : n === 4 ? `${i}° trimestre ${anno}` : n === 2 ? `${i}° semestre ${anno}` : String(anno);
+    out.push({ periodo: n === 1 ? String(anno) : `${anno}-${n === 12 ? String(i).padStart(2, "0") : ({ 6: "B", 4: "T", 2: "S" })[n] + i}`, da, a, etichetta, quota: 1 / n });
   }
   return out;
 }

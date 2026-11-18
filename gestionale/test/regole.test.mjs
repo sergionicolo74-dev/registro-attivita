@@ -309,3 +309,13 @@ console.log("Test compiti superati");
     tst(R.parseData(s) === atteso, `data «${s}» → ${atteso}`);
   for (const s of ["31.02.2026", "abc", "2026", "20.13.2026", "1.2.3"]) tst(R.parseData(s) === null, `data non valida «${s}»`);
 }
+
+// fatturazione bimestrale
+{
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  const R = await import("../js/regole.js");
+  const p = R.periodiFatturazione("Bimestrale", 2026);
+  tst(p.length === 6 && p[0].da === "2026-01-01" && p[0].a === "2026-02-28" && p[5].da === "2026-11-01" && p[5].a === "2026-12-31", "bimestrale: 6 periodi da gen–feb a nov–dic");
+  tst(p[2].periodo === "2026-B3" && p[2].etichetta.includes("2026"), "bimestrale: codice e nome del periodo");
+  tst(R.FREQ_FATTURAZIONE.includes("Bimestrale"), "bimestrale tra le scelte");
+}

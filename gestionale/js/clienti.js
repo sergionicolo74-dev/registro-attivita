@@ -134,6 +134,7 @@ export async function vistaScheda(el, id) {
           : `<div><span>Chiusura esercizio</span>${e(c.chiusuraEsercizio || "–")}</div>`}
         ${D.isAdmin() && budgetTotale(mandatiDi(c)) ? `<div><span>Onorari annui</span>CHF ${fmtNum(budgetTotale(mandatiDi(c)))}</div>` : ""}
       </div>
+      ${c.cartella ? `<div style="font-size:14px">📁 <span class="percorso" title="Cartella dei documenti sul server">${e(c.cartella)}</span> <button type="button" class="btn piccolo" id="copia-cartella">Copia percorso</button></div>` : ""}
       ${collegate.length ? `<div style="font-size:14px">🔗 Collegato a ${collegate.map(x => `<a href="#/clienti/${encodeURIComponent(x.clienteId)}/persone">${e(cliPer[x.clienteId]?.ragioneSociale || "società")}</a>${x.ruolo ? ` <span class="tenue">(${e(x.ruolo)})</span>` : ""}`).join(", ")}</div>` : ""}
       ${mancanti.length ? `<div class="tenue" style="font-size:13px">${stato("neutro", "Da completare")} ${e(mancanti.join(" · "))}</div>` : ""}
     </section>
@@ -143,6 +144,10 @@ export async function vistaScheda(el, id) {
 
   const p = el.querySelector("#pannello");
   const ricarica = () => vistaScheda(el, id);
+  el.querySelector("#copia-cartella")?.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(c.cartella); avviso("Percorso copiato: incollalo in Esplora file (Windows) o nel Finder (Mac: Vai → Vai alla cartella)"); }
+    catch { avviso("Copia non riuscita: seleziona il percorso e copialo a mano"); }
+  });
   el.querySelector("#elimina-cli")?.addEventListener("click", async () => {
     // Si elimina solo un cliente vuoto: con ore, compiti o persone collegate si rischierebbe di perdere dati
     const [reg, comp] = await Promise.all([D.listaRegistrazioni(id), D.listaCompiti(id)]);
@@ -261,7 +266,7 @@ function schedaDati(p, c, kyc, ricarica) {
       ${campo("emailGenerale", "Email generale", c.emailGenerale, "email")}${campo("lingua", "Lingua corrispondenza", c.lingua, "select", ["Italiano", "Tedesco", "Francese", "Inglese"])}
     </div>
     <div class="sezione"><h3>Archivio</h3><div class="griglia">
-      ${campo("cartella", "Cartella archivio (percorso)", c.cartella, "text", [], true)}
+      ${campo("cartella", "Cartella dei documenti sul server (es. \\\\SERVER\\Clienti\\C005 Base Camp Europe)", c.cartella, "text", [], true)}
     </div></div>
     </fieldset>
     ${admin ? `<div class="sezione riservato"><h3>KYC e rischio</h3><div class="griglia">
@@ -309,7 +314,7 @@ function schedaDatiPF(p, c, kyc, ricarica) {
       <p class="tenue" style="font-size:13px;margin:0 0 8px">Spunta quelli che riguardano questo cliente: nello Scadenziario, per ogni dichiarazione, si segneranno man mano quelli ricevuti.</p>
       <div class="servizi">${DOCUMENTI_DF.map(([k, n]) => `<label><input type="checkbox" name="df.documenti.${k}"${df.documenti?.[k] ? " checked" : ""}> ${e(n)}</label>`).join("")}</div></div>
     <div class="sezione"><h3>Note per la dichiarazione</h3>${campo("df.note", "Particolarità (es. immobile in Italia, deduzioni ricorrenti, proroga abituale)", df.note, "textarea", [], true)}</div>
-    <div class="sezione"><h3>Archivio</h3><div class="griglia">${campo("cartella", "Cartella archivio (percorso)", c.cartella, "text", [], true)}</div></div>
+    <div class="sezione"><h3>Archivio</h3><div class="griglia">${campo("cartella", "Cartella dei documenti sul server (es. \\\\SERVER\\Clienti\\C005 Base Camp Europe)", c.cartella, "text", [], true)}</div></div>
     </fieldset>
     ${admin ? `<div class="sezione riservato"><h3>KYC e rischio</h3><div class="griglia">
       ${campo("kyc.stato", "Stato KYC", kyc?.stato, "select", ["Completo", "Da completare", "Da aggiornare"])}${campo("kyc.rischio", "Rischio", kyc?.rischio, "select", ["Basso", "Medio", "Elevato"])}

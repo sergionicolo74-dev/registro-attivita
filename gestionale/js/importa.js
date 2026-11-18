@@ -42,50 +42,64 @@ async function anteprimaExcel(file, box) {
   const { clienti, kyc, errori, senzaCodice = [] } = clientiDaExcel(foglio("Clienti"));
   const esistenti = await D.listaClienti();
   const perCodice = Object.fromEntries(esistenti.map(c => [c.codice, c]));
-  // Abbinamento: prima per nome (es. clienti creati dal vecchio registro), poi per codice
-  let perNome = 0;
-  const conflitti = [];
+  // Abbinamento di ogni riga del file a un cliente del gestionale:
+  // 1) stesso nome (anche con codice diverso: si tiene il codice del gestionale, così niente doppioni)
+  // 2) stesso codice e nome simile (rinomina, il vecchio nome resta come alias)
+  // 3) codice già usato da un altro cliente: la riga riceve un codice libero e lo si segnala
+  const usati = new Set(esistenti.map(c => c.codice));
+  let prossimo = Math.max(0, ...[...usati, ...clienti.map(c => c.codice)].map(k => /^C\d+$/.test(k || "") ? +k.slice(1) : 0));
+  const libero = () => { let k; do { k = "C" + String(++prossimo).padStart(3, "0"); } while (usati.has(k)); usati.add(k); return k; };
+  const piano = [], mappa = {}, conflitti = [], riassegnati = [], perNomeL = [];
+  const presi = new Map();
   for (const c of clienti) {
     const exNome = abbinaNome(c.ragioneSociale, esistenti), exCod = perCodice[c.codice];
-    if (exNome && exNome !== exCod) {
-      if (exCod) conflitti.push(`Il codice ${c.codice} (${c.ragioneSociale}) è già usato da «${exCod.ragioneSociale}» nel gestionale`);
-      perCodice[c.codice] = exNome; perNome++;
-    } else if (exCod && normNome(exCod.ragioneSociale) !== normNome(c.ragioneSociale) && !(exCod.aliasNomi || []).length && !nomiSimili(exCod.ragioneSociale, c.ragioneSociale)) {
-      conflitti.push(`Il codice ${c.codice} è «${exCod.ragioneSociale}» nel gestionale ma «${c.ragioneSociale}» nel file`);
-    }
+    let ex = null, cod = c.codice;
+    if (exNome) { ex = exNome; cod = exNome.codice; if (exNome.codice !== c.codice) perNomeL.push(`${c.ragioneSociale}: nel gestionale è già ${exNome.codice}, resta ${exNome.codice}`); }
+    else if (exCod && (normNome(exCod.ragioneSociale) === normNome(c.ragioneSociale) || nomiSimili(exCod.ragioneSociale, c.ragioneSociale))) ex = exCod;
+    else if (exCod) { cod = null; }
+    if (ex && presi.has(ex.id)) { conflitti.push(`«${c.ragioneSociale}» e «${presi.get(ex.id)}» corrispondono allo stesso cliente ${ex.codice} del gestionale`); continue; }
+    if (ex) presi.set(ex.id, c.ragioneSociale);
+    piano.push({ c, ex, cod }); 
   }
+  // codici liberi per le righe il cui codice era già di un altro cliente (dopo, per non rubare codici del file)
+  for (const x of piano) if (!x.cod) { x.cod = libero(); riassegnati.push(`${x.c.ragioneSociale}: ${x.c.codice} è già «${perCodice[x.c.codice].ragioneSociale}» nel gestionale → riceve ${x.cod}`); }
+  // un codice del file non deve finire su due clienti diversi
+  const finali = new Map();
+  for (const x of piano) { if (finali.has(x.cod) && finali.get(x.cod) !== x) { const k = libero(); riassegnati.push(`${x.c.ragioneSociale}: ${x.cod} è già usato → riceve ${k}`); x.cod = k; } finali.set(x.cod, x); mappa[x.c.codice] = x.cod; }
+  const perNome = perNomeL.length;
   errori.push(...conflitti);
   const codici = new Set([...clienti.map(c => c.codice), ...esistenti.map(c => c.codice)]);
   const { persone, errori: errP, senzaCodice: persSenza = 0 } = personeDaExcel(foglio("Persone"), codici);
-  const rinomina = clienti.filter(c => perCodice[c.codice] && normNome(perCodice[c.codice].ragioneSociale) !== normNome(c.ragioneSociale) && nomiSimili(perCodice[c.codice].ragioneSociale, c.ragioneSociale))
-    .map(c => `${c.codice}: «${perCodice[c.codice].ragioneSociale}» diventa «${c.ragioneSociale}»`);
-  const nuovi = clienti.filter(c => !perCodice[c.codice]).length;
+  const rinomina = piano.filter(x => x.ex && normNome(x.ex.ragioneSociale) !== normNome(x.c.ragioneSociale)).map(x => `${x.cod}: «${x.ex.ragioneSociale}» diventa «${x.c.ragioneSociale}»`);
+  const nuovi = piano.filter(x => !x.ex).length;
   const tuttiErr = [...errori, ...errP];
-  box.innerHTML = `<div class="segnali">${stato("info", `${clienti.length} clienti: ${nuovi} nuovi, ${clienti.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} abbinati per nome`) : ""}
+  box.innerHTML = `<div class="segnali">${stato("info", `${piano.length} clienti: ${nuovi} nuovi, ${piano.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} abbinati per nome`) : ""}
     ${tuttiErr.length ? stato("scaduto", `${tuttiErr.length} problemi`) : stato("ok", "Nessun problema")}</div>
     ${tuttiErr.length ? `<ul>${tuttiErr.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
+    ${riassegnati.length ? `<p style="margin-top:8px">${stato("urgente", `${riassegnati.length} codici cambiati per evitare doppioni`)}</p><ul style="font-size:13px">${riassegnati.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
+    ${perNomeL.length ? `<details style="font-size:13px;margin-top:8px"><summary>${perNomeL.length} clienti riconosciuti per nome (tengono il codice del gestionale)</summary><ul>${perNomeL.map(x => `<li>${e(x)}</li>`).join("")}</ul></details>` : ""}
     ${rinomina.length ? `<p style="margin-top:8px">${stato("info", `${rinomina.length} nomi aggiornati`)} <span class="tenue" style="font-size:13px">il nome vecchio resta come alias, le ore già registrate restano collegate</span></p><ul style="font-size:13px">${rinomina.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
     ${senzaCodice.length ? `<p style="margin-top:8px">${stato("urgente", `${senzaCodice.length} righe senza codice cliente: non vengono importate`)}</p><details style="font-size:13px"><summary>Vedi quali</summary>${senzaCodice.map(e).join(" · ")}</details><p class="tenue" style="font-size:13px">Per importarle dai loro un codice nel file (C035, C036…).</p>` : ""}
     ${persSenza ? `<p style="margin-top:8px">${stato("urgente", `${persSenza} persone senza codice cliente: non vengono importate`)} <span class="tenue" style="font-size:13px">nel foglio Persone scrivi in colonna A il codice del cliente a cui appartengono</span></p>` : ""}
-    ${conflitti.length ? `<p>${stato("scaduto", "Codici in conflitto: correggi il file o i codici nel gestionale prima di importare")}</p>` : ""}
+    ${conflitti.length ? `<p>${stato("scaduto", "Doppioni: correggi il file prima di importare")}</p>` : ""}
     <div class="azioni"><button class="btn primario" id="vai-xlsx" ${clienti.length && !conflitti.length ? "" : "disabled"}>Importa</button></div><div class="avanzamento" hidden><div></div></div>`;
   box.querySelector("#vai-xlsx").addEventListener("click", async () => {
     box.querySelector("#vai-xlsx").disabled = true;
     const barra = box.querySelector(".avanzamento"); barra.hidden = false;
     // 1) clienti (aggiorna quelli con lo stesso codice, conserva i nomi precedenti per abbinare il backup)
     const ids = {};
-    for (const c of clienti) {
-      const ex = perCodice[c.codice];
+    for (const { c, ex, cod } of piano) {
       const alias = new Set([...(ex?.aliasNomi || []), ...(ex && ex.ragioneSociale !== c.ragioneSociale ? [ex.ragioneSociale] : [])]);
-      ids[c.codice] = await D.salvaCliente({ ...(ex ? { ...unisciCliente(ex, c), codice: c.codice } : c), aliasNomi: [...alias] });
+      ids[c.codice] = await D.salvaCliente({ ...(ex ? { ...unisciCliente(ex, c), id: ex.id } : c), codice: cod, aliasNomi: [...alias] });
     }
     for (const { codice, ...r } of kyc) {
       const pieni = Object.fromEntries(Object.entries(r).filter(([, v]) => v != null && v !== ""));
-      if (Object.keys(pieni).length) await D.salvaKycCliente(ids[codice], pieni);
+      if (Object.keys(pieni).length && ids[codice]) await D.salvaKycCliente(ids[codice], pieni);
     }
     // 2) persone
     for (const p of persone) {
       const clienteId = ids[p.codice] || perCodice[p.codice]?.id;
+      if (!clienteId) continue;
       const clientePF = p.codicePF ? (ids[p.codicePF] || perCodice[p.codicePF]?.id || null) : null;
       // stessa persona già presente (es. importazione ripetuta): si aggiorna invece di duplicarla
       const gia = (await D.listaPersone(clienteId).catch(() => [])).find(y => normNome(`${y.cognome} ${y.nome}`) === normNome(`${p.dati.cognome} ${p.dati.nome}`));

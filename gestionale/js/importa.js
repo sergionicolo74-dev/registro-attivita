@@ -52,7 +52,8 @@ async function anteprimaExcel(file, box) {
   const piano = [], mappa = {}, conflitti = [], riassegnati = [], perNomeL = [];
   const presi = new Map();
   for (const c of clienti) {
-    const exNome = abbinaNome(c.ragioneSociale, esistenti), exCod = perCodice[c.codice];
+    // "Nome precedente": società che ha cambiato nome (es. DigitCo GmbH → Tokenance Group SA): si aggiorna quella già presente
+    const exNome = abbinaNome(c.ragioneSociale, esistenti) || (c.nomePrecedente ? abbinaNome(c.nomePrecedente, esistenti) : null), exCod = perCodice[c.codice];
     let ex = null, cod = c.codice;
     if (exNome) { ex = exNome; cod = exNome.codice; if (exNome.codice !== c.codice) perNomeL.push(`${c.ragioneSociale}: nel gestionale è già ${exNome.codice}, resta ${exNome.codice}`); }
     else if (exCod && (normNome(exCod.ragioneSociale) === normNome(c.ragioneSociale) || nomiSimili(exCod.ragioneSociale, c.ragioneSociale))) ex = exCod;
@@ -88,8 +89,9 @@ async function anteprimaExcel(file, box) {
     const barra = box.querySelector(".avanzamento"); barra.hidden = false;
     // 1) clienti (aggiorna quelli con lo stesso codice, conserva i nomi precedenti per abbinare il backup)
     const ids = {};
-    for (const { c, ex, cod } of piano) {
-      const alias = new Set([...(ex?.aliasNomi || []), ...(ex && ex.ragioneSociale !== c.ragioneSociale ? [ex.ragioneSociale] : [])]);
+    for (const { c: c0, ex, cod } of piano) {
+      const { nomePrecedente, ...c } = c0;
+      const alias = new Set([...(ex?.aliasNomi || []), ...(ex && ex.ragioneSociale !== c.ragioneSociale ? [ex.ragioneSociale] : []), ...(nomePrecedente ? [nomePrecedente] : [])]);
       ids[c.codice] = await D.salvaCliente({ ...(ex ? { ...unisciCliente(ex, c), id: ex.id } : c), codice: cod, aliasNomi: [...alias] });
     }
     for (const { codice, ...r } of kyc) {

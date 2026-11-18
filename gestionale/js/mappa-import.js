@@ -58,7 +58,7 @@ function clientiDaExcelV3(righe) {
       coniuge: coniugeNome ? { nome: coniugeNome, nascita: parseData(r["PF – coniuge data di nascita"]), attivita: T(r["PF – coniuge attività"]) } : null
     } : null;
     clienti.push({
-      codice, ragioneSociale: rs, forma, idi: T(r["IDI"]), responsabile: T(r["Responsabile interno"]), sostituto: T(r["Sostituto"]),
+      codice, ragioneSociale: rs, nomePrecedente: T(r["Nome precedente"]) || null, forma, idi: T(r["IDI"]), responsabile: T(r["Responsabile interno"]), sostituto: T(r["Sostituto"]),
       stato: T(r["Stato cliente"]) || "Attivo", chiusuraEsercizio: chiusuraDa(r["Chiusura esercizio"]),
       indirizzo: T(r["Indirizzo"]), npa: T(r["NPA"]), localita: T(r["Località"]), cantone: T(r["Cantone"]),
       emailGenerale: T(r["Email generale"]), lingua: T(r["Lingua corrispondenza"]),
@@ -94,7 +94,7 @@ export function clientiDaExcel(righe) {
       ? `${String(r["Chiusura esercizio"].getDate()).padStart(2, "0")}.${String(r["Chiusura esercizio"].getMonth() + 1).padStart(2, "0")}`
       : T(r["Chiusura esercizio"]);
     clienti.push({
-      codice, ragioneSociale: rs, forma: T(r["Forma giuridica"]), idi: T(r["IDI"]),
+      codice, ragioneSociale: rs, nomePrecedente: T(r["Nome precedente"]) || null, forma: T(r["Forma giuridica"]), idi: T(r["IDI"]),
       responsabile: T(r["Responsabile interno"]), sostituto: T(r["Sostituto"]), stato: T(r["Stato mandato"]) || "Attivo",
       inizioMandato: parseData(r["Inizio mandato"]), chiusuraEsercizio: chiusura,
       indirizzo: T(r["Indirizzo"]), npa: T(r["NPA"]), localita: T(r["Località"]), cantone: T(r["Cantone"]),

@@ -43,30 +43,30 @@ async function anteprimaExcel(file, box) {
   const esistenti = await D.listaClienti();
   const perCodice = Object.fromEntries(esistenti.map(c => [c.codice, c]));
   // Abbinamento di ogni riga del file a un cliente del gestionale:
-  // 1) stesso nome (anche con codice diverso: si tiene il codice del gestionale, così niente doppioni)
-  // 2) stesso codice e nome simile (rinomina, il vecchio nome resta come alias)
-  // 3) codice già usato da un altro cliente: la riga riceve un codice libero e lo si segnala
-  const usati = new Set(esistenti.map(c => c.codice));
-  let prossimo = Math.max(0, ...[...usati, ...clienti.map(c => c.codice)].map(k => /^C\d+$/.test(k || "") ? +k.slice(1) : 0));
-  const libero = () => { let k; do { k = "C" + String(++prossimo).padStart(3, "0"); } while (usati.has(k)); usati.add(k); return k; };
+  // 1) stesso nome (o "Nome precedente") → è quel cliente; 2) stesso codice e nome simile → rinomina.
+  // I codici del file sono quelli giusti: i clienti riconosciuti prendono il codice del file (le ore restano collegate, il codice è solo un'etichetta).
+  // Un codice del file già usato da un cliente che non è nel file riceve invece un codice libero, segnalato.
   const piano = [], mappa = {}, conflitti = [], riassegnati = [], perNomeL = [];
   const presi = new Map();
   for (const c of clienti) {
-    // "Nome precedente": società che ha cambiato nome (es. DigitCo GmbH → Tokenance Group SA): si aggiorna quella già presente
     const exNome = abbinaNome(c.ragioneSociale, esistenti) || (c.nomePrecedente ? abbinaNome(c.nomePrecedente, esistenti) : null), exCod = perCodice[c.codice];
-    let ex = null, cod = c.codice;
-    if (exNome) { ex = exNome; cod = exNome.codice; if (exNome.codice !== c.codice) perNomeL.push(`${c.ragioneSociale}: nel gestionale è già ${exNome.codice}, resta ${exNome.codice}`); }
+    let ex = null;
+    if (exNome) ex = exNome;
     else if (exCod && (normNome(exCod.ragioneSociale) === normNome(c.ragioneSociale) || nomiSimili(exCod.ragioneSociale, c.ragioneSociale))) ex = exCod;
-    else if (exCod) { cod = null; }
     if (ex && presi.has(ex.id)) { conflitti.push(`«${c.ragioneSociale}» e «${presi.get(ex.id)}» corrispondono allo stesso cliente ${ex.codice} del gestionale`); continue; }
     if (ex) presi.set(ex.id, c.ragioneSociale);
-    piano.push({ c, ex, cod }); 
+    piano.push({ c, ex, cod: null });
   }
-  // codici liberi per le righe il cui codice era già di un altro cliente (dopo, per non rubare codici del file)
-  for (const x of piano) if (!x.cod) { x.cod = libero(); riassegnati.push(`${x.c.ragioneSociale}: ${x.c.codice} è già «${perCodice[x.c.codice].ragioneSociale}» nel gestionale → riceve ${x.cod}`); }
-  // un codice del file non deve finire su due clienti diversi
-  const finali = new Map();
-  for (const x of piano) { if (finali.has(x.cod) && finali.get(x.cod) !== x) { const k = libero(); riassegnati.push(`${x.c.ragioneSociale}: ${x.cod} è già usato → riceve ${k}`); x.cod = k; } finali.set(x.cod, x); mappa[x.c.codice] = x.cod; }
+  const fissi = new Set(esistenti.filter(c => !presi.has(c.id)).map(c => c.codice)); // clienti che non sono nel file: tengono il loro codice
+  const usati = new Set([...fissi, ...clienti.map(c => c.codice)]);
+  let prossimo = Math.max(0, ...[...usati].map(k => /^C\d+$/.test(k || "") ? +k.slice(1) : 0));
+  const libero = () => { let k; do { k = "C" + String(++prossimo).padStart(3, "0"); } while (usati.has(k)); usati.add(k); return k; };
+  for (const x of piano) {
+    if (fissi.has(x.c.codice)) { x.cod = libero(); riassegnati.push(`${x.c.ragioneSociale}: ${x.c.codice} è già «${perCodice[x.c.codice].ragioneSociale}» nel gestionale → riceve ${x.cod}`); }
+    else x.cod = x.c.codice;
+    if (x.ex && x.ex.codice !== x.cod) perNomeL.push(`${x.c.ragioneSociale}: ${x.ex.codice} → ${x.cod}`);
+    mappa[x.c.codice] = x.cod;
+  }
   const perNome = perNomeL.length;
   errori.push(...conflitti);
   const codici = new Set([...clienti.map(c => c.codice), ...esistenti.map(c => c.codice)]);
@@ -74,11 +74,11 @@ async function anteprimaExcel(file, box) {
   const rinomina = piano.filter(x => x.ex && normNome(x.ex.ragioneSociale) !== normNome(x.c.ragioneSociale)).map(x => `${x.cod}: «${x.ex.ragioneSociale}» diventa «${x.c.ragioneSociale}»`);
   const nuovi = piano.filter(x => !x.ex).length;
   const tuttiErr = [...errori, ...errP];
-  box.innerHTML = `<div class="segnali">${stato("info", `${piano.length} clienti: ${nuovi} nuovi, ${piano.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} abbinati per nome`) : ""}
+  box.innerHTML = `<div class="segnali">${stato("info", `${piano.length} clienti: ${nuovi} nuovi, ${piano.length - nuovi} da aggiornare`)}${stato("info", `${persone.length} persone`)}${perNome ? stato("info", `${perNome} codici aggiornati`) : ""}
     ${tuttiErr.length ? stato("scaduto", `${tuttiErr.length} problemi`) : stato("ok", "Nessun problema")}</div>
     ${tuttiErr.length ? `<ul>${tuttiErr.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
     ${riassegnati.length ? `<p style="margin-top:8px">${stato("urgente", `${riassegnati.length} codici cambiati per evitare doppioni`)}</p><ul style="font-size:13px">${riassegnati.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
-    ${perNomeL.length ? `<details style="font-size:13px;margin-top:8px"><summary>${perNomeL.length} clienti riconosciuti per nome (tengono il codice del gestionale)</summary><ul>${perNomeL.map(x => `<li>${e(x)}</li>`).join("")}</ul></details>` : ""}
+    ${perNomeL.length ? `<details style="font-size:13px;margin-top:8px"><summary>${perNomeL.length} clienti già presenti prendono il codice del file (le ore restano collegate)</summary><ul>${perNomeL.map(x => `<li>${e(x)}</li>`).join("")}</ul></details>` : ""}
     ${rinomina.length ? `<p style="margin-top:8px">${stato("info", `${rinomina.length} nomi aggiornati`)} <span class="tenue" style="font-size:13px">il nome vecchio resta come alias, le ore già registrate restano collegate</span></p><ul style="font-size:13px">${rinomina.map(x => `<li>${e(x)}</li>`).join("")}</ul>` : ""}
     ${senzaCodice.length ? `<p style="margin-top:8px">${stato("urgente", `${senzaCodice.length} righe senza codice cliente: non vengono importate`)}</p><details style="font-size:13px"><summary>Vedi quali</summary>${senzaCodice.map(e).join(" · ")}</details><p class="tenue" style="font-size:13px">Per importarle dai loro un codice nel file (C035, C036…).</p>` : ""}
     ${persSenza ? `<p style="margin-top:8px">${stato("urgente", `${persSenza} persone senza codice cliente: non vengono importate`)} <span class="tenue" style="font-size:13px">nel foglio Persone scrivi in colonna A il codice del cliente a cui appartengono</span></p>` : ""}

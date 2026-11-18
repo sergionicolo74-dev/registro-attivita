@@ -3,6 +3,7 @@ import * as D from "./data.js";
 import { e, avviso } from "./ui.js";
 import { vistaClienti, vistaScheda } from "./clienti.js";
 import { vistaImporta } from "./importa.js";
+import { vistaPartenza } from "./partenza.js";
 import { vistaRegistro } from "./registro.js";
 import { vistaMandati } from "./mandati.js";
 import { vistaCompiti } from "./compiti.js";
@@ -29,7 +30,8 @@ const MODULI = [
   { id: "presenze", nome: "Presenze", pronto: true },
   { id: "vacanze", nome: "Vacanze", pronto: true },
   { id: "utenti", nome: "Utenti", pronto: true, admin: true },
-  { id: "importa", nome: "Importa dati", pronto: true, admin: true }
+  { id: "importa", nome: "Importa dati", pronto: true, admin: true },
+  { id: "partenza", nome: "Situazione di partenza", pronto: true, admin: true }
 ];
 
 async function avvio() {
@@ -98,6 +100,7 @@ async function instrada() {
     else if (mod === "vacanze") await vistaVacanze(vista);
     else if (mod === "utenti" && D.isAdmin()) await vistaUtenti(vista);
     else if (mod === "importa" && D.isAdmin()) await vistaImporta(vista);
+    else if (mod === "partenza" && D.isAdmin()) await vistaPartenza(vista);
     else vista.innerHTML = `<div class="testata"><h1>${e(m?.nome || "Pagina")}</h1></div><div class="pannello vuoto">Questo modulo arriva nelle prossime fasi del piano.</div>`;
   } catch (x) {
     console.error(x);

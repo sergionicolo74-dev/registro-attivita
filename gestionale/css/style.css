@@ -506,3 +506,5 @@ ul.richieste li.ok { opacity: .7; }
 .bud-leg i.b-lim-l { border-left: 2px dashed var(--inchiostro); width: 0; border-radius: 0; height: 14px; }
 .meter-b .b-fatt { background: #3F78B5; }
 @media (max-width: 800px) { .bud-kpi { grid-template-columns: repeat(2, 1fr); } }
+.tab-ins input, .tab-ins select { width: 100%; min-width: 90px; padding: 6px 8px; font-size: 14px; }
+.tab-ins td { padding: 4px 6px; }

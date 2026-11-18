@@ -113,7 +113,7 @@ export async function vistaReport(el) {
         <td><a href="#/clienti/${encodeURIComponent(x.c.id)}/mandati">${e(nomeCli(x.c.id))}</a></td><td>${e(NOME_MANDATO[x.k])}</td><td>${e(x.p.etichetta)}${x.chiuso ? "" : ' <span class="tenue">(in corso)</span>'}</td>
         <td class="num">${chf(x.importo)}</td><td>${barraOre(x.minuti, x.minutiPreventivati)}</td><td class="num">${chf(x.valore)}</td>
         <td>${x.esito ? stato(...ESITO[x.esito]) : ""}</td>
-        <td class="num">${x.fatt ? stato("ok", `Fatturato ${fmtData(x.fatt.fatturataIl)}`) : x.chiuso ? `<button class="btn piccolo" data-forf="${e(x.id)}">✓ Fatturato</button>` : ""}</td></tr>`).join("")}
+        <td class="num">${x.fatt ? `${stato("ok", `Fatturato ${fmtData(x.fatt.fatturataIl)}`)}${D.isAdmin() ? ` <button class="btn piccolo" data-annulla="${e(x.id)}" title="Annulla: il periodo torna da fatturare e le ore si riaprono">Annulla</button>` : ""}` : x.chiuso ? `<button class="btn piccolo" data-forf="${e(x.id)}">✓ Fatturato</button>` : ""}</td></tr>`).join("")}
       </tbody></table></div>` : '<div class="vuoto">Nessun mandato a forfait con un periodo che termina qui. Il forfait si imposta nel mandato del cliente (budget annuo e fatturazione).</div>'}
     </section>
 
@@ -207,10 +207,19 @@ export async function vistaReport(el) {
   el.querySelector("#f-chi").addEventListener("change", ev => { fChi = ev.target.value; ricarica(); });
   corpo.querySelectorAll("[data-forf]").forEach(b => b.addEventListener("click", async () => {
     const x = forfait.find(y => y.id === b.dataset.forf);
+    if (!confirm(`Segnare come fatturato l'onorario di ${x.c.ragioneSociale} (${NOME_MANDATO[x.k]}, ${x.p.etichetta}) di CHF ${chf(x.importo)}?${x.idsPeriodo.length ? `\n\nLe ${x.idsPeriodo.length} registrazioni di ore del periodo verranno chiuse e non si potranno più modificare.` : ""}`)) return;
     await D.salvaFattura({ id: x.id, clienteId: x.c.id, mandato: x.k, periodo: x.p.periodo, importo: x.importo, minuti: x.minuti, valoreOre: x.valore, stato: "Fatturata", fatturataIl: oggi, fatturataDa: D.utenteCorrente().nome, registrazioni: x.idsPeriodo });
     // le ore del periodo si chiudono: nel Registro non si possono più modificare
     if (x.idsPeriodo.length) await D.aggiornaRegistrazioni(x.idsPeriodo, { fatturataIl: oggi, fatturaRif: x.id });
     avviso(`Fatturato: ${x.c.ragioneSociale}, ${x.p.etichetta}`); ricarica();
+  }));
+  corpo.querySelectorAll("[data-annulla]").forEach(b => b.addEventListener("click", async () => {
+    const x = forfait.find(y => y.id === b.dataset.annulla); if (!x?.fatt) return;
+    if (!confirm(`Annullare "Fatturato" per ${x.c.ragioneSociale} (${x.p.etichetta})?\nIl periodo torna da fatturare e le ore del periodo si riaprono.`)) return;
+    const ids = x.fatt.registrazioni || reg.filter(r => r.fatturaRif === x.id).map(r => r.id);
+    if (ids.length) await D.aggiornaRegistrazioni(ids, { fatturataIl: null, fatturaRif: null });
+    await D.eliminaFattura(x.id);
+    avviso("Annullato: il periodo è di nuovo da fatturare"); ricarica();
   }));
   corpo.querySelectorAll("[data-extra]").forEach(b => b.addEventListener("click", async () => {
     const cid = b.dataset.extra, l = perCliExtra[cid] || [], sp = perCliSpese[cid] || [];

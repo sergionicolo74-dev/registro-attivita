@@ -242,7 +242,7 @@ console.log("Test compiti superati");
   const ok = (a, b, n) => { const x = JSON.stringify(a), y = JSON.stringify(b); if (x !== y) { console.error("FALLITO", n, x, "≠", y); process.exitCode = 1; } else console.log("ok", n); };
   const c = { codice: "C009", forma: "SA", idi: "x", responsabile: "x", indirizzo: "x", npa: "x", localita: "x", chiusuraEsercizio: "31.12", servizi: { contabilita: true },
     mandati: { intestazione: { attivo: true, stato: "Firmato aggiornato", tipoTitoli: "Azioni", numero: 100 } } };
-  ok(R.TIPI_MANDATO.map(([k]) => k), ["contabilita", "funzione", "domiciliazione", "intestazione"], "quattro mandati");
+  ok(R.TIPI_MANDATO.map(([k]) => k), ["contabilita", "stipendi", "funzione", "domiciliazione", "intestazione"], "cinque mandati (stipendi separato)");
   ok(R.campiMancanti(c, 1, null), ["Contratto fiduciario"], "manca il contratto fiduciario firmato");
   ok(R.mandatiDi({ servizi: {} }).intestazione.attivo, false, "dati vecchi: intestazione non attiva");
   ok(R.budgetTotale(R.mandatiDi({ mandati: { intestazione: { attivo: true, budget: 1500 }, contabilita: { attivo: true, budget: 2200 } } })), 3700, "budget con intestazione");
@@ -334,4 +334,10 @@ console.log("Test compiti superati");
     tst(mandatoDiRegistrazione({ attivita: "stipendi", mandato: "contabilita" }, mm) === "stipendi", "ore stipendi → mandato stipendi se attivo");
     tst(mandatoDiRegistrazione({ attivita: "stipendi", mandato: "contabilita" }, R.mandatiDi({ mandati: { contabilita: { attivo: true } } })) === "contabilita", "ore stipendi → contabilità se stipendi non attivo");
   }
+}
+{
+  const R = await import("../js/regole.js");
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  tst(R.senzaOre("funzione") && R.senzaOre("domiciliazione") && !R.senzaOre("contabilita") && !R.senzaOre("intestazione"), "senza ore previste: solo funzione e domiciliazione");
+  tst(R.tfDiMandato("mandato", "funzione") === "extra" && R.tfDiMandato("non", "domiciliazione") === "non" && R.tfDiMandato("mandato", "contabilita") === "mandato", "ore su funzione/domiciliazione fatturate come extra");
 }

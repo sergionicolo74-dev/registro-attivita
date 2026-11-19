@@ -20,7 +20,7 @@ const chf = n => fmtNum(n || 0, 0);
 const TEMPO_TUTTI = [["M", "Nel mandato", "c-mand"], ["X", "Extra da fatturare", "c-extra"], ["PR", "Pratiche", "c-prat"], ["N", "Non fatturabile", "c-non"], ["BO", "Back office", "c-bo"], ["NR", "Non registrato", "c-nr"]];
 let TEMPO = TEMPO_TUTTI.filter(([k]) => k !== "BO"); // "Back office" compare solo se c'è chi lavora in back office
 // Composizione dei ricavi: ordine dei colori verificato anche tra primo e ultimo spicchio
-const RICAVI = [["contabilita", "Contabilità e Tax", "#3F78B5"], ["funzione", "Funzione societaria", "#C4683A"], ["domiciliazione", "Domiciliazione", "#36A07A"],
+const RICAVI = [["contabilita", "Contabilità e Tax", "#3F78B5"], ["stipendi", "Stipendi", "#2E9AA6"], ["funzione", "Funzione societaria", "#C4683A"], ["domiciliazione", "Domiciliazione", "#36A07A"],
   ["intestazione", "Intestazione fiduciaria", "#6F62B8"], ["extra", "Ore extra e a tariffa", "#B88A20"], ["pratiche", "Pratiche", "#C26F8E"]];
 
 export async function vistaDashboard(el) {

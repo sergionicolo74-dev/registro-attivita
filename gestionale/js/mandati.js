@@ -9,6 +9,7 @@ let filtro = "";
 /** Tipo di mandato di una registrazione: quello scelto; per le vecchie, l'unico mandato attivo o la contabilità. */
 export function mandatoDiRegistrazione(r, mm) {
   if (r.praticaId || r.mandato === "pratica") return "pratica"; // pratiche amministrative: fuori dai mandati
+  if (r.attivita === "stipendi" && mm.stipendi?.attivo) return "stipendi"; // stipendi: ricavo separato se il cliente ha il mandato stipendi
   if (r.mandato) return r.mandato;
   const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo).map(([k]) => k);
   if (att.length === 1) return att[0];
@@ -46,7 +47,7 @@ export async function vistaMandati(el) {
   <div class="kpi">${TIPI_MANDATO.map(([k, n]) => `<div class="pannello">
     <div class="tenue" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em">${e(n)}</div>
     <div class="grande">${tot[k].attivi} <span class="tenue" style="font-size:14px;font-weight:400">clienti</span></div>
-    <div class="segnali">${tot[k].daAgg ? stato("urgente", `${tot[k].daAgg} da aggiornare`) : tot[k].attivi ? stato("ok", "Tutti aggiornati") : ""}</div>
+    <div class="segnali">${k === "stipendi" ? '<span class="tenue" style="font-size:13px">Firmato con la contabilità</span>' : tot[k].daAgg ? stato("urgente", `${tot[k].daAgg} da aggiornare`) : tot[k].attivi ? stato("ok", "Tutti aggiornati") : ""}</div>
     ${admin ? `<div class="tenue" style="margin-top:8px">Onorari CHF <strong style="color:var(--inchiostro)">${fmtNum(tot[k].budget)}</strong></div>` : ""}
   </div>`).join("")}</div>
 

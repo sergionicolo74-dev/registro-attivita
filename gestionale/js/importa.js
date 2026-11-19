@@ -6,7 +6,7 @@ import { clientiDaExcel, personeDaExcel, abbinaNome, documentiDaBackup, unisciCl
 
 // SheetJS (licenza Apache 2.0) incluso nel progetto, così non dipende da siti esterni
 const SHEETJS = new URL("../lib/xlsx.full.min.js", import.meta.url).href;
-function caricaSheetJS() {
+export function caricaSheetJS() {
   if (window.XLSX) return Promise.resolve(window.XLSX);
   return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = SHEETJS; s.onload = () => ok(window.XLSX); s.onerror = ko; document.head.append(s); });
 }

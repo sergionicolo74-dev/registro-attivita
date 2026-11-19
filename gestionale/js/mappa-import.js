@@ -11,7 +11,7 @@ const MAPPA_SERVIZI = {
   "LPP": "lpp", "Domiciliazione": "domiciliazione", "Revisione": "revisione"
 };
 
-const PREF_MANDATO = { contabilita: "Contabilità", funzione: "Funzione", domiciliazione: "Domiciliazione", intestazione: "Intestazione" };
+const PREF_MANDATO = { contabilita: "Contabilità", stipendi: "Stipendi", funzione: "Funzione", domiciliazione: "Domiciliazione", intestazione: "Intestazione" };
 const chiusuraDa = v => v instanceof Date ? `${String(v.getDate()).padStart(2, "0")}.${String(v.getMonth() + 1).padStart(2, "0")}` : T(v);
 
 /** Figli scritti come "Giulia 01.09.2012; Luca 15.03.2015" */
@@ -47,6 +47,10 @@ function clientiDaExcelV3(righe) {
         percentuale: N(r["Intestazione – quota del capitale %"]), intestatario: T(r["Intestazione – intestate a"]), dal: parseData(r["Intestazione – dal"]),
         contratto: T(r["Intestazione – contratto fiduciario"]), iscrizione: T(r["Intestazione – libro azioni / RC"]) })
     };
+    if ("Stipendi – onorario annuo CHF" in r || "Stipendi – mandato attivo" in r) {
+      const st = m("stipendi"); delete st.stato; delete st.dataFirma; delete st.aggiornareEntro;
+      mandati.stipendi = { ...st, attivo: st.attivo || Number(st.budget) > 0 };
+    }
     if (mandati.domiciliazione.attivo) servizi.domiciliazione = true;
     const forma = T(r["Forma giuridica"]);
     const documenti = {};

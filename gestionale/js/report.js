@@ -5,6 +5,7 @@ import { e, avviso, stato } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, periodoDi, spostaPeriodo, mandatiDi, TIPI_MANDATO, NOME_MANDATO,
   freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE, clienteSpeciale, NOME_CATEGORIA, fuoriIva, totaliSpese } from "./regole.js";
 import { mostraRicevuta } from "./ricevute.js";
+import { caricaSheetJS } from "./importa.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 
 let periodo = "trimestre", rif = oggiISO(), vista = "fatturare", fCli = "", fMand = "", fChi = "";
@@ -89,6 +90,7 @@ export async function vistaReport(el) {
     <div class="segmenti" role="radiogroup" aria-label="Report">${[["fatturare", "Da fatturare"], ["redditivita", "Redditività mandati"], ["dettaglio", "Dettaglio ore"]].map(([k, n]) => `<button type="button" role="radio" data-v="${k}" aria-checked="${k === vista}">${n}</button>`).join("")}</div>
     <select id="f-cli" aria-label="Cliente"><option value="">Tutti i clienti</option>${clientiVeri.length || fCli ? clienti.filter(c => !clienteSpeciale(c)).sort((x, y) => (x.codice || "").localeCompare(y.codice || "")).map(c => `<option value="${e(c.id)}"${c.id === fCli ? " selected" : ""}>${e(nomeCli(c.id))}</option>`).join("") : ""}</select>
     <select id="f-mand" aria-label="Mandato"><option value="">Tutti i mandati</option>${TIPI_MANDATO.map(([k, n]) => `<option value="${k}"${k === fMand ? " selected" : ""}>${e(n)}</option>`).join("")}<option value="pratica"${fMand === "pratica" ? " selected" : ""}>Pratiche</option></select>
+    <button class="btn" id="xls-mandati" style="margin-left:auto;order:9" title="Tabella di controllo: per ogni cliente gli onorari annui dei mandati come sono in anagrafica">⬇ Onorari mandati (Excel)</button>
     <select id="f-chi" aria-label="Collaboratore"><option value="">Tutti i collaboratori</option>${utenti.filter(x => x.ruolo).map(x => `<option value="${e(x.id)}"${x.id === fChi ? " selected" : ""}>${e(x.nome || x.id)}</option>`).join("")}</select>
   </div>
   <div id="corpo-r"></div>`;
@@ -204,6 +206,7 @@ export async function vistaReport(el) {
   el.querySelector("#p-succ").addEventListener("click", () => { rif = spostaPeriodo(periodo, rif, 1); ricarica(); });
   el.querySelector("#f-cli").addEventListener("change", ev => { fCli = ev.target.value; ricarica(); });
   el.querySelector("#f-mand").addEventListener("change", ev => { fMand = ev.target.value; ricarica(); });
+  el.querySelector("#xls-mandati").addEventListener("click", () => esportaMandati(clienti, mmDi).catch(err => { console.error(err); avviso("Esportazione non riuscita"); }));
   el.querySelector("#f-chi").addEventListener("change", ev => { fChi = ev.target.value; ricarica(); });
   corpo.querySelectorAll("[data-forf]").forEach(b => b.addEventListener("click", async () => {
     const x = forfait.find(y => y.id === b.dataset.forf);
@@ -266,6 +269,32 @@ function barraOre(min, prev) {
   return `<div class="barra-ore" role="img" aria-label="${h(min)} su ${h(prev)} preventivate"><span class="prev" style="width:${w(prev)}%"></span>
     <span class="s-fat" style="width:${w(dentro)}%"></span>${oltre ? `<span class="oltre" style="left:${w(prev)}%;width:${w(oltre)}%"></span>` : ""}</div>
     <div class="tenue" style="font-size:12px">${h(min)} su ${h(prev)} (${Math.round(min / prev * 100)}%)</div>`;
+}
+
+/** Excel di controllo: un cliente per riga, gli onorari annui dei mandati come sono in anagrafica. */
+async function esportaMandati(clienti, mmDi) {
+  const XLSX = await caricaSheetJS();
+  const lista = clienti.filter(c => !clienteSpeciale(c) && TIPI_MANDATO.some(([k]) => mmDi[c.id][k].attivo)).sort((a, b) => (a.codice || "").localeCompare(b.codice || ""));
+  const tipi = TIPI_MANDATO.map(([k]) => k), L = i => XLSX.utils.encode_col(i);
+  const cTot = 2 + tipi.length; // colonna del totale
+  const intest = ["Codice", "Cliente", ...TIPI_MANDATO.map(([, n]) => n), "Totale onorari annui", "Fatturazione contabilità", "Tariffa concordata CHF/h", "Mandato firmato", "Stato cliente"];
+  const righe = lista.map(c => {
+    const mm = mmDi[c.id];
+    return [c.codice || "", c.ragioneSociale || "", ...tipi.map(k => !mm[k].attivo ? "" : Number(mm[k].budget) > 0 ? Number(mm[k].budget) : "attivo, senza onorario"),
+      null, mm.contabilita.attivo ? freqMandato("contabilita", mm.contabilita) : "", Number(mm.contabilita.tariffa) || "",
+      TIPI_MANDATO.some(([k]) => mm[k].attivo) ? (mm.contabilita.attivo ? mm.contabilita.stato : TIPI_MANDATO.map(([k]) => mm[k].attivo && mm[k].stato).find(Boolean)) || "Non indicato" : "", c.stato || "Attivo"];
+  });
+  const n = righe.length, ultima = n + 1;
+  const ws = XLSX.utils.aoa_to_sheet([intest, ...righe, ["", "Totale", ...tipi.map(() => null), null]]);
+  const fmt = "#,##0.00";
+  for (let r = 2; r <= ultima; r++) ws[`${L(cTot)}${r}`] = { t: "n", f: `SUM(${L(2)}${r}:${L(cTot - 1)}${r})`, z: fmt };
+  for (let i = 2; i <= cTot; i++) ws[`${L(i)}${ultima + 1}`] = { t: "n", f: `SUM(${L(i)}2:${L(i)}${ultima})`, z: fmt };
+  for (let r = 2; r <= ultima; r++) for (let i = 2; i < cTot; i++) { const x = ws[`${L(i)}${r}`]; if (x && x.t === "n") x.z = fmt; }
+  ws["!cols"] = [{ wch: 8 }, { wch: 36 }, ...tipi.map(() => ({ wch: 16 })), { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 12 }];
+  ws["!autofilter"] = { ref: `A1:${L(intest.length - 1)}${ultima}` };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Onorari mandati");
+  const oggi = oggiISO();
+  XLSX.writeFile(wb, `Onorari_mandati_${oggi.slice(8, 10)}.${oggi.slice(5, 7)}.${oggi.slice(0, 4)}.xlsx`);
 }
 
 function scaricaCsv(nome, righe) {

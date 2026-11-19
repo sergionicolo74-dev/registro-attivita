@@ -56,7 +56,7 @@ export async function vistaRegistro(el) {
   const ETI_F = { mandato: ["ok", "Nel mandato"], extra: ["urgente", "Extra"], non: ["neutro", "Non fatturabile"], pratica: ["info", "Pratica"], nota: ["info", "Nota"] };
   const q = normNome(eCerca);
   const elenco = tutte.filter(r => (!admin || !soloMie || r.autoreUid === u.uid)
-    && (!eCli || r.clienteId === eCli) && (!eMand || (eMand === "pratica" ? !!r.praticaId : (r.mandato || "contabilita") === eMand && !r.praticaId))
+    && (!eCli || r.clienteId === eCli) && (!eMand || (eMand === "pratica" ? !!r.praticaId : eMand === "stipendi" ? r.attivita === "stipendi" && !r.praticaId : (r.mandato || "contabilita") === eMand && !r.praticaId && !(r.attivita === "stipendi" && eMand === "contabilita" && r.mandato === "stipendi")))
     && (!eFatt || (eFatt === "aperte" ? !chiusa(r) : eFatt === "chiuse" ? chiusa(r) : tipoF(r) === eFatt))
     && (!q || normNome(`${r.descrizione} ${nomeCli[r.clienteId] || ""} ${r.autoreNome || ""}`).includes(q)))
     .sort((a, b) => b.data.localeCompare(a.data) || String(b.creato || "").localeCompare(String(a.creato || "")));
@@ -106,7 +106,7 @@ export async function vistaRegistro(el) {
     ${elenco.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Mandato / pratica</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Fatturazione</th><th class="num">Durata</th><th></th></tr></thead><tbody>
       ${elenco.slice(0, eQuante).map(r => `<tr${chiusa(r) ? ' class="chiusa"' : ""}><td style="white-space:nowrap"><a href="#" data-vai="${e(r.data)}">${e(fmtData(r.data))}</a></td>
         <td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
-        <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}${r.attivita === "stipendi" ? " · Stipendi" : ""}</td>
+        <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}${r.attivita === "stipendi" && r.mandato !== "stipendi" ? " · Stipendi" : ""}</td>
         <td class="desc-r">${e(r.descrizione).replace(/\n/g, "<br>")}</td>${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td>${stato(...ETI_F[tipoF(r)])}</td><td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}</td>
         <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}</tbody></table></div>
@@ -281,7 +281,7 @@ export async function vistaRegistro(el) {
     const box = el.querySelector("#scelte");
     if (!cli) { box.innerHTML = '<span class="tenue">Scegli prima il cliente</span>'; form.scelta.value = ""; aggiornaInvia(); return; }
     const mm = mandatiDi(cli);
-    const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo).map(([k]) => k);
+    const att = TIPI_MANDATO.filter(([k]) => mm[k].attivo && k !== "stipendi").map(([k]) => k);
     mandatoPrinc = att.includes("contabilita") ? "contabilita" : att[0] || null;
     // Solo tre scelte: compreso nel mandato, consulenza extra, ore interne non fatturabili.
     // (una vecchia registrazione su una pratica, in modifica, resta visibile)
@@ -400,7 +400,7 @@ export async function vistaRegistro(el) {
     const prat = sc.startsWith("pratica:");
     const dati = { ...(modifica?.id ? { id: modifica.id, autoreUid: modifica.autoreUid, autoreNome: modifica.autoreNome } : { creato: new Date().toISOString() }),
       clienteId: cli.id, data, minuti, fatturabile: t === "lavoro" ? sc !== "non" : false, extra: t === "lavoro" && sc === "consulenza", tipo: t, descrizione,
-      mandato: t === "lavoro" ? (prat ? "pratica" : sc === "stipendi" ? (mm0(cli).contabilita.attivo ? "contabilita" : mandatoPrinc) : (modifica?.mandato && modifica.mandato !== "pratica" ? modifica.mandato : sc === "mandato" ? mandatoPrinc : null)) : null,
+      mandato: t === "lavoro" ? (prat ? "pratica" : sc === "stipendi" ? (mm0(cli).stipendi.attivo ? "stipendi" : mm0(cli).contabilita.attivo ? "contabilita" : mandatoPrinc) : (modifica?.mandato && !["pratica", "stipendi"].includes(modifica.mandato) ? modifica.mandato : sc === "mandato" ? mandatoPrinc : null)) : null,
       attivita: t === "lavoro" && sc === "stipendi" ? "stipendi" : null,
       praticaId: t === "lavoro" && prat ? sc.slice(8) : null };
     if (t === "lavoro") memo.set(cli.id, sc);

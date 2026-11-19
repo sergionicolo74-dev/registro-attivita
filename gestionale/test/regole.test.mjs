@@ -319,3 +319,19 @@ console.log("Test compiti superati");
   tst(p[2].periodo === "2026-B3" && p[2].etichetta.includes("2026"), "bimestrale: codice e nome del periodo");
   tst(R.FREQ_FATTURAZIONE.includes("Bimestrale"), "bimestrale tra le scelte");
 }
+{
+  const R = await import("../js/regole.js"); const { mandatoDiRegistrazione } = await import("../js/mandati.js").catch(() => ({}));
+  const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
+  const c = { mandati: { contabilita: { attivo: true, stato: "Da aggiornare", dataFirma: "2020-01-01", budget: 2400 }, stipendi: { attivo: true, budget: 1200, stato: "Firmato aggiornato" } } };
+  const mm = R.mandatiDi(c);
+  tst(mm.stipendi.attivo && mm.stipendi.budget === 1200, "stipendi: mandato con onorario proprio");
+  tst(mm.stipendi.stato === "Da aggiornare" && mm.stipendi.dataFirma === "2020-01-01", "stipendi: stato e firma presi dalla contabilità");
+  tst(!R.daAggiornare(mm.stipendi) && R.daAggiornare(mm.contabilita), "stipendi: non conta due volte come mandato da aggiornare");
+  tst(R.budgetTotale(mm) === 3600, "stipendi: nel totale onorari (2'400 + 1'200 = 3'600)");
+  tst(!R.mandatiDi({ mandati: { contabilita: { attivo: true } } }).stipendi.attivo, "stipendi: spento se non attivato");
+  tst(R.freqMandato("stipendi", {}) === "Trimestrale", "stipendi: fatturazione di base trimestrale");
+  if (mandatoDiRegistrazione) {
+    tst(mandatoDiRegistrazione({ attivita: "stipendi", mandato: "contabilita" }, mm) === "stipendi", "ore stipendi → mandato stipendi se attivo");
+    tst(mandatoDiRegistrazione({ attivita: "stipendi", mandato: "contabilita" }, R.mandatiDi({ mandati: { contabilita: { attivo: true } } })) === "contabilita", "ore stipendi → contabilità se stipendi non attivo");
+  }
+}

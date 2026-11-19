@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
   TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
-  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, TARIFFA_BASE, minutiPrevisti, fmtDurata, clienteSpeciale } from "./regole.js";
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, freqMandato, TARIFFA_BASE, minutiPrevisti, fmtDurata, clienteSpeciale } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -351,15 +351,16 @@ function rigaFunzione(i, f = {}) {
 function schedaMandati(p, c, ricarica, kyc) {
   const admin = D.isAdmin(), mm = mandatiDi(c);
   const comuni = (k) => `
-      ${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
+      ${k === "stipendi" ? "" : `${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
       ${campo(`mandati.${k}.dataFirma`, "Data firma", mm[k].dataFirma, "date")}
-      ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}
+      ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}`}
       ${admin ? campo(`mandati.${k}.budget`, "Onorario annuo CHF (prezzo del mandato)", mm[k].budget, "number") + `<div class="ore-prev" data-k="${k}"></div>` : ""}
-      ${k !== "contabilita" ? campo(`mandati.${k}.fatturazione`, "Fatturazione", mm[k].fatturazione || "Annuale", "select", FREQ_FATTURAZIONE) : ""}`;
+      ${k !== "contabilita" ? campo(`mandati.${k}.fatturazione`, "Fatturazione", mm[k].fatturazione || freqMandato(k, {}), "select", FREQ_FATTURAZIONE) : ""}`;
   const specifici = {
     contabilita: `${admin ? campo("mandati.contabilita.tariffa", "Tariffa concordata con il cliente CHF/h (vuoto = tariffa di chi lavora)", mm.contabilita.tariffa, "number") : ""}
       ${campo("mandati.contabilita.fatturazione", "Fatturazione", mm.contabilita.fatturazione || "Trimestrale", "select", FREQ_FATTURAZIONE)}`,
     funzione: "",
+    stipendi: `<p class="tenue largo" style="margin:0 0 6px;font-size:13px">Stesso mandato firmato della contabilità (stato e date si aggiornano lì). Qui solo l'onorario degli stipendi, tenuto separato nei ricavi e nel budget. Le ore segnate con "Stipendi" vanno qui.</p>`,
     domiciliazione: `${campo("mandati.domiciliazione.tipo", "Tipo", mm.domiciliazione.tipo, "select", TIPI_DOMICILIO)}${campo("mandati.domiciliazione.dal", "Dal", mm.domiciliazione.dal, "date")}`,
     intestazione: `${campo("mandati.intestazione.tipoTitoli", "Titoli intestati", mm.intestazione.tipoTitoli, "select", TIPI_TITOLI)}
       ${campo("mandati.intestazione.numero", "Numero di azioni / quote", mm.intestazione.numero, "number")}

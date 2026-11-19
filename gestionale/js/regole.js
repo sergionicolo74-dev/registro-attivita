@@ -140,6 +140,7 @@ export const GIORNI = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 // Un cliente può avere fino a tre mandati, ognuno con stato, date e budget propri.
 export const TIPI_MANDATO = [
   ["contabilita", "Contabilità e Tax"],
+  ["stipendi", "Stipendi"],
   ["funzione", "Funzione societaria"],
   ["domiciliazione", "Domiciliazione"],
   ["intestazione", "Intestazione fiduciaria"]
@@ -156,9 +157,13 @@ const RUOLO_VECCHIO = { "Amministratore": "Amministratore unico", "Membro CdA / 
 /** Mandati del cliente nella struttura nuova; ricava quelli dei dati vecchi (mandato/funzione/onorario/servizi). */
 export function mandatiDi(c) {
   const base = { attivo: false, stato: "", dataFirma: null, aggiornareEntro: null, budget: null, note: "" };
+  // Stipendi: ricavo e budget separati, ma stesso mandato firmato della contabilità (stato e date si leggono da lì)
+  const firmaDi = m => ({ stato: m.stato, dataFirma: m.dataFirma, aggiornareEntro: m.aggiornareEntro });
   if (c.mandati) {
+    const contabilita = { ...base, budgetOre: null, tariffa: null, fatturazione: "", ...c.mandati.contabilita };
     return {
-      contabilita: { ...base, budgetOre: null, tariffa: null, fatturazione: "", ...c.mandati.contabilita },
+      contabilita,
+      stipendi: { ...base, fatturazione: "", ...c.mandati.stipendi, ...firmaDi(contabilita), inclusoIn: "contabilita" },
       funzione: { ...base, ...c.mandati.funzione, funzioni: c.mandati.funzione?.funzioni || [] },
       domiciliazione: { ...base, tipo: "", dal: null, ...c.mandati.domiciliazione },
       intestazione: { ...base, tipoTitoli: "", numero: null, valoreNominale: null, percentuale: null, intestatario: "", dal: null, contratto: "", iscrizione: "", ...c.mandati.intestazione }
@@ -167,9 +172,11 @@ export function mandatiDi(c) {
   const m = c.mandato || {}, s = c.servizi || {}, o = c.onorario || {}, f = c.funzione || {};
   const comune = { stato: m.stato || "", dataFirma: m.dataFirma || null, aggiornareEntro: m.aggiornareEntro || null };
   const conTipo = (...t) => t.includes(m.tipo);
+  const contabilita = { ...base, ...comune, attivo: !!(s.contabilita || s.dichiarazione || s.iva || s.stipendi || conTipo("Contabilità e fiscale", "Completo")),
+      budget: o.forfait ?? null, budgetOre: o.budgetOre ?? null, tariffa: o.tariffa ?? null, fatturazione: o.fatturazione || "" };
   return {
-    contabilita: { ...base, ...comune, attivo: !!(s.contabilita || s.dichiarazione || s.iva || s.stipendi || conTipo("Contabilità e fiscale", "Completo")),
-      budget: o.forfait ?? null, budgetOre: o.budgetOre ?? null, tariffa: o.tariffa ?? null, fatturazione: o.fatturazione || "" },
+    contabilita,
+    stipendi: { ...base, fatturazione: "", ...firmaDi(contabilita), inclusoIn: "contabilita" },
     funzione: { ...base, ...(conTipo("Amministrazione fiduciaria", "Completo") ? comune : { aggiornareEntro: m.aggiornareEntro || null }),
       attivo: !!(f.tipo || conTipo("Amministrazione fiduciaria", "Completo")),
       funzioni: f.tipo ? [{ ruolo: RUOLO_VECCHIO[f.tipo] || f.tipo, persona: f.persona || "", firma: f.firma || "", inizio: f.inizio || null }] : [] },
@@ -186,7 +193,7 @@ export function statoMandato(m, oggi = new Date()) {
   const s = statoScadenza(m.aggiornareEntro, 45, oggi);
   return s === "scaduto" || s === "urgente" ? s : "neutro";
 }
-export const daAggiornare = (m) => m.attivo && m.stato !== "Firmato aggiornato";
+export const daAggiornare = (m) => m.attivo && !m.inclusoIn && m.stato !== "Firmato aggiornato";
 export const budgetTotale = (mm) => TIPI_MANDATO.reduce((s, [k]) => s + (mm[k].attivo ? Number(mm[k].budget) || 0 : 0), 0);
 
 // ---------- Compiti ----------
@@ -569,7 +576,7 @@ export const documentiDF = (c) => DOCUMENTI_DF.map(([k]) => k).filter(k => c.df?
 export const FREQ_FATTURAZIONE = ["Mensile", "Bimestrale", "Trimestrale", "Semestrale", "Annuale"];
 const N_FREQ = { Mensile: 12, Bimestrale: 6, Trimestrale: 4, Semestrale: 2, Annuale: 1 };
 /** Frequenza di fatturazione di un mandato (contabilità: trimestrale se non indicata; gli altri: annuale). */
-export const freqMandato = (k, m) => m.fatturazione || (k === "contabilita" ? "Trimestrale" : "Annuale");
+export const freqMandato = (k, m) => m.fatturazione || (k === "contabilita" || k === "stipendi" ? "Trimestrale" : "Annuale");
 /** Periodi di fatturazione di un anno: [{periodo, da, a, etichetta, quota}] */
 export function periodiFatturazione(freq, anno) {
   const n = N_FREQ[freq] || 1, mesi = 12 / n, out = [];

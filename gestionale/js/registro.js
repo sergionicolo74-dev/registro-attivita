@@ -1,6 +1,6 @@
 // Modulo Registro ore: una sola maschera, tre esiti (lavoro svolto, nota/decisione, da fare).
 import * as D from "./data.js";
-import { e, avviso, stato, campo, dataNonValida } from "./ui.js";
+import { e, avviso, stato, campo, dataNonValida, selectCercabile } from "./ui.js";
 import { CATEGORIE_SPESA, NOME_CATEGORIA, TARIFFA_KM, importoKm, fuoriIva, fmtNum } from "./regole.js";
 import { preparaRicevuta, mostraRicevuta } from "./ricevute.js";
 import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta, ID_INTERNO, CLIENTE_INTERNO } from "./regole.js";
@@ -324,6 +324,7 @@ export async function vistaRegistro(el) {
   }));
   const filtroE = (fn) => ev => { fn(ev.target.value); eQuante = 50; ricarica().then(() => el.querySelector("#elenco-reg")?.scrollIntoView({ block: "start" })); };
   el.querySelector("#e-per").addEventListener("change", filtroE(v => { ePeriodo = v; }));
+  selectCercabile(el.querySelector("#e-cli"));
   el.querySelector("#e-cli").addEventListener("change", filtroE(v => { eCli = v; }));
   el.querySelector("#e-mand").addEventListener("change", filtroE(v => { eMand = v; }));
   el.querySelector("#e-fatt").addEventListener("change", filtroE(v => { eFatt = v; }));

@@ -73,3 +73,56 @@ export function leggiForm(form) {
   }
   return out;
 }
+
+/**
+ * Trasforma un <select> lungo (es. elenco clienti) in una casella dove si scrive e si sceglie:
+ * bastano poche lettere del nome o del codice. Il <select> resta nascosto e riceve il "change" come prima.
+ */
+export function selectCercabile(sel) {
+  if (!sel || sel.dataset.cerca) return;
+  sel.dataset.cerca = "1";
+  const norm = t => (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[·.,'’\-]/g, " ").replace(/\s+/g, " ").trim();
+  const opz = [...sel.options].map(o => ({ v: o.value, t: o.textContent, n: norm(o.textContent) }));
+  const box = document.createElement("div"); box.className = "cerca-sel";
+  const inp = document.createElement("input");
+  const idLista = `${sel.id || "sel"}-lista`;
+  Object.assign(inp, { type: "text", autocomplete: "off", placeholder: `${opz[0]?.t || ""} · scrivi per cercare` });
+  inp.setAttribute("aria-label", sel.getAttribute("aria-label") || "Cerca");
+  inp.setAttribute("role", "combobox"); inp.setAttribute("aria-autocomplete", "list"); inp.setAttribute("aria-controls", idLista); inp.setAttribute("aria-expanded", "false");
+  const ul = document.createElement("ul"); ul.className = "cerca-lista"; ul.id = idLista; ul.setAttribute("role", "listbox"); ul.hidden = true;
+  const testoScelto = () => (sel.value ? sel.selectedOptions[0]?.textContent || "" : "");
+  inp.value = testoScelto();
+  sel.hidden = true; sel.after(box); box.append(inp, ul);
+  let vis = [], att = 0;
+  const disegna = () => {
+    ul.innerHTML = vis.length ? vis.map((o, i) => `<li role="option" data-i="${i}" aria-selected="${i === att}"${o.v === sel.value ? ' class="scelto"' : ""}>${e(o.t)}</li>`).join("")
+      : '<li class="nessuno">Nessuna corrispondenza</li>';
+    ul.hidden = false; inp.setAttribute("aria-expanded", "true");
+    ul.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  };
+  const filtra = q => {
+    const n = norm(q);
+    if (!n) vis = opz.slice();
+    else { // prima chi ha una parola che inizia con il testo scritto, poi chi lo contiene
+      const parole = o => (" " + o.n).includes(" " + n);
+      vis = [...opz.filter(o => o.n.includes(n) && parole(o)), ...opz.filter(o => o.n.includes(n) && !parole(o))];
+    }
+    att = 0; disegna();
+  };
+  const chiudi = () => { ul.hidden = true; inp.setAttribute("aria-expanded", "false"); };
+  const scegli = o => {
+    chiudi(); inp.value = o.v ? o.t : "";
+    if (sel.value !== o.v) { sel.value = o.v; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+  };
+  inp.addEventListener("focus", () => { inp.select(); filtra(""); });
+  inp.addEventListener("input", () => filtra(inp.value));
+  inp.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault(); if (ul.hidden) return filtra(inp.value);
+      att = Math.max(0, Math.min(vis.length - 1, att + (ev.key === "ArrowDown" ? 1 : -1))); disegna();
+    } else if (ev.key === "Enter") { ev.preventDefault(); if (vis[att]) scegli(vis[att]); }
+    else if (ev.key === "Escape") { chiudi(); inp.value = testoScelto(); }
+  });
+  inp.addEventListener("blur", () => setTimeout(() => { chiudi(); inp.value = testoScelto(); }, 150));
+  ul.addEventListener("mousedown", ev => { const li = ev.target.closest("[data-i]"); if (!li) return; ev.preventDefault(); scegli(vis[+li.dataset.i]); });
+}

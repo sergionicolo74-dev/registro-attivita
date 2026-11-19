@@ -1,7 +1,7 @@
 // Modulo Report (amministratori e chi ha il permesso di fatturazione):
 // cosa fatturare (forfait dei periodi chiusi, ore extra, pratiche), redditività dei mandati, dettaglio ore.
 import * as D from "./data.js";
-import { e, avviso, stato } from "./ui.js";
+import { e, avviso, stato, selectCercabile } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, periodoDi, spostaPeriodo, mandatiDi, TIPI_MANDATO, NOME_MANDATO,
   freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE, clienteSpeciale, NOME_CATEGORIA, fuoriIva, totaliSpese } from "./regole.js";
 import { mostraRicevuta } from "./ricevute.js";
@@ -204,6 +204,7 @@ export async function vistaReport(el) {
   el.querySelectorAll("[data-v]").forEach(b => b.addEventListener("click", () => { vista = b.dataset.v; ricarica(); }));
   el.querySelector("#p-prec").addEventListener("click", () => { rif = spostaPeriodo(periodo, rif, -1); ricarica(); });
   el.querySelector("#p-succ").addEventListener("click", () => { rif = spostaPeriodo(periodo, rif, 1); ricarica(); });
+  selectCercabile(el.querySelector("#f-cli"));
   el.querySelector("#f-cli").addEventListener("change", ev => { fCli = ev.target.value; ricarica(); });
   el.querySelector("#f-mand").addEventListener("change", ev => { fMand = ev.target.value; ricarica(); });
   el.querySelector("#xls-mandati").addEventListener("click", () => esportaMandati(clienti, mmDi).catch(err => { console.error(err); avviso("Esportazione non riuscita"); }));

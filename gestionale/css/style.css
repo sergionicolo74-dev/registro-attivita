@@ -516,3 +516,12 @@ button.stato.filtro { border: 1px solid transparent; cursor: pointer; font: inhe
 button.stato.filtro:hover { border-color: currentColor; }
 button.stato.filtro.attivo { border-color: currentColor; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 25%, transparent); }
 .stato.prio-urg { background: var(--rosso-tinta); color: var(--rosso); }
+/* elenco a tendina dove si scrive per cercare (clienti) */
+.cerca-sel { position: relative; min-width: 260px; flex: 0 1 340px; }
+.cerca-sel input { width: 100%; }
+.cerca-lista { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 2px); max-height: 340px; overflow: auto; margin: 0; padding: 4px 0; list-style: none;
+  background: var(--sfondo-pannello, #fff); border: 1px solid var(--bordo, #ddd); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.cerca-lista li { padding: 7px 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cerca-lista li[aria-selected="true"], .cerca-lista li:hover { background: var(--rosso-tinta, #fdeaea); }
+.cerca-lista li.scelto { font-weight: 600; }
+.cerca-lista li.nessuno { color: var(--tenue, #888); cursor: default; }

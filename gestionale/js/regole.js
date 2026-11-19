@@ -621,8 +621,8 @@ export function esitoMandato(onorario, minuti, valore, minutiPrev) {
     esito: !onorario ? null : valore <= onorario ? "ok" : valore <= onorario * 1.15 ? "urgente" : "scaduto" };
 }
 
-/** Funzione societaria e domiciliazione: compenso fisso senza ore previste; le ore lavorate si fatturano come extra. */
-export const senzaOre = k => k === "funzione" || k === "domiciliazione";
+/** Funzione societaria, domiciliazione e intestazione fiduciaria: compenso fisso senza ore previste; le ore lavorate si fatturano come extra. */
+export const senzaOre = k => k === "funzione" || k === "domiciliazione" || k === "intestazione";
 export const tfDiMandato = (tf, mand) => tf === "mandato" && senzaOre(mand) ? "extra" : tf;
 
 /** Come è fatturata una registrazione: pratica | extra | mandato | non */

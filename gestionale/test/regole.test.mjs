@@ -338,6 +338,6 @@ console.log("Test compiti superati");
 {
   const R = await import("../js/regole.js");
   const tst = (c, m) => { assert.ok(c, m); console.log("ok " + m); };
-  tst(R.senzaOre("funzione") && R.senzaOre("domiciliazione") && !R.senzaOre("contabilita") && !R.senzaOre("intestazione"), "senza ore previste: solo funzione e domiciliazione");
+  tst(R.senzaOre("funzione") && R.senzaOre("domiciliazione") && R.senzaOre("intestazione") && !R.senzaOre("contabilita") && !R.senzaOre("stipendi"), "senza ore previste: funzione, domiciliazione, intestazione");
   tst(R.tfDiMandato("mandato", "funzione") === "extra" && R.tfDiMandato("non", "domiciliazione") === "non" && R.tfDiMandato("mandato", "contabilita") === "mandato", "ore su funzione/domiciliazione fatturate come extra");
 }

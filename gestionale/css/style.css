@@ -57,6 +57,9 @@ main:focus { outline: none; }
 .tabella tr:last-child td { border-bottom: 0; }
 .tabella tr.cliccabile { cursor: pointer; }
 .tabella tr.cliccabile:hover td { background: #FCFBF7; }
+.th-ordina { all: unset; cursor: pointer; font: inherit; color: inherit; }
+.th-ordina:hover, .th-ordina.attivo { color: var(--inchiostro); }
+.th-ordina:focus-visible { outline: 2px solid var(--linea); outline-offset: 2px; border-radius: 4px; }
 .num, .tabella th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Stati: sempre colore + simbolo + testo */

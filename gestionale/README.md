@@ -6,7 +6,7 @@ Il vecchio registro (`index.html` nella cartella principale) resta in uso finchÃ
 ## Stato
 
 - Accesso con email e password, ruoli `admin` / `utente`
-- Clienti: elenco con ricerca e filtri, scheda a schede (Persone, Dati e mandato, Servizi e scadenze, Compiti, Ore e diario, Note)
+- Clienti: elenco con ricerca, filtri e ordine per codice o per nome (Aâ€“Z), scheda a schede (Persone, Dati e mandato, Servizi e scadenze, Compiti, Ore e diario, Note)
 - Dati KYC (clienti e persone) separati e visibili solo agli amministratori
 - Importazione dell'anagrafica da Excel e del backup del vecchio registro
 - Completezza: per ogni cliente l'elenco dei dati mancanti (filtro "Dati da completare")

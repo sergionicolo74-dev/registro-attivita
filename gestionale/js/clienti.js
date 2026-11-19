@@ -44,7 +44,11 @@ export async function vistaClienti(el) {
     const s = statoScadenza(k.scadenzaDocumento, 60);
     if (s === "scaduto" || s === "urgente") docPerCliente[k.clienteId] = Math.max(docPerCliente[k.clienteId] || 0, s === "scaduto" ? 2 : 1);
   }
-  clienti.sort((a, b) => (a.codice || "").localeCompare(b.codice || "") || (a.ragioneSociale || "").localeCompare(b.ragioneSociale || ""));
+  // Ordine dell'elenco: per codice (C001, C002…) o alfabetico per nome; la scelta resta memorizzata sul dispositivo.
+  const perCodice = (a, b) => String(a.codice || "").localeCompare(String(b.codice || ""), "it", { numeric: true }) || perNome(a, b);
+  const perNome = (a, b) => String(a.ragioneSociale || "").localeCompare(String(b.ragioneSociale || ""), "it", { sensitivity: "base" });
+  let ordine = "codice";
+  try { ordine = localStorage.getItem("clienti-ordine") === "nome" ? "nome" : "codice"; } catch (_) {}
   const nDaAggiornare = clienti.filter(haDaAggiornare).length;
 
   el.innerHTML = `
@@ -52,6 +56,9 @@ export async function vistaClienti(el) {
       <div><h1>Clienti</h1><div class="tenue">${clienti.length} clienti · ${nDaAggiornare} con mandati da aggiornare · ${incompleti} con dati da completare</div></div>
       <div class="barra">
         <input type="search" id="cerca" placeholder="Cerca per nome o codice" aria-label="Cerca cliente">
+        <select id="ordina" aria-label="Ordine dell'elenco">
+          <option value="codice"${ordine === "codice" ? " selected" : ""}>Ordina per codice</option><option value="nome"${ordine === "nome" ? " selected" : ""}>Ordina per nome (A–Z)</option>
+        </select>
         <select id="filtro" aria-label="Filtro">
           <option value="">Tutti</option><option value="incompleti">Dati da completare</option><option value="mandato">Mandato da aggiornare</option>
           ${D.isAdmin() ? '<option value="doc">Documenti in scadenza</option>' : ""}
@@ -61,10 +68,13 @@ export async function vistaClienti(el) {
         ${D.isAdmin() ? '<button class="btn" id="nuovo-pf">Nuova persona fisica</button><button class="btn primario" id="nuovo">Nuova società</button>' : ""}
       </div>
     </div>
-    <table class="tabella"><thead><tr><th>Codice</th><th>Cliente</th><th>Responsabile</th><th>Servizi</th><th>Segnali</th><th id="col-manca" hidden>Da completare</th></tr></thead><tbody id="righe"></tbody></table>`;
+    <table class="tabella"><thead><tr><th><button type="button" class="th-ordina" data-ordine="codice" title="Ordina per codice">Codice<span class="freccia"></span></button></th><th><button type="button" class="th-ordina" data-ordine="nome" title="Ordina per nome">Cliente<span class="freccia"></span></button></th><th>Responsabile</th><th>Servizi</th><th>Segnali</th><th id="col-manca" hidden>Da completare</th></tr></thead><tbody id="righe"></tbody></table>`;
 
   const disegna = () => {
     const q = normNome(el.querySelector("#cerca").value), f = el.querySelector("#filtro").value;
+    // I clienti speciali (es. C000 Clienti occasionali) restano sempre in cima.
+    clienti.sort((a, b) => (clienteSpeciale(b) ? 1 : 0) - (clienteSpeciale(a) ? 1 : 0) || (ordine === "nome" ? perNome(a, b) || perCodice(a, b) : perCodice(a, b)));
+    el.querySelectorAll(".th-ordina").forEach(b => { const att = b.dataset.ordine === ordine; b.classList.toggle("attivo", att); b.querySelector(".freccia").textContent = att ? " ▲" : ""; b.setAttribute("aria-pressed", att); });
     const righe = clienti.filter(c => {
       if (q && !normNome(`${c.codice} ${c.ragioneSociale}`).includes(q)) return false;
       if (f === "incompleti") return manca[c.id].length > 0;
@@ -88,6 +98,14 @@ export async function vistaClienti(el) {
   disegna();
   el.querySelector("#cerca").addEventListener("input", disegna);
   el.querySelector("#filtro").addEventListener("change", disegna);
+  const impostaOrdine = (o) => {
+    ordine = o === "nome" ? "nome" : "codice";
+    el.querySelector("#ordina").value = ordine;
+    try { localStorage.setItem("clienti-ordine", ordine); } catch (_) {}
+    disegna();
+  };
+  el.querySelector("#ordina").addEventListener("change", ev => impostaOrdine(ev.target.value));
+  el.querySelectorAll(".th-ordina").forEach(b => b.addEventListener("click", () => impostaOrdine(b.dataset.ordine)));
   const apri = (tr) => tr?.dataset.id && (location.hash = "#/clienti/" + encodeURIComponent(tr.dataset.id));
   el.querySelector("#righe").addEventListener("click", ev => apri(ev.target.closest("tr")));
   el.querySelector("#righe").addEventListener("keydown", ev => { if (ev.key === "Enter") apri(ev.target.closest("tr")); });

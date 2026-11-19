@@ -6,7 +6,7 @@ import * as D from "./data.js";
 import { e, stato } from "./ui.js";
 import { fmtData, fmtDurata, fmtNum, oggiISO, aggiungiGiorni, periodoDi, spostaPeriodo, colonnePeriodo, statoCopertura, mandatiDi,
   riepilogoPresenze, conVacanze, urgenzaScadenza, urgenzaCompito, aperto, statoRichieste, daAggiornare, TIPI_MANDATO, NOME_MANDATO, PERIODI, INIZIO_SCADENZIARIO,
-  urgenzaPratica, tipoFatturazione, aForfait, importoPratica, valoreOra, clienteSpeciale } from "./regole.js";
+  urgenzaPratica, tipoFatturazione, tfDiMandato, senzaOre, aForfait, importoPratica, valoreOra, clienteSpeciale } from "./regole.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 
@@ -52,7 +52,7 @@ export async function vistaDashboard(el) {
   const valR = r => valoreOra(r, mmDi[r.clienteId], tariffeUt);
   const scelti = chi === "tutti" ? utenti.map(x => x.id) : [chi];
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r),
-    mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+    mand: r.praticaId ? "pratica" : mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" })).map(r => ({ ...r, tf: tfDiMandato(r.tf, r.mand) }));
   const miei = lavoro.filter(r => scelti.includes(r.autoreUid));
 
   // --- composizione del tempo per persona (fino a ieri, confronto con la presenza) ---
@@ -108,7 +108,7 @@ export async function vistaDashboard(el) {
     fattureAnno.filter(f => f.stato === "Fatturata" && String(f.periodo || "").startsWith(String(annoB)) && f.mandato)
       .forEach(f => { (bud[f.mandato] = bud[f.mandato] || { previsto: 0, fatturato: 0 }).fatturato += Number(f.importo) || 0; });
     const lavAnno = regAnno.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0 && !r.praticaId).map(r => ({ ...r, tf: tipoFatturazione(r),
-      mand: mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+      mand: mmDi[r.clienteId] && !clienteSpeciale(cliPer[r.clienteId]) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" })).map(r => ({ ...r, tf: tfDiMandato(r.tf, r.mand) }));
     const extraAnno = lavAnno.filter(r => r.tf === "extra" || (r.tf === "mandato" && (r.mand === "nonAttribuito" || !aForfait(mmDi[r.clienteId]?.[r.mand]))));
     const exF = extraAnno.filter(r => r.fatturataIl).reduce((s, r) => s + valR(r), 0), exA = extraAnno.filter(r => !r.fatturataIl).reduce((s, r) => s + valR(r), 0);
     const prF = pratiche.filter(p => p.fatturazione?.stato === "Fatturata" && String(p.fatturazione.fatturataIl || "").startsWith(String(annoB)))

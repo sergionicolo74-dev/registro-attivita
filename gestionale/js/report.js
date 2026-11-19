@@ -3,7 +3,7 @@
 import * as D from "./data.js";
 import { e, avviso, stato, selectCercabile } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, periodoDi, spostaPeriodo, mandatiDi, TIPI_MANDATO, NOME_MANDATO,
-  freqMandato, periodiFatturazione, aForfait, tipoFatturazione, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE, clienteSpeciale, NOME_CATEGORIA, fuoriIva, totaliSpese } from "./regole.js";
+  freqMandato, periodiFatturazione, aForfait, tipoFatturazione, tfDiMandato, senzaOre, importoPratica, minutiPrevisti, valoreOra, esitoMandato, TARIFFA_BASE, clienteSpeciale, NOME_CATEGORIA, fuoriIva, totaliSpese } from "./regole.js";
 import { mostraRicevuta } from "./ricevute.js";
 import { caricaSheetJS } from "./importa.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
@@ -30,7 +30,7 @@ export async function vistaReport(el) {
   const valR = r => valoreOra(r, mmDi[r.clienteId], tariffeUt);
   const fattPer = Object.fromEntries(fatture.map(f => [f.id, f]));
   const nomeCli = id => cliPer[id] ? `${cliPer[id].codice} · ${cliPer[id].ragioneSociale}` : "–";
-  const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r), mand: r.praticaId ? "pratica" : mmDi[r.clienteId] ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+  const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0).map(r => ({ ...r, tf: tipoFatturazione(r), mand: r.praticaId ? "pratica" : mmDi[r.clienteId] ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" })).map(r => ({ ...r, tf: tfDiMandato(r.tf, r.mand) }));
   const filtra = r => (!fCli || r.clienteId === fCli) && (!fMand || r.mand === fMand) && (!fChi || r.autoreUid === fChi);
   const nelPeriodo = lavoro.filter(r => r.data >= da && r.data <= a && filtra(r));
   const clientiVeri = clienti.filter(c => !clienteSpeciale(c) && (!fCli || c.id === fCli)).sort((x, y) => (x.codice || "").localeCompare(y.codice || ""));
@@ -48,7 +48,7 @@ export async function vistaReport(el) {
       const id = `${c.id}_${k}_${p.periodo}`;
       // tutte le ore del periodo (anche degli altri collaboratori): si chiudono quando il periodo è fatturato
       const idsPeriodo = lavoro.filter(r => r.clienteId === c.id && r.mand === k && (r.tf === "mandato" || r.tf === "non") && r.data >= p.da && r.data <= p.a && !r.fatturataIl).map(r => r.id);
-      forfait.push({ id, c, k, p, importo, minuti, idsPeriodo, chiuso: p.a < oggi, fatt: fattPer[id], ...esitoMandato(importo, minuti, valore, minutiPrevisti(importo, mmDi[c.id].contabilita.tariffa)) });
+      forfait.push({ id, c, k, p, importo, minuti, idsPeriodo, chiuso: p.a < oggi, fatt: fattPer[id], ...esitoMandato(importo, minuti, valore, senzaOre(k) ? 0 : minutiPrevisti(importo, mmDi[c.id].contabilita.tariffa)) });
     }
   }
   const forfaitDaFatt = forfait.filter(x => x.chiuso && !x.fatt);
@@ -113,7 +113,7 @@ export async function vistaReport(el) {
     ${forfait.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th>Periodo</th><th class="num">Onorario CHF</th><th>Ore impiegate / preventivate</th><th class="num">Valore ore</th><th>Esito</th><th></th></tr></thead><tbody>
       ${forfait.sort((x, y) => (x.fatt ? 1 : 0) - (y.fatt ? 1 : 0) || x.p.a.localeCompare(y.p.a) || x.c.codice.localeCompare(y.c.codice)).map(x => `<tr${x.fatt ? ' class="fatturato"' : ""}>
         <td><a href="#/clienti/${encodeURIComponent(x.c.id)}/mandati">${e(nomeCli(x.c.id))}</a></td><td>${e(NOME_MANDATO[x.k])}</td><td>${e(x.p.etichetta)}${x.chiuso ? "" : ' <span class="tenue">(in corso)</span>'}</td>
-        <td class="num">${chf(x.importo)}</td><td>${barraOre(x.minuti, x.minutiPreventivati)}</td><td class="num">${chf(x.valore)}</td>
+        <td class="num">${chf(x.importo)}</td><td>${senzaOre(x.k) ? fisso(x.minuti) : barraOre(x.minuti, x.minutiPreventivati)}</td><td class="num">${chf(x.valore)}</td>
         <td>${x.esito ? stato(...ESITO[x.esito]) : ""}</td>
         <td class="num">${x.fatt ? `${stato("ok", `Fatturato ${fmtData(x.fatt.fatturataIl)}`)}${D.isAdmin() ? ` <button class="btn piccolo" data-annulla="${e(x.id)}" title="Annulla: il periodo torna da fatturare e le ore si riaprono">Annulla</button>` : ""}` : x.chiuso ? `<button class="btn piccolo" data-forf="${e(x.id)}">✓ Fatturato</button>` : ""}</td></tr>`).join("")}
       </tbody></table></div>` : '<div class="vuoto">Nessun mandato a forfait con un periodo che termina qui. Il forfait si imposta nel mandato del cliente (budget annuo e fatturazione).</div>'}
@@ -158,7 +158,7 @@ export async function vistaReport(el) {
       const minuti = rr.reduce((s, r) => s + r.minuti, 0), valore = rr.reduce((s, r) => s + valR(r), 0);
       const extra = nelPeriodo.filter(r => r.clienteId === c.id && r.mand === k && r.tf === "extra").reduce((s, r) => s + r.minuti, 0);
       const forf = Math.round(Number(m.budget) * q * 100) / 100;
-      righe.push({ c, k, n, forf, minuti, extra, ...esitoMandato(forf, minuti, valore, minutiPrevisti(forf, mmDi[c.id].contabilita.tariffa)) });
+      righe.push({ c, k, n, forf, minuti, extra, ...esitoMandato(forf, minuti, valore, senzaOre(k) ? 0 : minutiPrevisti(forf, mmDi[c.id].contabilita.tariffa)) });
     }
     const tot = righe.reduce((s, r) => ({ forf: s.forf + r.forf, valore: s.valore + r.valore, minuti: s.minuti + r.minuti }), { forf: 0, valore: 0, minuti: 0 });
     const margine = tot.forf - tot.valore, esitoTot = esitoMandato(tot.forf, tot.minuti, tot.valore, 0).esito;
@@ -175,7 +175,7 @@ export async function vistaReport(el) {
     <section class="pannello sez-d"><div class="testa-d"><h2>Per mandato</h2><div class="legenda"><span><i class="s-fat"></i>Ore impiegate</span><span><i class="s-vuoto"></i>Ore preventivate</span><span><i class="s-oltre"></i>Oltre il preventivo</span></div></div>
     ${righe.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Cliente</th><th>Mandato</th><th class="num">Onorario</th><th style="min-width:220px">Ore impiegate / preventivate</th><th class="num">Valore ore</th><th class="num">Margine</th><th class="num">CHF/h effettivi</th><th>Esito</th></tr></thead><tbody>
       ${righe.map(r => `<tr><td><a href="#/clienti/${encodeURIComponent(r.c.id)}/mandati">${e(nomeCli(r.c.id))}</a></td><td>${e(r.n)}${r.extra ? `<div class="tenue">+ ${h(r.extra)} extra fatturate a parte</div>` : ""}</td>
-        <td class="num">${chf(r.forf)}</td><td>${barraOre(r.minuti, r.minutiPreventivati)}</td><td class="num">${chf(r.valore)}</td>
+        <td class="num">${chf(r.forf)}</td><td>${senzaOre(r.k) ? fisso(r.minuti) : barraOre(r.minuti, r.minutiPreventivati)}</td><td class="num">${chf(r.valore)}</td>
         <td class="num"><span class="${r.margine < 0 ? "neg" : ""}">${chf(r.margine)}</span></td><td class="num">${r.tariffaEffettiva != null ? chf(r.tariffaEffettiva) : "–"}</td>
         <td>${r.minuti ? stato(...ESITO[r.esito]) : stato("neutro", "Nessuna ora")}</td></tr>`).join("")}
       <tr class="totale"><td colspan="2"><strong>Totale</strong></td><td class="num"><strong>${chf(tot.forf)}</strong></td><td>${h(tot.minuti)}</td><td class="num">${chf(tot.valore)}</td><td class="num"><strong class="${margine < 0 ? "neg" : ""}">${chf(margine)}</strong></td><td></td><td></td></tr></tbody></table></div>`
@@ -261,6 +261,9 @@ export async function vistaReport(el) {
     ...nelPeriodo.map(r => [fmtData(r.data), r.autoreNome || "", cliPer[r.clienteId]?.codice || "", cliPer[r.clienteId]?.ragioneSociale || "", NOME_MANDATO[r.mand] || (r.mand === "pratica" ? "Pratica" : ""), ETI_FATT[r.tf], r.descrizione, r.voceFattura || "", (r.minuti / 60).toFixed(2)])
   ]));
 }
+
+/** Funzione societaria e domiciliazione: compenso fisso, le ore vanno come extra. */
+const fisso = min => `<span class="tenue" style="font-size:13px">Compenso fisso · ore come extra${min ? ` (${h(min)} non fatturabili)` : ""}</span>`;
 
 /** Barra ore impiegate su preventivate: la parte oltre il preventivo è rossa a righe. */
 function barraOre(min, prev) {

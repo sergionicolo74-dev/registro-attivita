@@ -4,7 +4,7 @@ import * as D from "./data.js";
 import { e, avviso, stato } from "./ui.js";
 import { fmtData, fmtNum, fmtDurata, oggiISO, aggiungiGiorni, parseData, normNome, INIZIO_SCADENZIARIO, NOME_SCADENZA, chiusa,
   TIPI_PRATICA, ATTESA_TIPO, ENTE_TIPO, FASI_PRATICA, PRIORITA, TIPI_MANDATO, NOME_MANDATO, mandatiDi, freqMandato, periodiFatturazione,
-  aForfait, tipoFatturazione, clienteSpeciale, valoreOra } from "./regole.js";
+  aForfait, tipoFatturazione, tfDiMandato, senzaOre, clienteSpeciale, valoreOra } from "./regole.js";
 import { carica as caricaScadenze } from "./scadenziario.js";
 import { mandatoDiRegistrazione } from "./mandati.js";
 
@@ -178,7 +178,7 @@ async function schedaFatturato(p, ricarica) {
   const mmDi = Object.fromEntries(clienti.map(c => [c.id, mandatiDi(c)]));
   const tariffeUt = Object.fromEntries(utenti.filter(x => x.tariffa).map(x => [x.id, Number(x.tariffa)]));
   const lavoro = reg.filter(r => r.tipo !== "nota" && (r.minuti || 0) > 0 && !r.praticaId).map(r => ({ ...r, tf: tipoFatturazione(r),
-    mand: mmDi[r.clienteId] && !clienteSpeciale(clienti.find(c => c.id === r.clienteId)) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" }));
+    mand: mmDi[r.clienteId] && !clienteSpeciale(clienti.find(c => c.id === r.clienteId)) ? mandatoDiRegistrazione(r, mmDi[r.clienteId]) : "nonAttribuito" })).map(r => ({ ...r, tf: tfDiMandato(r.tf, r.mand) }));
   const periodi = [];
   for (const c of clienti) {
     if (clienteSpeciale(c)) continue;

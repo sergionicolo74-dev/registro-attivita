@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, statoData, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtOre, fmtNum, normNome, statoScadenza, campiMancanti, SERVIZI, RUOLI_PERSONA,
   TIPI_MANDATO, STATI_MANDATO, RUOLI_FUNZIONE, TIPI_DOMICILIO, mandatiDi, statoMandato, daAggiornare, budgetTotale, urgenzaScadenza, praticaAperta, urgenzaPratica,
-  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, freqMandato, TARIFFA_BASE, minutiPrevisti, fmtDurata, clienteSpeciale } from "./regole.js";
+  STATI_CIVILI, TASSAZIONE_PF, ATTIVITA_PF, DOCUMENTI_DF, TIPI_TITOLI, ISCRIZIONE_TITOLI, FREQ_FATTURAZIONE, freqMandato, senzaOre, TARIFFA_BASE, minutiPrevisti, fmtDurata, clienteSpeciale } from "./regole.js";
 import { prossimeDelCliente } from "./scadenziario.js";
 
 const FORME = ["SA", "Sagl", "Ditta individuale", "SNC", "SAc", "Persona fisica", "Associazione", "Fondazione", "Altro"];
@@ -372,7 +372,7 @@ function schedaMandati(p, c, ricarica, kyc) {
       ${k === "stipendi" ? "" : `${campo(`mandati.${k}.stato`, "Stato del mandato firmato", mm[k].stato, "select", STATI_MANDATO)}
       ${campo(`mandati.${k}.dataFirma`, "Data firma", mm[k].dataFirma, "date")}
       ${campo(`mandati.${k}.aggiornareEntro`, "Aggiornare entro", mm[k].aggiornareEntro, "date")}`}
-      ${admin ? campo(`mandati.${k}.budget`, "Onorario annuo CHF (prezzo del mandato)", mm[k].budget, "number") + `<div class="ore-prev" data-k="${k}"></div>` : ""}
+      ${admin ? campo(`mandati.${k}.budget`, "Onorario annuo CHF (prezzo del mandato)", mm[k].budget, "number") + (senzaOre(k) ? `<div class="tenue" style="font-size:13px;align-self:center">Compenso fisso, senza ore previste. Le ore lavorate si fatturano come extra.</div>` : `<div class="ore-prev" data-k="${k}"></div>`) : ""}
       ${k !== "contabilita" ? campo(`mandati.${k}.fatturazione`, "Fatturazione", mm[k].fatturazione || freqMandato(k, {}), "select", FREQ_FATTURAZIONE) : ""}`;
   const specifici = {
     contabilita: `${admin ? campo("mandati.contabilita.tariffa", "Tariffa concordata con il cliente CHF/h (vuoto = tariffa di chi lavora)", mm.contabilita.tariffa, "number") : ""}

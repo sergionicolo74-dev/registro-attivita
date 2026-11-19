@@ -12,6 +12,7 @@ let vista = "colonne";     // colonne | elenco
 let ambito = "miei";       // miei | delegati | studio
 let filtroChi = "";        // in "studio": uid di un collaboratore
 let cerca = "";
+let filtroRapido = "";   // nuovi | aiuto | soll | scaduto | urgente (clic sui contatori in alto)
 let mostraFatti = false;
 
 const ETICHETTA_URG = { scaduto: "Scaduto", urgente: "Entro 5 giorni", fermo: `Fermo da ${GIORNI_FERMO}+ giorni` };
@@ -34,18 +35,28 @@ export async function vistaCompiti(el, clienteFiltro) {
   const base = compiti.filter(k => visibile(k) && (!q || normNome(`${k.titolo} ${nomeCli[k.clienteId] || ""} ${k.tipo} ${k.assegnatoNome || ""}`).includes(q)));
   const conta = a => base.filter(k => aperto(k) && nell[a](k)).length;
   const visibili = base.filter(nell[ambito]);
-  const aperti = visibili.filter(aperto);
+  const tuttiAperti = visibili.filter(aperto);
+  const FILTRI = {
+    nuovi: k => mio(k) && k.autoreUid !== u.uid && (k.stato || "Da fare") === "Da fare",
+    aiuto: k => k.aiuto && (delegato(k) || (admin && !mio(k))),
+    soll: k => statoRichieste(k).daSollecitare > 0,
+    prio: k => k.priorita === "urgente",
+    scaduto: k => urgenzaCompito(k) === "scaduto",
+    urgente: k => urgenzaCompito(k) === "urgente" };
+  if (filtroRapido && !FILTRI[filtroRapido]) filtroRapido = "";
+  const aperti = filtroRapido ? tuttiAperti.filter(FILTRI[filtroRapido]) : tuttiAperti;
   const fatti = visibili.filter(k => !aperto(k)).sort((a, b) => String(b.completatoIl || b.aggiornato || "").localeCompare(String(a.completatoIl || a.aggiornato || ""))).slice(0, 30);
   const ordina = (a, b) => (b.aiuto ? 1 : 0) - (a.aiuto ? 1 : 0) || rangoPriorita(a) - rangoPriorita(b) || (a.scadenza || "9999").localeCompare(b.scadenza || "9999");
   const nuovi = base.filter(k => aperto(k) && mio(k) && k.autoreUid !== u.uid && (k.stato || "Da fare") === "Da fare").length;
   const aiuti = base.filter(k => aperto(k) && k.aiuto && (delegato(k) || (admin && !mio(k)))).length;
   const allarmi = { scaduto: 0, urgente: 0 };
-  aperti.forEach(k => { const g = urgenzaCompito(k); if (g in allarmi) allarmi[g]++; });
-  const daSoll = aperti.reduce((n, k) => n + statoRichieste(k).daSollecitare, 0);
+  tuttiAperti.forEach(k => { const g = urgenzaCompito(k); if (g in allarmi) allarmi[g]++; });
+  const daSoll = tuttiAperti.reduce((n, k) => n + statoRichieste(k).daSollecitare, 0);
 
+  const btnFiltro = (k, n, tipo, testo) => (n || filtroRapido === k) ? `<button type="button" class="stato ${tipo} filtro${filtroRapido === k ? " attivo" : ""}" data-f="${k}" aria-pressed="${filtroRapido === k}" title="${filtroRapido === k ? "Togli il filtro" : "Mostra solo questi"}">${e(testo)}${filtroRapido === k ? " ✕" : ""}</button>` : "";
   el.innerHTML = `
   <div class="testata">
-    <div><h1>Compiti${clienteFiltro ? ` · ${e(nomeCli[clienteFiltro] || "")}` : ""}</h1><div class="tenue">${aperti.length} aperti</div></div>
+    <div><h1>Compiti${clienteFiltro ? ` · ${e(nomeCli[clienteFiltro] || "")}` : ""}</h1><div class="tenue">${filtroRapido ? `${aperti.length} di ${tuttiAperti.length} aperti · <a href="#" id="via-filtro">mostra tutti</a>` : `${tuttiAperti.length} aperti`}</div></div>
     <div class="barra">
       <input type="search" id="cerca-k" placeholder="Cerca" value="${e(cerca)}" aria-label="Cerca compito">
       <div class="segmenti" role="radiogroup" aria-label="Vista"><button type="button" role="radio" data-v="colonne" aria-checked="${vista === "colonne"}">Colonne</button><button type="button" role="radio" data-v="elenco" aria-checked="${vista === "elenco"}">Elenco</button></div>
@@ -59,12 +70,13 @@ export async function vistaCompiti(el, clienteFiltro) {
       <button type="button" role="radio" data-a="studio" aria-checked="${ambito === "studio"}">Tutto lo studio <span class="conta">${conta("studio")}</span></button>
     </div>
     ${ambito === "studio" ? `<select id="chi-k" aria-label="Collaboratore"><option value="">Tutti</option>${persone.map(p => `<option value="${e(p.uid)}"${filtroChi === p.uid ? " selected" : ""}>${e(p.nome)}</option>`).join("")}</select>` : ""}
-    <div class="segnali" style="margin-left:auto">
-      ${nuovi ? stato("info", `${nuovi} ${nuovi === 1 ? "nuovo assegnato" : "nuovi assegnati"} a te`) : ""}
-      ${aiuti ? `<span class="stato aiuto">🙋 ${aiuti} ${aiuti === 1 ? "richiesta" : "richieste"} di aiuto</span>` : ""}
-      ${daSoll ? stato("scaduto", `📨 ${daSoll} ${daSoll === 1 ? "richiesta" : "richieste"} da sollecitare`) : ""}
-      ${allarmi.scaduto ? stato("scaduto", `${allarmi.scaduto} ${allarmi.scaduto === 1 ? "scaduto" : "scaduti"}`) : ""}
-      ${allarmi.urgente ? stato("urgente", `${allarmi.urgente} entro 5 giorni`) : ""}
+    <div class="segnali filtri-k" style="margin-left:auto">
+      ${btnFiltro("nuovi", nuovi, "info", `${nuovi} ${nuovi === 1 ? "nuovo assegnato" : "nuovi assegnati"} a te`)}
+      ${btnFiltro("aiuto", aiuti, "aiuto", `🙋 ${aiuti} ${aiuti === 1 ? "richiesta" : "richieste"} di aiuto`)}
+      ${btnFiltro("soll", daSoll, "scaduto", `📨 ${daSoll} ${daSoll === 1 ? "richiesta" : "richieste"} da sollecitare`)}
+      ${btnFiltro("prio", tuttiAperti.filter(k => k.priorita === "urgente").length, "prio-urg", `${tuttiAperti.filter(k => k.priorita === "urgente").length} urgenti`)}
+      ${btnFiltro("scaduto", allarmi.scaduto, "scaduto", `${allarmi.scaduto} ${allarmi.scaduto === 1 ? "scaduto" : "scaduti"}`)}
+      ${btnFiltro("urgente", allarmi.urgente, "urgente", `${allarmi.urgente} entro 5 giorni`)}
     </div>
   </div>
   <div id="corpo-k"></div>`;
@@ -106,7 +118,7 @@ export async function vistaCompiti(el, clienteFiltro) {
     return `<div class="rich-k${st.daSollecitare ? " soll" : ""}">📨 ${st.ricevute} di ${st.tot} ricevute${st.daSollecitare ? ` · <strong>${st.daSollecitare} da sollecitare</strong>` : ""}
       ${aperte.length ? `<ul>${aperte.map(x => `<li${x.sollecitareIl && x.sollecitareIl <= oggiISO() ? ' class="rosso"' : ""}>${e(x.a)}: ${e(x.cosa)}${x.sollecitareIl ? ` <span class="tenue">· sollecito ${e(fmtData(x.sollecitareIl))}</span>` : ""}</li>`).join("")}</ul>` : ""}</div>`;
   }
-  const vuotoTesto = ambito === "delegati" ? "Non hai delegato compiti ancora aperti. Per delegare: Nuovo compito → Assegna a." : "Nessun compito aperto.";
+  const vuotoTesto = filtroRapido ? "Nessun compito con questo filtro. Clicca di nuovo sul filtro per vedere tutti." : ambito === "delegati" ? "Non hai delegato compiti ancora aperti. Per delegare: Nuovo compito → Assegna a." : "Nessun compito aperto.";
   if (vista === "colonne") {
     corpo.innerHTML = `<div class="colonne-k">${COLONNE.map(([c, n, sotto]) => {
       const l = aperti.filter(k => colonnaCompito(k) === c).sort(ordina);
@@ -125,7 +137,16 @@ export async function vistaCompiti(el, clienteFiltro) {
     ${mostraFatti ? `<div class="elenco-k" style="margin-top:10px">${fatti.map(scheda).join("")}</div>` : ""}</section>`);
 
   const ricarica = () => vistaCompiti(el, clienteFiltro);
-  el.querySelector("#cerca-k").addEventListener("change", ev => { cerca = ev.target.value; ricarica(); });
+  let tCerca;
+  el.querySelector("#cerca-k").addEventListener("input", ev => { clearTimeout(tCerca); tCerca = setTimeout(async () => {
+    cerca = ev.target.value; await ricarica();
+    const c = el.querySelector("#cerca-k"); if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } }, 350); });
+  el.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => {
+    const f = b.dataset.f; filtroRapido = filtroRapido === f ? "" : f;
+    if (filtroRapido === "nuovi") ambito = "miei";
+    if (filtroRapido === "aiuto" && ambito === "miei") ambito = admin ? "studio" : "delegati";
+    ricarica(); }));
+  el.querySelector("#via-filtro")?.addEventListener("click", ev => { ev.preventDefault(); filtroRapido = ""; ricarica(); });
   el.querySelector("#chi-k")?.addEventListener("change", ev => { filtroChi = ev.target.value; ricarica(); });
   el.querySelectorAll("[data-v]").forEach(b => b.addEventListener("click", () => { vista = b.dataset.v; ricarica(); }));
   el.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", () => { ambito = b.dataset.a; ricarica(); }));

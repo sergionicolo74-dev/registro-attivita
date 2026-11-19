@@ -508,3 +508,8 @@ ul.richieste li.ok { opacity: .7; }
 @media (max-width: 800px) { .bud-kpi { grid-template-columns: repeat(2, 1fr); } }
 .tab-ins input, .tab-ins select { width: 100%; min-width: 90px; padding: 6px 8px; font-size: 14px; }
 .tab-ins td { padding: 4px 6px; }
+/* contatori cliccabili dei Compiti */
+button.stato.filtro { border: 1px solid transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; padding: 4px 11px; }
+button.stato.filtro:hover { border-color: currentColor; }
+button.stato.filtro.attivo { border-color: currentColor; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 25%, transparent); }
+.stato.prio-urg { background: var(--rosso-tinta); color: var(--rosso); }

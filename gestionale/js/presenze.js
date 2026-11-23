@@ -3,11 +3,13 @@
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
 import { fmtData, fmtDurata, fmtSaldo, oggiISO, aggiungiGiorni, dataISO, giornoSettimana, festiviTicino, minutiDovuti, minutiCredito,
-  lavoraIl, giorniLavoroDi, fmtGiorniLavoro, dirittoVacanze, parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima, conVacanze } from "./regole.js";
+  lavoraIl, giorniLavoroDi, fmtGiorniLavoro, dirittoVacanze, parseOre, riepilogoPresenze, TIPI_ASSENZA, GIORNI, MESI, parseOrario, fmtOrario, minutiDaOrari, pausaMinima, conVacanze, lunedi, senzaOre } from "./regole.js";
 
 const PAUSE = [0, 15, 30, 45, 60, 75, 90, 120];
 
-let mese = oggiISO().slice(0, 7);   // "2026-11"
+let mese = oggiISO().slice(0, 7);   // "2026-11" (vista mese e panoramica)
+let lun = null;                     // lunedì della settimana mostrata
+let modo = "settimana";             // settimana | mese | anno
 let chi = null;                     // uid mostrato
 let panoramica = false;             // admin: tabella di tutto lo studio
 
@@ -16,45 +18,97 @@ const ultimoDel = m => dataISO(+m.slice(0, 4), +m.slice(5, 7), 31);
 const meseDopo = (m, n) => dataISO(+m.slice(0, 4), +m.slice(5, 7) + n, 1).slice(0, 7);
 const nomeMese = m => `${MESI[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
 const ore = min => min == null ? "" : `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
+const breve = d => fmtData(d).slice(0, 5);
+const nomeSett = l => `${breve(l)} – ${fmtData(aggiungiGiorni(l, 6))}`;
+const giorni = (da, a) => { const l = []; for (let d = da; d <= a; d = aggiungiGiorni(d, 1)) l.push(d); return l; };
+
+// Come si dividono le ore del Registro: nel mandato, extra e pratiche (fatturate a parte), non fatturabili
+const CAT_REG = [["mandato", "Nei mandati", "#3F78B5"], ["extra", "Extra e pratiche", "#2E9AA6"], ["non", "Non fatturabili", "#A39C8C"]];
+const catReg = r => r.fatturabile === false ? "non" : r.praticaId || r.extra || senzaOre(r.mandato) ? "extra" : "mandato";
 
 export async function vistaPresenze(el) {
   const admin = D.isAdmin(), u = D.utenteCorrente();
   if (!chi || !admin) chi = u.uid;
   const utenti = admin ? (await D.listaUtenti()).filter(x => x.attivo !== false && x.ruolo) : [];
   if (admin && panoramica) return vistaPanoramica(el, utenti);
+  const oggi = oggiISO();
+  if (!lun) lun = lunedi(oggi);
 
-  const anno = mese.slice(0, 4), da = primoDel(mese), a = ultimoDel(mese), inizioAnno = `${anno}-01-01`;
-  const [profilo, presAnno, regMese, vacanze] = await Promise.all([
+  // Periodo mostrato
+  let da, a, titolo;
+  if (modo === "settimana") { da = lun; a = aggiungiGiorni(lun, 6); titolo = `Settimana ${nomeSett(lun)}`; }
+  else if (modo === "mese") { da = primoDel(mese); a = ultimoDel(mese); titolo = nomeMese(mese); }
+  else { da = `${mese.slice(0, 4)}-01-01`; a = `${mese.slice(0, 4)}-12-31`; titolo = `Anno ${mese.slice(0, 4)}`; }
+  const anno = a.slice(0, 4), inizioAnno = `${anno}-01-01`;
+  const caricaDa = da < inizioAnno ? da : inizioAnno;
+
+  const [profilo, presAnno, regPer, vacanze] = await Promise.all([
     D.leggiProfilo(chi).then(p => p || {}),
-    D.listaPresenze(chi, inizioAnno, `${anno}-12-31`),
+    D.listaPresenze(chi, caricaDa, `${anno}-12-31`),
     chi === u.uid || admin ? D.listaRegistrazioniPeriodo(da, a).catch(() => []) : Promise.resolve([]),
     D.listaVacanze().catch(() => [])
   ]);
   // Le vacanze approvate entrano da sole nei giorni senza registrazione
   const pres = conVacanze(Object.fromEntries(presAnno.map(p => [p.data, p])), vacanze, chi, profilo);
-  const regGiorno = {};
-  regMese.filter(r => r.autoreUid === chi && r.tipo !== "nota").forEach(r => { regGiorno[r.data] = (regGiorno[r.data] || 0) + (r.minuti || 0); });
+  const regGiorno = {};   // { data: { tot, mandato, extra, non } }
+  regPer.filter(r => r.autoreUid === chi && r.tipo !== "nota").forEach(r => {
+    const g = regGiorno[r.data] ||= { tot: 0, mandato: 0, extra: 0, non: 0 };
+    g.tot += r.minuti || 0; g[catReg(r)] += r.minuti || 0;
+  });
   const dal = profilo.inizioPresenze || presAnno.map(p => p.data).sort()[0] || da;
-  const oggi = oggiISO();
   // Il saldo si calcola fino a oggi (se oggi è già compilato) o fino a ieri: i giorni futuri non sono ancora dovuti
   const finora = pres[oggi] ? oggi : aggiungiGiorni(oggi, -1);
-  const rMeseTutto = riepilogoPresenze(pres, profilo, da, a, dal);
-  const fineMeseCalc = a < finora ? a : finora;
-  const rMese = fineMeseCalc >= da ? riepilogoPresenze(pres, profilo, da, fineMeseCalc, dal) : { ...rMeseTutto, dovute: 0, saldo: 0, lavorate: 0, credito: 0 };
-  const fineAnnoCalc = a < finora ? a : finora;
-  const rAnno = riepilogoPresenze(pres, profilo, inizioAnno, fineAnnoCalc, dal);
+  const fineCalc = a < finora ? a : finora;
+  const rTutto = riepilogoPresenze(pres, profilo, da, a, dal);
+  const rPer = fineCalc >= da ? riepilogoPresenze(pres, profilo, da, fineCalc, dal) : { ...rTutto, dovute: 0, saldo: 0, lavorate: 0, credito: 0, daCompilare: 0 };
+  const rAnno = riepilogoPresenze(pres, profilo, inizioAnno, fineCalc < inizioAnno ? inizioAnno : fineCalc, dal);
   const saldoAnno = rAnno.saldo + (Number(profilo.saldoRiportatoMinuti) || 0);
-  const fest = festiviTicino(+anno);
+  const fest = { ...festiviTicino(+anno), ...festiviTicino(+caricaDa.slice(0, 4)) };
   const nomeChi = admin ? (utenti.find(x => x.id === chi)?.nome || u.nome) : u.nome;
   const entStd = parseOrario(profilo.entrataStandard) ?? 480, pausaStd = profilo.pausaStandard != null && profilo.pausaStandard !== "" ? Number(profilo.pausaStandard) : 60;
 
+  const infoGiorno = d => {
+    const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0, gs = giornoSettimana(d), f = fest[d];
+    const libPers = gs < 5 && !f && !lavoraIl(profilo, d); // giorno libero della persona (tempo parziale)
+    const lib = gs >= 5 || f || libPers;
+    return { p, dov, gs, f, libPers, lib, manca: !lib && dov && d < oggi && d >= dal && p.minuti == null && !p.assenza };
+  };
+  // Settimane passate (di quest'anno) con giorni da compilare
+  const lunOggi = lunedi(oggi), arretrate = [];
+  for (let l = lunedi(dal > inizioAnno ? dal : inizioAnno); l < lunOggi; l = aggiungiGiorni(l, 7)) {
+    const n = giorni(l, aggiungiGiorni(l, 6)).filter(d => infoGiorno(d).manca).length;
+    if (n) arretrate.push({ l, n });
+  }
+
+  // Totali per il grafico: ogni colonna = giorno (settimana), settimana (mese) o mese (anno)
+  const somma = (gg) => gg.reduce((t, d) => {
+    const i = infoGiorno(d), g = regGiorno[d] || {};
+    t.dov += d <= fineCalc ? i.dov : 0; t.lav += i.p.minuti || 0; t.cred += d <= fineCalc ? minutiCredito(i.p.assenza, i.dov) : 0;
+    for (const [k] of CAT_REG) t[k] += g[k] || 0;
+    t.reg += g.tot || 0; t.vuoto += Math.max(0, (i.p.minuti || 0) - (g.tot || 0)); return t;
+  }, { dov: 0, lav: 0, cred: 0, reg: 0, vuoto: 0, mandato: 0, extra: 0, non: 0 });
+  let colonne;
+  if (modo === "settimana") colonne = giorni(da, a).map(d => ({ et: `${GIORNI[giornoSettimana(d)]} ${breve(d)}`, ...somma([d]), dovTutto: infoGiorno(d).dov }));
+  else if (modo === "mese") {
+    colonne = [];
+    for (let l = lunedi(da); l <= a; l = aggiungiGiorni(l, 7)) {
+      const gg = giorni(l > da ? l : da, aggiungiGiorni(l, 6) < a ? aggiungiGiorni(l, 6) : a);
+      colonne.push({ et: `${breve(gg[0])}–${breve(gg[gg.length - 1])}`, ...somma(gg), dovTutto: gg.reduce((s, d) => s + infoGiorno(d).dov, 0) });
+    }
+  } else colonne = MESI.map((n, i) => { const m = `${anno}-${String(i + 1).padStart(2, "0")}`; return { et: n.slice(0, 3), mese: m, ...somma(giorni(primoDel(m), ultimoDel(m))), dovTutto: 0 }; });
+  const tot = colonne.reduce((t, c) => { for (const k of ["dov", "lav", "cred", "reg", "vuoto", "mandato", "extra", "non"]) t[k] += c[k]; return t; }, { dov: 0, lav: 0, cred: 0, reg: 0, vuoto: 0, mandato: 0, extra: 0, non: 0 });
+
+  const nav = modo === "settimana" ? ["Settimana precedente", "Settimana successiva"] : modo === "mese" ? ["Mese precedente", "Mese successivo"] : ["Anno precedente", "Anno successivo"];
+  const dicitura = { settimana: "della settimana", mese: "del mese", anno: "dell'anno" }[modo];
   el.innerHTML = `
   <div class="testata">
-    <div><h1>Presenze</h1><div class="tenue">${e(nomeChi)} · ${e(nomeMese(mese))}</div></div>
+    <div><h1>Presenze</h1><div class="tenue">${e(nomeChi)} · ${e(titolo)}</div></div>
     <div class="barra">
-      <button class="btn" id="m-prec" aria-label="Mese precedente">◀</button>
-      <span style="min-width:130px;text-align:center;font-weight:600">${e(nomeMese(mese))}</span>
-      <button class="btn" id="m-succ" aria-label="Mese successivo">▶</button>
+      <div class="segmenti" role="radiogroup" aria-label="Vista">${[["settimana", "Settimana"], ["mese", "Mese"], ["anno", "Anno"]].map(([k, n]) => `<button type="button" role="radio" data-modo="${k}" aria-checked="${modo === k}">${n}</button>`).join("")}</div>
+      <button class="btn" id="m-prec" aria-label="${nav[0]}">◀</button>
+      <span style="min-width:150px;text-align:center;font-weight:600">${e(modo === "settimana" ? nomeSett(lun) : modo === "mese" ? nomeMese(mese) : anno)}</span>
+      <button class="btn" id="m-succ" aria-label="${nav[1]}">▶</button>
+      ${(modo === "settimana" && lun !== lunOggi) || (modo === "mese" && mese !== oggi.slice(0, 7)) || (modo === "anno" && anno !== oggi.slice(0, 4)) ? '<button class="btn" id="m-oggi">Oggi</button>' : ""}
       ${admin ? `<select id="chi-p" aria-label="Collaboratore">${utenti.map(x => `<option value="${e(x.id)}"${x.id === chi ? " selected" : ""}>${e(x.nome || x.id)}</option>`).join("")}</select>
         <button class="btn" id="panoramica">Tutto lo studio</button>` : ""}
       <button class="btn" id="esporta">Esporta anno (CSV)</button>
@@ -62,45 +116,35 @@ export async function vistaPresenze(el) {
   </div>
   ${profilo.accordo73b ? "" : `<div class="pannello allerta" role="status" style="margin-bottom:14px">${stato("urgente", "Accordo scritto mancante")}
     <span style="margin-left:8px">La registrazione semplificata (art. 73b OLL 1) richiede un accordo scritto individuale con ${e(nomeChi)}.${admin ? " Indica la data della firma in «Orario e accordo» qui sotto." : " Rivolgiti all'amministratore."}</span></div>`}
+  ${arretrate.length && modo !== "anno" ? `<div class="pannello allerta" role="status" style="margin-bottom:14px">${stato("urgente", `⚠ ${arretrate.reduce((s, x) => s + x.n, 0)} giorni da compilare nelle settimane passate`)}
+    <div class="arretrate">${arretrate.slice(-8).reverse().map(x => `<button type="button" class="btn piccolo" data-sett="${x.l}">${e(nomeSett(x.l))} · ${x.n} ${x.n === 1 ? "giorno" : "giorni"}</button>`).join("")}${arretrate.length > 8 ? `<span class="tenue">e altre ${arretrate.length - 8} settimane</span>` : ""}</div></div>` : ""}
   <div class="kpi-s">
-    <div class="kpi-b fermo"><span class="tenue">Dovute nel mese</span><strong>${fmtDurata(rMeseTutto.dovute)}</strong>${rMese.dovute !== rMeseTutto.dovute ? `<span class="tenue">${fmtDurata(rMese.dovute)} fino a ${e(fmtData(fineMeseCalc))}</span>` : ""}</div>
-    <div class="kpi-b fermo"><span class="tenue">Lavorate</span><strong>${fmtDurata(rMese.lavorate)}</strong>${rMese.credito ? `<span class="tenue">+ ${fmtDurata(rMese.credito)} assenze/vacanze</span>` : ""}</div>
-    <div class="kpi-b fermo"><span class="tenue">Saldo del mese${rMese.dovute !== rMeseTutto.dovute ? " finora" : ""}</span><strong>${fmtSaldo(rMese.saldo)}</strong></div>
-    <div class="kpi-b fermo"><span class="tenue">Saldo ${anno} fino a ${e(fmtData(fineAnnoCalc))}</span><strong>${fmtSaldo(saldoAnno)}</strong></div>
+    <div class="kpi-b fermo"><span class="tenue">Dovute ${dicitura}</span><strong>${fmtDurata(rTutto.dovute)}</strong>${rPer.dovute !== rTutto.dovute ? `<span class="tenue">${fmtDurata(rPer.dovute)} fino a ${e(fmtData(fineCalc))}</span>` : ""}</div>
+    <div class="kpi-b fermo"><span class="tenue">Lavorate</span><strong>${fmtDurata(rPer.lavorate)}</strong>${rPer.credito ? `<span class="tenue">+ ${fmtDurata(rPer.credito)} assenze/vacanze</span>` : ""}</div>
+    <div class="kpi-b fermo"><span class="tenue">Saldo ${dicitura}${rPer.dovute !== rTutto.dovute ? " finora" : ""}</span><strong class="${rPer.saldo < 0 ? "neg" : ""}">${fmtSaldo(rPer.saldo)}</strong></div>
+    ${modo !== "anno" ? `<div class="kpi-b fermo"><span class="tenue">Saldo ${anno} fino a ${e(fmtData(fineCalc < inizioAnno ? inizioAnno : fineCalc))}</span><strong class="${saldoAnno < 0 ? "neg" : ""}">${fmtSaldo(saldoAnno)}</strong></div>` : (profilo.saldoRiportatoMinuti ? `<div class="kpi-b fermo"><span class="tenue">Saldo con il riporto</span><strong class="${saldoAnno < 0 ? "neg" : ""}">${fmtSaldo(saldoAnno)}</strong></div>` : "")}
     <div class="kpi-b fermo"><span class="tenue">Vacanze ${anno}</span><strong>${String(rAnno.vacanze).replace(".5", "½")} ${rAnno.vacanze === 1 ? "giorno" : "giorni"}</strong>${profilo.giorniVacanza ? `<span class="tenue">su ${String(dirittoVacanze(profilo)).replace(".5", "½")}</span>` : ""}</div>
-    <div class="kpi-b fermo"><span class="tenue">Giorni da compilare</span><strong>${rMese.daCompilare ? stato("urgente", String(rMese.daCompilare)) : stato("ok", "0")}</strong></div>
+    <div class="kpi-b fermo"><span class="tenue">Giorni da compilare</span><strong>${rPer.daCompilare ? stato("urgente", String(rPer.daCompilare)) : stato("ok", "0")}</strong>${modo === "settimana" && arretrate.length ? `<span class="tenue">+ ${arretrate.reduce((s, x) => s + x.n, 0)} nelle settimane passate</span>` : ""}</div>
   </div>
-  <div class="pannello" style="padding:0">
-    <div class="scorri"><table class="tabella presenze"><thead><tr><th>Giorno</th><th class="num">Dovute</th><th>Entrata</th><th>Uscita</th><th>Pausa</th><th class="num">Lavorate</th><th>Assenza</th><th class="num">Registro ore</th><th class="num">Saldo</th></tr></thead><tbody>
-    ${giorniDelMese().map(d => {
-      const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0, gs = giornoSettimana(d), f = fest[d];
-      const libPers = gs < 5 && !f && !lavoraIl(profilo, d); // giorno libero della persona (tempo parziale)
-      const lib = gs >= 5 || f || libPers, futuro = d > oggi;
-      const saldo = (p.minuti != null || p.assenza) ? (p.minuti || 0) + minutiCredito(p.assenza, dov) - dov : null;
-      const reg = regGiorno[d];
-      const manca = !lib && dov && !futuro && d >= dal && p.minuti == null && !p.assenza;
-      return `<tr class="${lib ? "libero" : ""}${d === oggi ? " oggi" : ""}" data-d="${d}">
-        <td style="white-space:nowrap"><strong>${GIORNI[gs]} ${e(fmtData(d).slice(0, 5))}</strong>${f ? `<div class="tenue">${e(f)}</div>` : libPers ? '<div class="tenue">giorno libero</div>' : ""}${manca ? `<div>${stato("urgente", "Da compilare")}</div>` : ""}</td>
-        <td class="num">${dov ? ore(dov) : "–"}</td>
-        <td><input class="t-in ent"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
-        <td><input class="t-in usc"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
-        <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></td>
-        <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
-          ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
-          ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
-        <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select>${p.daPiano ? '<div class="tenue" style="font-size:12px">dal piano vacanze</div>' : ""}</td>
-        <td class="num">${reg ? `${fmtDurata(reg)}${p.minuti && reg > p.minuti ? `<div>${stato("urgente", "più della presenza")}</div>` : ""}` : '<span class="tenue">–</span>'}</td>
-        <td class="num">${saldo == null ? "" : `<span class="${saldo < 0 ? "neg" : ""}">${fmtSaldo(saldo)}</span>`}</td></tr>`;
-    }).join("")}
-    </tbody></table></div></div>
-  <p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>
+  ${graficoOre(colonne, tot, modo)}
+  ${modo === "anno" ? tabellaAnno(colonne, tot) : tabellaGiorni()}
+  ${modo !== "anno" ? `<p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>` : ""}
   ${admin ? formProfilo(profilo, nomeChi) : `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:8px">Orario e accordo</h3><div class="fatti">
       <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}% · ${fmtGiorniLavoro(profilo)}</div>
       <div><span>Accordo art. 73b</span>${profilo.accordo73b ? e(fmtData(profilo.accordo73b)) : "–"}</div></div></div>`}`;
 
   const ricarica = () => vistaPresenze(el);
-  el.querySelector("#m-prec").addEventListener("click", () => { mese = meseDopo(mese, -1); ricarica(); });
-  el.querySelector("#m-succ").addEventListener("click", () => { mese = meseDopo(mese, 1); ricarica(); });
+  el.querySelectorAll("[data-modo]").forEach(b => b.addEventListener("click", () => {
+    const prima = modo; modo = b.dataset.modo;
+    if (prima === "settimana" && modo !== "settimana") mese = aggiungiGiorni(lun, 3).slice(0, 7);
+    if (modo === "settimana" && prima !== "settimana") lun = mese === oggi.slice(0, 7) ? lunOggi : lunedi(primoDel(mese));
+    ricarica();
+  }));
+  el.querySelector("#m-prec").addEventListener("click", () => { if (modo === "settimana") lun = aggiungiGiorni(lun, -7); else mese = meseDopo(mese, modo === "anno" ? -12 : -1); ricarica(); });
+  el.querySelector("#m-succ").addEventListener("click", () => { if (modo === "settimana") lun = aggiungiGiorni(lun, 7); else mese = meseDopo(mese, modo === "anno" ? 12 : 1); ricarica(); });
+  el.querySelector("#m-oggi")?.addEventListener("click", () => { lun = lunOggi; mese = oggi.slice(0, 7); ricarica(); });
+  el.querySelectorAll("[data-sett]").forEach(b => b.addEventListener("click", ev => { ev.preventDefault(); modo = "settimana"; lun = b.dataset.sett; ricarica(); }));
+  el.querySelectorAll("[data-mese]").forEach(b => b.addEventListener("click", ev => { ev.preventDefault(); modo = "mese"; mese = b.dataset.mese; ricarica(); }));
   el.querySelector("#chi-p")?.addEventListener("change", ev => { chi = ev.target.value; ricarica(); });
   el.querySelector("#panoramica")?.addEventListener("click", () => { panoramica = true; ricarica(); });
   el.querySelector("#esporta").addEventListener("click", () => esportaAnno(nomeChi, profilo, pres, +anno, dal));
@@ -139,7 +183,67 @@ export async function vistaPresenze(el) {
     avviso("Orario salvato"); ricarica();
   });
 
-  function giorniDelMese() { const l = []; for (let d = da; d <= a; d = aggiungiGiorni(d, 1)) l.push(d); return l; }
+  function rigaGiorno(d) {
+    const { p, dov, gs, f, libPers, lib, manca } = infoGiorno(d);
+    const saldo = (p.minuti != null || p.assenza) ? (p.minuti || 0) + minutiCredito(p.assenza, dov) - dov : null;
+    const reg = regGiorno[d]?.tot;
+    return `<tr class="${lib ? "libero" : ""}${d === oggi ? " oggi" : ""}" data-d="${d}">
+      <td style="white-space:nowrap"><strong>${GIORNI[gs]} ${e(breve(d))}</strong>${f ? `<div class="tenue">${e(f)}</div>` : libPers ? '<div class="tenue">giorno libero</div>' : ""}${manca ? `<div>${stato("urgente", "Da compilare")}</div>` : ""}</td>
+      <td class="num">${dov ? ore(dov) : "–"}</td>
+      <td><input class="t-in ent"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
+      <td><input class="t-in usc"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
+      <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></td>
+      <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
+        ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
+        ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
+      <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select>${p.daPiano ? '<div class="tenue" style="font-size:12px">dal piano vacanze</div>' : ""}</td>
+      <td class="num">${reg ? `${fmtDurata(reg)}${p.minuti && reg > p.minuti ? `<div>${stato("urgente", "più della presenza")}</div>` : ""}` : '<span class="tenue">–</span>'}</td>
+      <td class="num">${saldo == null ? "" : `<span class="${saldo < 0 ? "neg" : ""}">${fmtSaldo(saldo)}</span>`}</td></tr>`;
+  }
+  function rigaSettimana(gg) {
+    const t = somma(gg), saldo = t.lav + t.cred - t.dov;
+    return `<tr class="tot-sett"><td colspan="5">Settimana ${e(breve(gg[0]))} – ${e(breve(gg[gg.length - 1]))}</td><td class="num">${fmtDurata(t.lav)}</td><td></td>
+      <td class="num">${t.reg ? fmtDurata(t.reg) : "–"}</td><td class="num"><span class="${saldo < 0 ? "neg" : ""}">${t.dov || t.lav ? fmtSaldo(saldo) : ""}</span></td></tr>`;
+  }
+  function tabellaGiorni() {
+    const gg = giorni(da, a);
+    let righe = "";
+    if (modo === "settimana") righe = gg.map(rigaGiorno).join("");
+    else { let blocco = []; gg.forEach((d, i) => { righe += rigaGiorno(d); blocco.push(d); if (giornoSettimana(d) === 6 || i === gg.length - 1) { righe += rigaSettimana(blocco); blocco = []; } }); }
+    return `<div class="pannello" style="padding:0"><div class="scorri"><table class="tabella presenze"><thead><tr><th>Giorno</th><th class="num">Dovute</th><th>Entrata</th><th>Uscita</th><th>Pausa</th><th class="num">Lavorate</th><th>Assenza</th><th class="num">Registro ore</th><th class="num">Saldo</th></tr></thead><tbody>${righe}</tbody></table></div></div>`;
+  }
+}
+
+/** Grafico: per ogni colonna le ore di presenza divise in ore registrate (per tipo) e ore non registrate; la tacca nera sono le ore dovute. */
+function graficoOre(col, tot, modo) {
+  const max = Math.max(60, ...col.map(c => Math.max(c.lav, c.reg, c.dov, c.dovTutto || 0)));
+  // non registrate = per ogni giorno la presenza che manca nel Registro ore
+  const nonReg = tot.vuoto, perc = tot.lav ? Math.round((tot.lav - nonReg) / tot.lav * 100) : 0;
+  const barra = c => {
+    const pz = CAT_REG.map(([k, n, col]) => c[k] ? `<span class="gb-pz" style="height:${c[k] / max * 100}%;background:${col}" title="${e(n)}: ${fmtDurata(c[k])}"></span>` : "").join("");
+    const vuoto = c.vuoto;
+    const dov = c.dovTutto || c.dov;
+    return `<div class="gb-col" title="${e(c.et)} · presenza ${fmtDurata(c.lav)} · registrate ${fmtDurata(c.reg)}${vuoto ? ` · non registrate ${fmtDurata(vuoto)}` : ""}${dov ? ` · dovute ${fmtDurata(dov)}` : ""}">
+      <div class="gb-area">${dov ? `<span class="gb-dov" style="bottom:${dov / max * 100}%"></span>` : ""}
+        <div class="gb-stack">${vuoto ? `<span class="gb-pz gb-vuoto" style="height:${vuoto / max * 100}%" title="Non registrate: ${fmtDurata(vuoto)}"></span>` : ""}${pz}</div></div>
+      <div class="gb-et">${e(c.et)}</div><div class="gb-v">${c.lav ? fmtDurata(c.lav) : ""}</div></div>`;
+  };
+  return `<section class="pannello graf-ore">
+    <div class="gb-testa"><h3 style="font-size:15px;margin:0">Presenza e ore registrate</h3>
+      <div class="gb-sintesi">Presenza <strong>${fmtDurata(tot.lav)}</strong> · nel Registro ore <strong>${fmtDurata(tot.reg)}</strong>${tot.lav ? ` (${perc}%)` : ""} · non registrate <strong>${fmtDurata(nonReg)}</strong></div></div>
+    <div class="gb-grafico${modo === "anno" ? " anno" : ""}">${col.map(barra).join("")}</div>
+    <div class="gb-legenda">${CAT_REG.map(([k, n, c]) => `<span><i style="background:${c}"></i>${e(n)} ${fmtDurata(tot[k])}</span>`).join("")}<span><i class="gb-vuoto"></i>Presenza non registrata ${fmtDurata(nonReg)}</span><span><i class="gb-tacca"></i>Ore dovute</span></div>
+  </section>`;
+}
+
+function tabellaAnno(col, tot) {
+  const riga = (c, et, link) => { const saldo = c.lav + c.cred - c.dov, vuoto = c.vuoto;
+    return `<tr><td>${link ? `<a href="#" data-mese="${c.mese}">${e(et)}</a>` : `<strong>${e(et)}</strong>`}</td><td class="num">${c.dov ? fmtDurata(c.dov) : "–"}</td><td class="num">${c.lav ? fmtDurata(c.lav) : "–"}</td>
+      <td class="num">${c.cred ? fmtDurata(c.cred) : "–"}</td><td class="num">${c.dov || c.lav ? `<span class="${saldo < 0 ? "neg" : ""}">${fmtSaldo(saldo)}</span>` : ""}</td>
+      <td class="num">${c.reg ? fmtDurata(c.reg) : "–"}</td><td class="num">${vuoto ? fmtDurata(vuoto) : "–"}</td><td class="num">${c.lav ? Math.round((c.lav - vuoto) / c.lav * 100) + "%" : ""}</td></tr>`; };
+  return `<div class="pannello" style="padding:0"><div class="scorri"><table class="tabella"><thead><tr><th>Mese</th><th class="num">Dovute</th><th class="num">Lavorate</th><th class="num">Assenze e vacanze</th><th class="num">Saldo</th><th class="num">Nel Registro ore</th><th class="num">Non registrate</th><th class="num">Presenza registrata</th></tr></thead>
+    <tbody>${col.map(c => riga(c, MESI[+c.mese.slice(5, 7) - 1], true)).join("")}</tbody><tfoot>${riga(tot, "Totale", false)}</tfoot></table></div></div>
+    <p class="tenue" style="margin-top:8px;font-size:13px">Clic su un mese per vederlo settimana per settimana. Il saldo conta i giorni fino a oggi.</p>`;
 }
 
 function formProfilo(p, nome) {

@@ -532,3 +532,25 @@ button.stato.filtro.attivo { border-color: currentColor; box-shadow: 0 0 0 2px c
 .testo-r.taglia { cursor: pointer; }
 .testo-r.aperto { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .apri-r { background: none; border: 0; padding: 2px 0 0; font: inherit; font-size: 12px; color: var(--rosso, #b42318); cursor: pointer; }
+/* Presenze: grafico presenza / ore registrate */
+.graf-ore { margin-bottom: 14px; }
+.gb-testa { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; margin-bottom: 12px; }
+.gb-sintesi { font-size: 14px; color: var(--tenue); }
+.gb-sintesi strong { color: var(--inchiostro); }
+.gb-grafico { display: flex; gap: 10px; align-items: stretch; height: 230px; padding-top: 18px; }
+.gb-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.gb-area { position: relative; flex: 1; width: 100%; max-width: 64px; border-bottom: 1px solid var(--linea); }
+.gb-grafico.anno .gb-area { max-width: 44px; }
+.gb-stack { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
+.gb-pz { display: block; width: 100%; border-radius: 0; min-height: 2px; }
+.gb-stack .gb-pz:first-child { border-radius: 4px 4px 0 0; }
+.gb-vuoto { background: repeating-linear-gradient(135deg, #fff 0 4px, #E4DED2 4px 7px); border: 1px dashed #B9B2A4; box-sizing: border-box; }
+.gb-dov { position: absolute; left: -4px; right: -4px; height: 0; border-top: 2px solid var(--inchiostro); z-index: 2; }
+.gb-et { font-size: 12px; color: var(--tenue); margin-top: 6px; white-space: nowrap; }
+.gb-v { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 16px; }
+.gb-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 13px; color: var(--tenue); }
+.gb-legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.gb-legenda i.gb-tacca { height: 0; border-top: 2px solid var(--inchiostro); border-radius: 0; vertical-align: 3px; }
+.arretrate { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.tabella.presenze tr.tot-sett td { background: var(--grigio-tinta); font-weight: 600; font-size: 13px; border-bottom: 2px solid var(--linea); }
+strong.neg, .kpi-b strong.neg { color: var(--rosso); }

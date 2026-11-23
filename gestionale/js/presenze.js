@@ -1,4 +1,4 @@
-// Modulo Presenze: registrazione semplificata della durata del lavoro (art. 46 LL, art. 73b OLL 1).
+// Modulo Presenze: registrazione della durata del lavoro (art. 46 LL, art. 73 OLL 1): entrata, uscita, pausa con inizio e fine.
 // Si registra solo il totale delle ore lavorate al giorno; per le assenze solo il tipo, mai il motivo.
 import * as D from "./data.js";
 import { e, avviso, stato, campo, leggiForm, dataNonValida } from "./ui.js";
@@ -66,6 +66,7 @@ export async function vistaPresenze(el) {
   const fest = { ...festiviTicino(+anno), ...festiviTicino(+caricaDa.slice(0, 4)) };
   const nomeChi = admin ? (utenti.find(x => x.id === chi)?.nome || u.nome) : u.nome;
   const entStd = parseOrario(profilo.entrataStandard) ?? 480, pausaStd = profilo.pausaStandard != null && profilo.pausaStandard !== "" ? Number(profilo.pausaStandard) : 60;
+  const pinStd = parseOrario(profilo.inizioPausa) ?? 720; // inizio pausa abituale (12:00)
 
   const infoGiorno = d => {
     const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0, gs = giornoSettimana(d), f = fest[d];
@@ -126,12 +127,10 @@ export async function vistaPresenze(el) {
   </div>
   ${arretrate.length && modo !== "anno" ? `<div class="pannello allerta compatto" id="arretrate" role="status">${stato("urgente", `⚠ ${arretrate.reduce((s, x) => s + x.n, 0)} giorni da compilare nelle settimane passate`)}
     <div class="arretrate">${arretrate.slice(-8).reverse().map(x => `<button type="button" class="btn piccolo" data-sett="${x.l}">${e(nomeSett(x.l))} · ${x.n} ${x.n === 1 ? "giorno" : "giorni"}</button>`).join("")}${arretrate.length > 8 ? `<span class="tenue">e altre ${arretrate.length - 8} settimane</span>` : ""}</div></div>` : ""}
-  ${profilo.accordo73b ? "" : `<div class="pannello allerta compatto" role="status">${stato("urgente", "Accordo scritto mancante")}
-    <span style="margin-left:8px">La registrazione semplificata (art. 73b OLL 1) richiede un accordo scritto individuale con ${e(nomeChi)}.${admin ? " Indica la data della firma in «Orario e accordo» qui sotto." : " Rivolgiti all'amministratore."}</span></div>`}
   ${graficoOre(colonne, tot, modo)}
   ${admin ? formProfilo(profilo, nomeChi) : `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:8px">Orario e accordo</h3><div class="fatti">
       <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}% · ${fmtGiorniLavoro(profilo)}</div>
-      <div><span>Accordo art. 73b</span>${profilo.accordo73b ? e(fmtData(profilo.accordo73b)) : "–"}</div></div></div>`}`;
+      <div><span>Pausa abituale</span>${e(fmtOrario(pinStd))} · ${ore(pausaStd)}</div></div></div>`}`;
 
   const ricarica = () => vistaPresenze(el);
   el.querySelectorAll("[data-modo]").forEach(b => b.addEventListener("click", () => {
@@ -156,18 +155,25 @@ export async function vistaPresenze(el) {
     if (Number.isNaN(eMin)) { ent.focus(); avviso("Ora di entrata non valida: es. 8:00"); return; }
     if (Number.isNaN(uMin)) { usc.focus(); avviso("Ora di uscita non valida: es. 17:30"); return; }
     if (eMin == null && uMin != null) { ent.focus(); avviso("Manca l'ora di entrata"); return; }
+    // art. 73 OLL 1: per le pause di almeno mezz'ora si registra anche quando (inizio e fine)
+    const pinEl = tr.querySelector(".pin");
+    let pin = pausa >= 30 && eMin != null ? parseOrario(pinEl.value) : null;
+    if (Number.isNaN(pin)) { pinEl.focus(); avviso("Inizio pausa non valido: es. 12:00"); return; }
+    if (pausa >= 30 && eMin != null && pin == null) { pin = pinStd; pinEl.value = fmtOrario(pin); }
+    if (pin != null && (pin < eMin || (uMin != null && pin + pausa > uMin))) { pinEl.focus(); avviso("La pausa deve stare tra l'entrata e l'uscita"); return; }
     const minuti = minutiDaOrari(eMin, uMin, pausa);
     if (Number.isNaN(minuti)) { usc.focus(); avviso("L'uscita deve essere dopo l'entrata più la pausa"); return; }
     if (eMin == null && !sel.value) { if (pres[d]) await D.eliminaPresenza(chi, d); }
-    else await D.salvaPresenza({ uid: chi, nome: nomeChi, data: d, entrata: eMin, uscita: uMin, pausa: eMin == null ? null : pausa, minuti, assenza: sel.value });
+    else await D.salvaPresenza({ uid: chi, nome: nomeChi, data: d, entrata: eMin, uscita: uMin, pausa: eMin == null ? null : pausa, pausaInizio: pin, minuti, assenza: sel.value });
     avviso(minuti != null ? `Salvato: ${ore(minuti)} lavorate` : "Salvato"); ricarica();
   };
   el.querySelectorAll("tr[data-d]").forEach(tr => {
-    tr.querySelectorAll(".ent, .usc, .pausa, .ass-in").forEach(x => x.addEventListener("change", () => salvaRiga(tr)));
+    tr.querySelectorAll(".ent, .usc, .pausa, .pin, .ass-in").forEach(x => x.addEventListener("change", () => salvaRiga(tr)));
+    tr.querySelector(".pausa").addEventListener("change", ev => { tr.querySelector(".p-dalle").hidden = +ev.target.value < 30; });
     tr.querySelector("[data-std]")?.addEventListener("click", () => {
       const dov = minutiDovuti(profilo, tr.dataset.d);
       tr.querySelector(".ent").value = fmtOrario(entStd); tr.querySelector(".usc").value = fmtOrario(entStd + dov + pausaStd);
-      tr.querySelector(".pausa").value = String(pausaStd); salvaRiga(tr);
+      tr.querySelector(".pausa").value = String(pausaStd); tr.querySelector(".pin").value = fmtOrario(pinStd); salvaRiga(tr);
     });
   });
   el.querySelector("#form-profilo")?.addEventListener("submit", async ev => {
@@ -178,9 +184,10 @@ export async function vistaPresenze(el) {
     if (Number.isNaN(saldo)) { avviso("Saldo riportato non valido: es. 12:30 oppure -4:00"); return; }
     const segno = /^[−-]/.test(String(d.saldoRiportato || "").trim()) ? -1 : 1;
     if (Number.isNaN(parseOrario(d.entrataStandard))) { avviso("Entrata abituale non valida: es. 8:00"); return; }
+    if (Number.isNaN(parseOrario(d.inizioPausa))) { avviso("Inizio pausa abituale non valido: es. 12:00"); return; }
     await D.salvaProfilo(chi, { entrataStandard: fmtOrario(parseOrario(d.entrataStandard)) || "", pausaStandard: d.pausaStandard === "" ? 60 : Number(d.pausaStandard),
       oreSettimanali: d.oreSettimanali, percentuale: d.percentuale, giorniVacanza: d.giorniVacanza, giorniLavoro: giorniDaForm(f),
-      accordo73b: d.accordo73b, inizioPresenze: d.inizioPresenze, saldoRiportatoMinuti: saldo == null ? 0 : segno * saldo });
+      inizioPausa: fmtOrario(parseOrario(d.inizioPausa)) || "12:00", inizioPresenze: d.inizioPresenze, saldoRiportatoMinuti: saldo == null ? 0 : segno * saldo });
     avviso("Orario salvato"); ricarica();
   });
 
@@ -193,7 +200,8 @@ export async function vistaPresenze(el) {
       <td class="num">${dov ? ore(dov) : "–"}</td>
       <td><input class="t-in ent"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
       <td><input class="t-in usc"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
-      <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></td>
+      <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select>
+        <div class="p-dalle"${(p.pausa ?? (lib ? 0 : pausaStd)) >= 30 ? "" : " hidden"}>dalle <input class="t-in pin" value="${e(fmtOrario(p.pausaInizio))}" placeholder="${e(fmtOrario(pinStd))}" inputmode="numeric" aria-label="Inizio pausa ${e(fmtData(d))}">${p.pausaInizio != null && p.pausa ? `<span class="tenue"> alle ${fmtOrario(p.pausaInizio + p.pausa)}</span>` : ""}</div></td>
       <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
         ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
         ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
@@ -257,7 +265,7 @@ function formProfilo(p, nome) {
       ${sceltaGiorniLavoro(p)}
       ${campo("entrataStandard", "Entrata abituale (per il pulsante Standard)", p.entrataStandard || "08:00")}
       <div><label for="f_pausaStandard">Pausa abituale</label><select id="f_pausaStandard" name="pausaStandard">${PAUSE.map(x => `<option value="${x}"${x === (p.pausaStandard ?? 60) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select></div>
-      ${campo("accordo73b", "Accordo scritto art. 73b firmato il", p.accordo73b, "date")}
+      ${campo("inizioPausa", "Inizio pausa abituale", p.inizioPausa || "12:00")}
       ${campo("inizioPresenze", "Registrazione delle presenze dal", p.inizioPresenze, "date")}
       ${campo("saldoRiportato", "Saldo ore riportato a inizio anno (es. 12:30 o -4:00)", sr ? (sr < 0 ? "-" : "") + Math.floor(Math.abs(sr) / 60) + ":" + String(Math.abs(sr) % 60).padStart(2, "0") : "")}
     </div>
@@ -278,14 +286,14 @@ async function vistaPanoramica(el, utenti) {
   el.innerHTML = `<div class="testata"><div><h1>Presenze · tutto lo studio</h1><div class="tenue">${e(nomeMese(mese))}</div></div>
     <div class="barra"><button class="btn" id="m-prec" aria-label="Mese precedente">◀</button><span style="min-width:130px;text-align:center;font-weight:600">${e(nomeMese(mese))}</span>
       <button class="btn" id="m-succ" aria-label="Mese successivo">▶</button><button class="btn" id="indietro">Torna al singolo</button></div></div>
-    <table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Dovute finora</th><th class="num">Lavorate</th><th class="num">Saldo mese</th><th class="num">Saldo ${anno}</th><th class="num">Vacanze ${anno}</th><th>Da compilare</th><th>Accordo 73b</th></tr></thead>
+    <table class="tabella"><thead><tr><th>Collaboratore</th><th class="num">Dovute finora</th><th class="num">Lavorate</th><th class="num">Saldo mese</th><th class="num">Saldo ${anno}</th><th class="num">Vacanze ${anno}</th><th>Da compilare</th></tr></thead>
     <tbody>${righe.map(({ x, rm, ra, saldoAnno, vuoto }) => `<tr class="cliccabile" data-uid="${e(x.id)}" tabindex="0">
       <td><strong>${e(x.nome || x.id)}</strong>${x.percentuale != null && +x.percentuale !== 100 ? ` <span class="tenue">${e(x.percentuale)}%</span>` : ""}${giorniLavoroDi(x).length < 5 ? ` <span class="tenue">${fmtGiorniLavoro(x)}</span>` : ""}</td>
       <td class="num">${vuoto ? "–" : fmtDurata(rm.dovute)}</td><td class="num">${fmtDurata(rm.lavorate + rm.credito)}</td>
       <td class="num"><span class="${rm.saldo < 0 && !vuoto ? "neg" : ""}">${vuoto ? "–" : fmtSaldo(rm.saldo)}</span></td><td class="num"><span class="${saldoAnno < 0 && !vuoto ? "neg" : ""}">${vuoto ? "–" : fmtSaldo(saldoAnno)}</span></td>
       <td class="num">${String(ra.vacanze).replace(".5", "½")}${x.giorniVacanza ? ` / ${String(dirittoVacanze(x)).replace(".5", "½")}` : ""}</td>
       <td>${vuoto ? stato("neutro", "Non iniziata") : rm.daCompilare ? stato("urgente", `${rm.daCompilare} ${rm.daCompilare === 1 ? "giorno" : "giorni"}`) : stato("ok", "In ordine")}</td>
-      <td>${x.accordo73b ? stato("ok", fmtData(x.accordo73b)) : stato("scaduto", "Mancante")}</td></tr>`).join("")}</tbody></table>
+</tr>`).join("")}</tbody></table>
     <p class="tenue" style="margin-top:10px">Lavorate comprende vacanze e assenze. Clicca un collaboratore per vedere e correggere il suo mese.</p>`;
   const ricarica = () => vistaPresenze(el);
   el.querySelector("#m-prec").addEventListener("click", () => { mese = meseDopo(mese, -1); ricarica(); });
@@ -300,16 +308,16 @@ async function vistaPanoramica(el, utenti) {
 /** CSV dell'anno per la conservazione (5 anni, art. 73 OLL 1): separatore ;, date gg.mm.aaaa, ore in hh:mm. */
 function esportaAnno(nome, profilo, pres, anno, dal) {
   const fest = festiviTicino(anno);
-  const righe = [[`Presenze ${anno} - ${nome}`], [`Registrazione della durata del lavoro (art. 73 / 73b OLL 1)${profilo.accordo73b ? ` - accordo scritto del ${fmtData(profilo.accordo73b)}` : " - accordo scritto non indicato"}`],
+  const righe = [[`Presenze ${anno} - ${nome}`], [`Registrazione della durata del lavoro (art. 46 LL e art. 73 OLL 1): entrata, uscita e pause`],
     [`Orario: ${profilo.oreSettimanali || 42} h settimanali al ${profilo.percentuale ?? 100}%`], [],
-    ["Data", "Giorno", "Festivo", "Ore dovute", "Entrata", "Uscita", "Pausa", "Ore lavorate", "Assenza", "Saldo giorno"]];
+    ["Data", "Giorno", "Festivo", "Ore dovute", "Entrata", "Uscita", "Pausa", "Pausa dalle-alle", "Ore lavorate", "Assenza", "Saldo giorno"]];
   let saldo = Number(profilo.saldoRiportatoMinuti) || 0;
   for (let d = `${anno}-01-01`; d <= `${anno}-12-31`; d = aggiungiGiorni(d, 1)) {
     const p = pres[d] || {}, dov = d >= dal ? minutiDovuti(profilo, d) : 0;
     if (!dov && p.minuti == null && !p.assenza) continue;
     const s = (p.minuti != null || p.assenza || d < oggiISO()) ? (p.minuti || 0) + minutiCredito(p.assenza, dov) - dov : 0;
     saldo += s;
-    righe.push([fmtData(d), GIORNI[giornoSettimana(d)], fest[d] || "", ore(dov), fmtOrario(p.entrata), fmtOrario(p.uscita), p.pausa != null ? ore(p.pausa) : "", ore(p.minuti), p.assenza || "", fmtSaldo(s).replace("−", "-")]);
+    righe.push([fmtData(d), GIORNI[giornoSettimana(d)], fest[d] || "", ore(dov), fmtOrario(p.entrata), fmtOrario(p.uscita), p.pausa != null ? ore(p.pausa) : "", p.pausaInizio != null && p.pausa ? `${fmtOrario(p.pausaInizio)}-${fmtOrario(p.pausaInizio + p.pausa)}` : "", ore(p.minuti), p.assenza || "", fmtSaldo(s).replace("−", "-")]);
   }
   righe.push([], ["Saldo a fine periodo", "", "", "", "", "", "", "", "", fmtSaldo(saldo).replace("−", "-")]);
   const csv = "﻿" + righe.map(r => r.map(c => /[;"\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(";")).join("\r\n");

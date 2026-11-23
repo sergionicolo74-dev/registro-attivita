@@ -569,3 +569,4 @@ strong.neg, .kpi-b strong.neg { color: var(--rosso); }
 .graf-ore .gb-area { max-width: 40px; }
 .graf-ore h3 { font-size: 14px !important; }
 .graf-ore .gb-sintesi, .graf-ore .gb-legenda { font-size: 12px; }
+.p-dalle { font-size: 12px; color: var(--tenue); margin-top: 4px; white-space: nowrap; } .p-dalle .pin { width: 64px; padding: 3px 6px; font-size: 13px; }

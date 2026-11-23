@@ -3,7 +3,7 @@ import * as D from "./data.js";
 import { e, avviso, stato, campo, dataNonValida, selectCercabile } from "./ui.js";
 import { CATEGORIE_SPESA, NOME_CATEGORIA, TARIFFA_KM, importoKm, fuoriIva, fmtNum } from "./regole.js";
 import { preparaRicevuta, mostraRicevuta } from "./ricevute.js";
-import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta, ID_INTERNO, CLIENTE_INTERNO } from "./regole.js";
+import { fmtData, parseData, fmtDurata, oggiISO, aggiungiGiorni, lunedi, normNome, GIORNI, TIPI_MANDATO, NOME_MANDATO, mandatiDi, minutiDovuti, praticaAperta, ID_INTERNO, CLIENTE_INTERNO, senzaOre } from "./regole.js";
 
 const DURATE = [5, 10, 15, 30, 45, 60, 90, 120];
 const TIPI = [["lavoro", "Lavoro svolto"], ["spesa", "Spesa"], ["nota", "Nota / decisione"], ["dafare", "Da fare"]];
@@ -52,7 +52,7 @@ export async function vistaRegistro(el) {
     if (chiusa(r)) return `<span class="lucchetto" title="Ore già fatturate: non si possono modificare">🔒 Fatturata ${e(fmtData(r.fatturataIl))}</span>`;
     return puo(r) ? `<button class="btn piccolo" data-mod="${e(r.id)}">Modifica</button> <button class="btn piccolo" data-del="${e(r.id)}" aria-label="Elimina">✕</button>` : "";
   }
-  const tipoF = r => r.tipo === "nota" ? "nota" : r.praticaId ? "pratica" : r.fatturabile === false ? "non" : r.extra ? "extra" : "mandato";
+  const tipoF = r => r.tipo === "nota" ? "nota" : r.praticaId ? "pratica" : r.fatturabile === false ? "non" : r.extra || senzaOre(r.mandato) ? "extra" : "mandato"; // funzione, domiciliazione, intestazione: compenso fisso, ore come extra
   const ETI_F = { mandato: ["ok", "Nel mandato"], extra: ["urgente", "Extra"], non: ["neutro", "Non fatturabile"], pratica: ["info", "Pratica"], nota: ["info", "Nota"] };
   const q = normNome(eCerca);
   const elenco = tutte.filter(r => (!admin || !soloMie || r.autoreUid === u.uid)
@@ -78,9 +78,9 @@ export async function vistaRegistro(el) {
     <div class="testa-d"><h2 style="font-size:16px">Spese${admin && !soloMie ? " dello studio" : ""}</h2>
       <span class="tenue" style="font-size:13px">${e(PERIODI_E.find(([k]) => k === ePeriodo)[1])} · ${speseVis.length} spese · CHF ${fmtNum(tot)} · da riaddebitare CHF ${fmtNum(daRiadd)}</span></div>
     ${speseVis.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Spesa</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Stato</th><th class="num">CHF</th><th></th><th></th></tr></thead><tbody>
-      ${speseVis.slice(0, sQuante).map(x => `<tr${x.fatturataIl ? ' class="chiusa"' : ""}><td style="white-space:nowrap">${e(fmtData(x.data))}</td><td style="white-space:nowrap">${e(nomeCli[x.clienteId] || "–")}</td>
+      ${speseVis.slice(0, sQuante).map(x => `<tr${x.fatturataIl ? ' class="chiusa"' : ""}><td style="white-space:nowrap">${e(fmtData(x.data))}</td><td class="cli-r" title="${e(nomeCli[x.clienteId] || "")}">${e(nomeCli[x.clienteId] || "–")}</td>
         <td style="font-size:13px">${e(NOME_CATEGORIA[x.categoria] || "")}${x.km ? `<div class="tenue">${e(String(x.km))} km × ${fmtNum(TARIFFA_KM)}</div>` : ""}${fuoriIva(x) ? '<div class="tenue">fuori IVA</div>' : ""}</td>
-        <td class="desc-r">${e(x.descrizione || "")}</td>${admin && !soloMie ? `<td>${e(x.autoreNome || "")}</td>` : ""}
+        <td class="desc-r"><div class="testo-r">${e(x.descrizione || "")}</div></td>${admin && !soloMie ? `<td>${e(x.autoreNome || "")}</td>` : ""}
         <td>${statoSpesa(x)}</td><td class="num">${fmtNum(x.importo)}</td>
         <td>${x.haRicevuta ? `<button class="btn piccolo" data-ric="${e(x.id)}" title="Vedi la ricevuta" aria-label="Vedi la ricevuta">📎</button>` : ""}</td>
         <td style="white-space:nowrap">${azioniSpesa(x)}</td></tr>`).join("")}</tbody></table></div>
@@ -105,9 +105,9 @@ export async function vistaRegistro(el) {
     </div>
     ${elenco.length ? `<div class="scorri"><table class="tabella"><thead><tr><th>Data</th><th>Cliente</th><th>Mandato / pratica</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th>Fatturazione</th><th class="num">Durata</th><th></th></tr></thead><tbody>
       ${elenco.slice(0, eQuante).map(r => `<tr${chiusa(r) ? ' class="chiusa"' : ""}><td style="white-space:nowrap"><a href="#" data-vai="${e(r.data)}">${e(fmtData(r.data))}</a></td>
-        <td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
+        <td class="cli-r" title="${e(nomeCli[r.clienteId] || "")}">${e(nomeCli[r.clienteId] || "–")}</td>
         <td style="font-size:13px">${r.praticaId ? e(pratPer[r.praticaId]?.titolo || "Pratica") : r.tipo === "nota" ? "" : e(NOME_MANDATO[r.mandato || "contabilita"] || "")}${r.attivita === "stipendi" && r.mandato !== "stipendi" ? " · Stipendi" : ""}</td>
-        <td class="desc-r">${e(r.descrizione).replace(/\n/g, "<br>")}</td>${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
+        <td class="desc-r"><div class="testo-r">${e(r.descrizione).replace(/\n/g, "<br>")}</div></td>${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td>${stato(...ETI_F[tipoF(r)])}</td><td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}</td>
         <td style="white-space:nowrap">${azioni(r)}</td></tr>`).join("")}</tbody></table></div>
       ${elenco.length > eQuante ? `<div class="azioni"><button class="btn" id="e-altre">Mostra altre ${Math.min(50, elenco.length - eQuante)} (di ${elenco.length - eQuante})</button></div>` : ""}`
@@ -176,7 +176,7 @@ export async function vistaRegistro(el) {
   <section class="pannello" style="margin-bottom:14px">
     <h2 style="font-size:16px;margin-bottom:10px">${e(fmtData(giorno))}</h2>
     ${delGiorno.length ? `<table class="tabella"><thead><tr><th>Cliente</th><th>Descrizione</th>${admin && !soloMie ? "<th>Chi</th>" : ""}<th class="num">Durata</th><th></th></tr></thead><tbody>
-      ${delGiorno.map(r => `<tr><td style="white-space:nowrap">${e(nomeCli[r.clienteId] || "–")}</td>
+      ${delGiorno.map(r => `<tr><td class="cli-r" title="${e(nomeCli[r.clienteId] || "")}">${e(nomeCli[r.clienteId] || "–")}</td>
         <td>${r.tipo === "nota" ? stato("info", "Nota") + " " : ""}${e(r.descrizione).replace(/\n/g, "<br>")}${r.attivita === "stipendi" ? '<div class="tenue" style="font-size:12px">Stipendi (nel forfait)</div>' : r.mandato && r.mandato !== "contabilita" ? `<div class="tenue" style="font-size:12px">${e(NOME_MANDATO[r.mandato] || "")}</div>` : ""}</td>
         ${admin && !soloMie ? `<td>${e(r.autoreNome || "")}</td>` : ""}
         <td class="num" style="white-space:nowrap">${r.tipo === "nota" ? "" : fmtDurata(r.minuti)}${r.tipo !== "nota" && !r.fatturabile ? '<div class="tenue">non fatt.</div>' : r.extra ? '<div class="tenue">extra</div>' : ""}</td>
@@ -330,6 +330,11 @@ export async function vistaRegistro(el) {
   el.querySelector("#e-fatt").addEventListener("change", filtroE(v => { eFatt = v; }));
   el.querySelector("#e-cerca").addEventListener("change", filtroE(v => { eCerca = v; }));
   el.querySelector("#e-altre")?.addEventListener("click", () => { eQuante += 50; const y = window.scrollY; ricarica().then(() => window.scrollTo(0, y)); });
+  // descrizioni lunghe: si vedono 3 righe, clic per aprire/chiudere
+  el.querySelectorAll(".testo-r").forEach(t => { if (t.scrollHeight > t.clientHeight + 2) { t.classList.add("taglia"); t.title = "Clic per leggere tutto";
+    const b = document.createElement("button"); b.type = "button"; b.className = "apri-r"; b.textContent = "▾ leggi tutto"; t.after(b);
+    const giro = () => { const ap = t.classList.toggle("aperto"); b.textContent = ap ? "▴ chiudi" : "▾ leggi tutto"; };
+    t.addEventListener("click", giro); b.addEventListener("click", giro); } });
   el.querySelectorAll("[data-vai]").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); vai(a.dataset.vai); window.scrollTo(0, 0); }));
   el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
     const r = [...delGiorno, ...tutte].find(x => x.id === b.dataset.del);

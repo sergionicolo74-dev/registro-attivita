@@ -525,3 +525,10 @@ button.stato.filtro.attivo { border-color: currentColor; box-shadow: 0 0 0 2px c
 .cerca-lista li[aria-selected="true"], .cerca-lista li:hover { background: var(--rosso-tinta, #fdeaea); }
 .cerca-lista li.scelto { font-weight: 600; }
 .cerca-lista li.nessuno { color: var(--tenue, #888); cursor: default; }
+/* Registro: cliente stretto, descrizione larga; testi lunghi su 3 righe, clic per aprire */
+.cli-r { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desc-r { min-width: 320px; max-width: 560px; }
+.testo-r { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.testo-r.taglia { cursor: pointer; }
+.testo-r.aperto { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.apri-r { background: none; border: 0; padding: 2px 0 0; font: inherit; font-size: 12px; color: var(--rosso, #b42318); cursor: pointer; }

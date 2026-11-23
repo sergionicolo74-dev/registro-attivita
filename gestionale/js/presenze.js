@@ -102,7 +102,7 @@ export async function vistaPresenze(el) {
   const dicitura = { settimana: "della settimana", mese: "del mese", anno: "dell'anno" }[modo];
   el.innerHTML = `
   <div class="testata">
-    <div><h1>Presenze</h1><div class="tenue">${e(nomeChi)} · ${e(titolo)}</div></div>
+    <div><h1>Presenze</h1><div class="tenue">${e(nomeChi)} · ${e(titolo)}${arretrate.length && modo !== "anno" ? ` · <a href="#" class="chip-arr" id="vai-arr">⚠ ${arretrate.reduce((t, x) => t + x.n, 0)} giorni da compilare</a>` : ""}</div></div>
     <div class="barra">
       <div class="segmenti" role="radiogroup" aria-label="Vista">${[["settimana", "Settimana"], ["mese", "Mese"], ["anno", "Anno"]].map(([k, n]) => `<button type="button" role="radio" data-modo="${k}" aria-checked="${modo === k}">${n}</button>`).join("")}</div>
       <button class="btn" id="m-prec" aria-label="${nav[0]}">◀</button>
@@ -114,11 +114,9 @@ export async function vistaPresenze(el) {
       <button class="btn" id="esporta">Esporta anno (CSV)</button>
     </div>
   </div>
-  ${profilo.accordo73b ? "" : `<div class="pannello allerta" role="status" style="margin-bottom:14px">${stato("urgente", "Accordo scritto mancante")}
-    <span style="margin-left:8px">La registrazione semplificata (art. 73b OLL 1) richiede un accordo scritto individuale con ${e(nomeChi)}.${admin ? " Indica la data della firma in «Orario e accordo» qui sotto." : " Rivolgiti all'amministratore."}</span></div>`}
-  ${arretrate.length && modo !== "anno" ? `<div class="pannello allerta" role="status" style="margin-bottom:14px">${stato("urgente", `⚠ ${arretrate.reduce((s, x) => s + x.n, 0)} giorni da compilare nelle settimane passate`)}
-    <div class="arretrate">${arretrate.slice(-8).reverse().map(x => `<button type="button" class="btn piccolo" data-sett="${x.l}">${e(nomeSett(x.l))} · ${x.n} ${x.n === 1 ? "giorno" : "giorni"}</button>`).join("")}${arretrate.length > 8 ? `<span class="tenue">e altre ${arretrate.length - 8} settimane</span>` : ""}</div></div>` : ""}
-  <div class="kpi-s">
+  ${modo === "anno" ? tabellaAnno(colonne, tot) : tabellaGiorni()}
+  ${modo !== "anno" ? `<p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>` : ""}
+  <div class="kpi-mini">
     <div class="kpi-b fermo"><span class="tenue">Dovute ${dicitura}</span><strong>${fmtDurata(rTutto.dovute)}</strong>${rPer.dovute !== rTutto.dovute ? `<span class="tenue">${fmtDurata(rPer.dovute)} fino a ${e(fmtData(fineCalc))}</span>` : ""}</div>
     <div class="kpi-b fermo"><span class="tenue">Lavorate</span><strong>${fmtDurata(rPer.lavorate)}</strong>${rPer.credito ? `<span class="tenue">+ ${fmtDurata(rPer.credito)} assenze/vacanze</span>` : ""}</div>
     <div class="kpi-b fermo"><span class="tenue">Saldo ${dicitura}${rPer.dovute !== rTutto.dovute ? " finora" : ""}</span><strong class="${rPer.saldo < 0 ? "neg" : ""}">${fmtSaldo(rPer.saldo)}</strong></div>
@@ -126,9 +124,11 @@ export async function vistaPresenze(el) {
     <div class="kpi-b fermo"><span class="tenue">Vacanze ${anno}</span><strong>${String(rAnno.vacanze).replace(".5", "½")} ${rAnno.vacanze === 1 ? "giorno" : "giorni"}</strong>${profilo.giorniVacanza ? `<span class="tenue">su ${String(dirittoVacanze(profilo)).replace(".5", "½")}</span>` : ""}</div>
     <div class="kpi-b fermo"><span class="tenue">Giorni da compilare</span><strong>${rPer.daCompilare ? stato("urgente", String(rPer.daCompilare)) : stato("ok", "0")}</strong>${modo === "settimana" && arretrate.length ? `<span class="tenue">+ ${arretrate.reduce((s, x) => s + x.n, 0)} nelle settimane passate</span>` : ""}</div>
   </div>
+  ${arretrate.length && modo !== "anno" ? `<div class="pannello allerta compatto" id="arretrate" role="status">${stato("urgente", `⚠ ${arretrate.reduce((s, x) => s + x.n, 0)} giorni da compilare nelle settimane passate`)}
+    <div class="arretrate">${arretrate.slice(-8).reverse().map(x => `<button type="button" class="btn piccolo" data-sett="${x.l}">${e(nomeSett(x.l))} · ${x.n} ${x.n === 1 ? "giorno" : "giorni"}</button>`).join("")}${arretrate.length > 8 ? `<span class="tenue">e altre ${arretrate.length - 8} settimane</span>` : ""}</div></div>` : ""}
+  ${profilo.accordo73b ? "" : `<div class="pannello allerta compatto" role="status">${stato("urgente", "Accordo scritto mancante")}
+    <span style="margin-left:8px">La registrazione semplificata (art. 73b OLL 1) richiede un accordo scritto individuale con ${e(nomeChi)}.${admin ? " Indica la data della firma in «Orario e accordo» qui sotto." : " Rivolgiti all'amministratore."}</span></div>`}
   ${graficoOre(colonne, tot, modo)}
-  ${modo === "anno" ? tabellaAnno(colonne, tot) : tabellaGiorni()}
-  ${modo !== "anno" ? `<p class="tenue" style="margin-top:10px">Scrivi l'ora di entrata e di uscita (es. 8:00 e 17:30) e scegli la pausa: le ore lavorate si calcolano da sole. L'entrata si può segnare all'arrivo e l'uscita a fine giornata. Il pulsante "Standard" inserisce l'orario del profilo. Per le assenze indica solo il tipo: il motivo non si registra. Si salva da solo.</p>` : ""}
   ${admin ? formProfilo(profilo, nomeChi) : `<div class="pannello" style="margin-top:14px"><h3 style="font-size:14px;margin-bottom:8px">Orario e accordo</h3><div class="fatti">
       <div><span>Ore settimanali</span>${e(profilo.oreSettimanali || 42)} h</div><div><span>Grado</span>${e(profilo.percentuale ?? 100)}% · ${fmtGiorniLavoro(profilo)}</div>
       <div><span>Accordo art. 73b</span>${profilo.accordo73b ? e(fmtData(profilo.accordo73b)) : "–"}</div></div></div>`}`;
@@ -145,6 +145,7 @@ export async function vistaPresenze(el) {
   el.querySelector("#m-oggi")?.addEventListener("click", () => { lun = lunOggi; mese = oggi.slice(0, 7); ricarica(); });
   el.querySelectorAll("[data-sett]").forEach(b => b.addEventListener("click", ev => { ev.preventDefault(); modo = "settimana"; lun = b.dataset.sett; ricarica(); }));
   el.querySelectorAll("[data-mese]").forEach(b => b.addEventListener("click", ev => { ev.preventDefault(); modo = "mese"; mese = b.dataset.mese; ricarica(); }));
+  el.querySelector("#vai-arr")?.addEventListener("click", ev => { ev.preventDefault(); el.querySelector("#arretrate")?.scrollIntoView({ behavior: "smooth", block: "center" }); });
   el.querySelector("#chi-p")?.addEventListener("change", ev => { chi = ev.target.value; ricarica(); });
   el.querySelector("#panoramica")?.addEventListener("click", () => { panoramica = true; ricarica(); });
   el.querySelector("#esporta").addEventListener("click", () => esportaAnno(nomeChi, profilo, pres, +anno, dal));

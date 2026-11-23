@@ -554,3 +554,18 @@ button.stato.filtro.attivo { border-color: currentColor; box-shadow: 0 0 0 2px c
 .arretrate { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
 .tabella.presenze tr.tot-sett td { background: var(--grigio-tinta); font-weight: 600; font-size: 13px; border-bottom: 2px solid var(--linea); }
 strong.neg, .kpi-b strong.neg { color: var(--rosso); }
+/* Presenze: riquadri piccoli e avvisi compatti sotto la tabella */
+.kpi-mini { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 14px 0 10px; padding: 10px 14px; background: #fff; border: 1px solid var(--linea); border-radius: var(--r); font-size: 13px; }
+.kpi-mini .kpi-b { border: 0; padding: 0; background: none; cursor: default; gap: 1px; flex-direction: column; }
+.kpi-mini .kpi-b strong { font-size: 16px; }
+.kpi-mini .kpi-b .tenue { font-size: 12px; }
+.kpi-mini .kpi-b .stato { font-size: 12px; padding: 1px 8px; }
+.pannello.allerta.compatto { padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.pannello.allerta.compatto .arretrate { margin-top: 6px; }
+.chip-arr { color: var(--rosso); font-weight: 600; text-decoration: none; }
+.chip-arr:hover { text-decoration: underline; }
+.graf-ore { padding: 12px 14px; }
+.graf-ore .gb-grafico { height: 140px; padding-top: 12px; gap: 8px; }
+.graf-ore .gb-area { max-width: 40px; }
+.graf-ore h3 { font-size: 14px !important; }
+.graf-ore .gb-sintesi, .graf-ore .gb-legenda { font-size: 12px; }

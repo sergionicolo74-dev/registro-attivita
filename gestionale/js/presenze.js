@@ -155,11 +155,10 @@ export async function vistaPresenze(el) {
     if (Number.isNaN(eMin)) { ent.focus(); avviso("Ora di entrata non valida: es. 8:00"); return; }
     if (Number.isNaN(uMin)) { usc.focus(); avviso("Ora di uscita non valida: es. 17:30"); return; }
     if (eMin == null && uMin != null) { ent.focus(); avviso("Manca l'ora di entrata"); return; }
-    // art. 73 OLL 1: per le pause di almeno mezz'ora si registra anche quando (inizio e fine)
+    // Orario della pausa: facoltativo, si scrive quello reale (anche per pause brevi)
     const pinEl = tr.querySelector(".pin");
-    let pin = pausa >= 30 && eMin != null ? parseOrario(pinEl.value) : null;
-    if (Number.isNaN(pin)) { pinEl.focus(); avviso("Inizio pausa non valido: es. 12:00"); return; }
-    if (pausa >= 30 && eMin != null && pin == null) { pin = pinStd; pinEl.value = fmtOrario(pin); }
+    const pin = pausa > 0 && eMin != null ? parseOrario(pinEl.value) : null;
+    if (Number.isNaN(pin)) { pinEl.focus(); avviso("Inizio pausa non valido: es. 12:30"); return; }
     if (pin != null && (pin < eMin || (uMin != null && pin + pausa > uMin))) { pinEl.focus(); avviso("La pausa deve stare tra l'entrata e l'uscita"); return; }
     const minuti = minutiDaOrari(eMin, uMin, pausa);
     if (Number.isNaN(minuti)) { usc.focus(); avviso("L'uscita deve essere dopo l'entrata più la pausa"); return; }
@@ -169,7 +168,7 @@ export async function vistaPresenze(el) {
   };
   el.querySelectorAll("tr[data-d]").forEach(tr => {
     tr.querySelectorAll(".ent, .usc, .pausa, .pin, .ass-in").forEach(x => x.addEventListener("change", () => salvaRiga(tr)));
-    tr.querySelector(".pausa").addEventListener("change", ev => { tr.querySelector(".p-dalle").hidden = +ev.target.value < 30; });
+    tr.querySelector(".pausa").addEventListener("change", ev => { tr.querySelector(".p-dalle").hidden = !+ev.target.value; });
     tr.querySelector("[data-std]")?.addEventListener("click", () => {
       const dov = minutiDovuti(profilo, tr.dataset.d);
       tr.querySelector(".ent").value = fmtOrario(entStd); tr.querySelector(".usc").value = fmtOrario(entStd + dov + pausaStd);
@@ -201,9 +200,9 @@ export async function vistaPresenze(el) {
       <td><input class="t-in ent"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.entrata))}" placeholder="--:--" inputmode="numeric" aria-label="Entrata ${e(fmtData(d))}"></td>
       <td><input class="t-in usc"${libPers && p.minuti == null ? " disabled" : ""} value="${e(fmtOrario(p.uscita))}" placeholder="--:--" inputmode="numeric" aria-label="Uscita ${e(fmtData(d))}"></td>
       <td><select class="pausa" aria-label="Pausa ${e(fmtData(d))}">${PAUSE.map(x => `<option value="${x}"${x === (p.pausa ?? (lib ? 0 : pausaStd)) ? " selected" : ""}>${x ? ore(x) : "nessuna"}</option>`).join("")}</select>
-        <div class="p-dalle"${(p.pausa ?? (lib ? 0 : pausaStd)) >= 30 ? "" : " hidden"}>dalle <input class="t-in pin" value="${e(fmtOrario(p.pausaInizio))}" placeholder="${e(fmtOrario(pinStd))}" inputmode="numeric" aria-label="Inizio pausa ${e(fmtData(d))}">${p.pausaInizio != null && p.pausa ? `<span class="tenue"> alle ${fmtOrario(p.pausaInizio + p.pausa)}</span>` : ""}</div></td>
+        <div class="p-dalle"${(p.pausa ?? (lib ? 0 : pausaStd)) > 0 ? "" : " hidden"}>dalle <input class="t-in pin" value="${e(fmtOrario(p.pausaInizio))}" placeholder="--:--" inputmode="numeric" aria-label="Inizio pausa ${e(fmtData(d))}">${p.pausaInizio != null && p.pausa ? `<span class="tenue"> alle ${fmtOrario(p.pausaInizio + p.pausa)}</span>` : ""}</div></td>
       <td class="num"><strong>${p.minuti != null ? ore(p.minuti) : p.entrata != null && p.uscita == null ? '<span class="tenue">in corso</span>' : ""}</strong>
-        ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div>${stato("urgente", `pausa min. ${pausaMinima(p.minuti)} min`)}</div>` : ""}
+        ${p.minuti != null && (p.pausa ?? 0) < pausaMinima(p.minuti) ? `<div class="tenue" style="font-size:12px" title="Pausa minima di legge (art. 15 LL) per questa durata di lavoro">pausa sotto ${pausaMinima(p.minuti)} min</div>` : ""}
         ${dov && p.minuti == null && p.entrata == null && !p.assenza && !lib ? `<div><button type="button" class="btn piccolo" data-std="1" title="Orario standard ${fmtOrario(entStd)}–${fmtOrario(entStd + dov + pausaStd)}">Standard</button></div>` : ""}</td>
       <td><select class="ass-in" aria-label="Assenza ${e(fmtData(d))}"><option value=""></option>${TIPI_ASSENZA.map(t => `<option${t === p.assenza ? " selected" : ""}>${e(t)}</option>`).join("")}</select>${p.daPiano ? '<div class="tenue" style="font-size:12px">dal piano vacanze</div>' : ""}</td>
       <td class="num">${reg ? `${fmtDurata(reg)}${p.minuti && reg > p.minuti ? `<div>${stato("urgente", "più della presenza")}</div>` : ""}` : '<span class="tenue">–</span>'}</td>
